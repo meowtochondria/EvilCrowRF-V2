@@ -1,8 +1,5 @@
 Import("env")
 
-import json
-import os
-
 # include toolchain paths
 # env.Replace(COMPILATIONDB_INCLUDE_TOOLCHAIN=True)
 
