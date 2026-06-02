@@ -47,7 +47,7 @@
 #define CC1101_SCK  14
 #define CC1101_MISO 12
 #define CC1101_MOSI 13
-#define CC1101_SS0   5 
+#define CC1101_SS0   5
 #define CC1101_SS1 27
 #define MOD0_GDO0 2
 #define MOD0_GDO2 4
@@ -69,7 +69,8 @@
 // Battery monitoring via ADC
 // GPIO 36 (VP) connected to battery through voltage divider
 // Voltage divider: GND---100K---GPIO36---220K---VBAT → ratio = (220+100)/100 = 3.2
-#define BATTERY_MODULE_ENABLED 1
+// TODO: Disable battery module as i am unable to resolve esp_adc/adc_oneshot.h: No such file or directory
+#define BATTERY_MODULE_ENABLED 0
 #define BATTERY_ADC_PIN 36         // GPIO 36 = ADC1_CH0 (input-only)
 #define BATTERY_DIVIDER_RATIO 3.2  // Voltage divider ratio: (R1+R2)/R2 = (220K+100K)/100K
 #define BATTERY_READ_INTERVAL_MS 30000  // Read every 30 seconds

@@ -1,0 +1,6 @@
+pyproject.toml
+src/evilcrowrf_firmware.egg-info/PKG-INFO
+src/evilcrowrf_firmware.egg-info/SOURCES.txt
+src/evilcrowrf_firmware.egg-info/dependency_links.txt
+src/evilcrowrf_firmware.egg-info/requires.txt
+src/evilcrowrf_firmware.egg-info/top_level.txt

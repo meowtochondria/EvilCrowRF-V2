@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
-#include <String>
+#include <WString.h>
 #include "config.h"
 #include "../CC1101_driver/CC1101_Module.h"
 

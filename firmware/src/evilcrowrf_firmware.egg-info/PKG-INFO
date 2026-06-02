@@ -1,0 +1,7 @@
+Metadata-Version: 2.4
+Name: evilcrowrf-firmware
+Version: 0.1.0
+Summary: EvilCrowRF-V2 ESP32 Firmware
+Requires-Python: <3.14,>=3.10
+Requires-Dist: intelhex>=2.3.0
+Requires-Dist: platformio>=6.0

@@ -1,0 +1,13 @@
+[project]
+name = "evilcrowrf-firmware"
+version = "0.1.0"
+description = "EvilCrowRF-V2 ESP32 Firmware"
+requires-python = ">=3.10, <3.14"
+dependencies = [
+    "intelhex>=2.3.0",
+    "platformio>=6.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"

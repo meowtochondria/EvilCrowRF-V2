@@ -1,0 +1,20 @@
+{
+  "name": "tool-esptoolpy",
+  "version": "4.11.0",
+  "description": "A serial utility to communicate & flash code to Espressif chips.",
+  "keywords": [
+    "build tools",
+    "compiler",
+    "assembler",
+    "linker",
+    "preprocessor",
+    "espressif",
+    "esp32"
+  ],
+  "license": "GPL-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/espressif/esptool"
+  },
+  "system": "linux_x86_64"
+}

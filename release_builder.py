@@ -43,11 +43,11 @@ from pathlib import Path
 # ─── Determine project root (script lives in project root) ───────────
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR  # Script is in the root
-CONFIG_H = PROJECT_ROOT / "include" / "config.h"
+CONFIG_H = PROJECT_ROOT / "firmware" / "include" / "config.h"
 PUBSPEC_YAML = PROJECT_ROOT / "mobile_app" / "pubspec.yaml"
 RELEASES_DIR = PROJECT_ROOT / "releases"
 CHANGELOG_FILE = RELEASES_DIR / "changelog.json"
-FW_RELEASES_DIR = RELEASES_DIR / "firmware"
+FW_RELEASES_DIR = RELEASES_DIR / "firmware" / "build"
 APP_RELEASES_DIR = RELEASES_DIR / "app"
 PIO_BUILD_DIR = PROJECT_ROOT / ".pio" / "build" / "esp32dev"
 
@@ -291,7 +291,10 @@ def run_command_verbose(
     try:
         while True:
             # In CLI popup mode, we don't have mainloop(); pump Tk events.
-            if _TK_ROOT is not None and threading.current_thread() is threading.main_thread():
+            if (
+                _TK_ROOT is not None
+                and threading.current_thread() is threading.main_thread()
+            ):
                 try:
                     _TK_ROOT.update_idletasks()
                     _TK_ROOT.update()
@@ -345,12 +348,14 @@ def run_command_verbose(
 
 # ─── Tool Discovery ─────────────────────────────────────────────────
 
+
 def get_platformio_core_dir() -> Path:
     """Return PlatformIO core dir if configured, else default to ~/.platformio."""
     env_dir = os.environ.get("PLATFORMIO_CORE_DIR") or os.environ.get("PIO_HOME_DIR")
     if env_dir:
         return Path(env_dir)
     return Path.home() / ".platformio"
+
 
 def find_platformio_cli() -> str | None:
     """Auto-discover PlatformIO CLI executable.
@@ -448,6 +453,7 @@ def find_flutter_cli() -> str | None:
 
 # ─── Environment Preparation ────────────────────────────────────────
 
+
 def prepare_environment(log_callback=None) -> bool:
     """Prepare the build environment: install PlatformIO (and optionally Flutter).
 
@@ -464,6 +470,7 @@ def prepare_environment(log_callback=None) -> bool:
 
     Returns True if PlatformIO is usable after the call.
     """
+
     def log(msg):
         if log_callback:
             log_callback(msg)
@@ -485,8 +492,14 @@ def prepare_environment(log_callback=None) -> bool:
         log(f"Using Python: {python_exe}")
 
         venv_dir = PROJECT_ROOT / "tools" / ".venv"
-        pip_exe = (venv_dir / "Scripts" / "pip.exe") if is_win else (venv_dir / "bin" / "pip")
-        pio_exe = (venv_dir / "Scripts" / "platformio.exe") if is_win else (venv_dir / "bin" / "platformio")
+        pip_exe = (
+            (venv_dir / "Scripts" / "pip.exe") if is_win else (venv_dir / "bin" / "pip")
+        )
+        pio_exe = (
+            (venv_dir / "Scripts" / "platformio.exe")
+            if is_win
+            else (venv_dir / "bin" / "platformio")
+        )
 
         # ── 2. Create venv ──
         if not venv_dir.exists():
@@ -567,7 +580,7 @@ def read_app_version() -> str:
     if not PUBSPEC_YAML.exists():
         return "0.0.0"
     content = PUBSPEC_YAML.read_text(encoding="utf-8")
-    match = re.search(r'^version:\s*(\d+\.\d+\.\d+)', content, re.MULTILINE)
+    match = re.search(r"^version:\s*(\d+\.\d+\.\d+)", content, re.MULTILINE)
     return match.group(1) if match else "0.0.0"
 
 
@@ -596,17 +609,25 @@ def write_firmware_version(new_version: str):
     major, minor, patch = parts[0], parts[1], parts[2]
     content = CONFIG_H.read_text(encoding="utf-8")
     content = re.sub(
-        r'#define\s+FIRMWARE_VERSION_MAJOR\s+\d+',
-        f'#define FIRMWARE_VERSION_MAJOR {major}', content)
+        r"#define\s+FIRMWARE_VERSION_MAJOR\s+\d+",
+        f"#define FIRMWARE_VERSION_MAJOR {major}",
+        content,
+    )
     content = re.sub(
-        r'#define\s+FIRMWARE_VERSION_MINOR\s+\d+',
-        f'#define FIRMWARE_VERSION_MINOR {minor}', content)
+        r"#define\s+FIRMWARE_VERSION_MINOR\s+\d+",
+        f"#define FIRMWARE_VERSION_MINOR {minor}",
+        content,
+    )
     content = re.sub(
-        r'#define\s+FIRMWARE_VERSION_PATCH\s+\d+',
-        f'#define FIRMWARE_VERSION_PATCH {patch}', content)
+        r"#define\s+FIRMWARE_VERSION_PATCH\s+\d+",
+        f"#define FIRMWARE_VERSION_PATCH {patch}",
+        content,
+    )
     content = re.sub(
         r'#define\s+FIRMWARE_VERSION_STRING\s+"[^"]+"',
-        f'#define FIRMWARE_VERSION_STRING "{new_version}"', content)
+        f'#define FIRMWARE_VERSION_STRING "{new_version}"',
+        content,
+    )
     CONFIG_H.write_text(content, encoding="utf-8")
 
 
@@ -614,16 +635,19 @@ def write_app_version(new_version: str):
     """Update version in pubspec.yaml"""
     content = PUBSPEC_YAML.read_text(encoding="utf-8")
     # Keep or increment the build number
-    match = re.search(r'^version:\s*\d+\.\d+\.\d+\+(\d+)', content, re.MULTILINE)
+    match = re.search(r"^version:\s*\d+\.\d+\.\d+\+(\d+)", content, re.MULTILINE)
     build_num = int(match.group(1)) + 1 if match else 1
     content = re.sub(
-        r'^version:\s*\d+\.\d+\.\d+\+?\d*',
-        f'version: {new_version}+{build_num}',
-        content, flags=re.MULTILINE)
+        r"^version:\s*\d+\.\d+\.\d+\+?\d*",
+        f"version: {new_version}+{build_num}",
+        content,
+        flags=re.MULTILINE,
+    )
     PUBSPEC_YAML.write_text(content, encoding="utf-8")
 
 
 # ─── MD5 ─────────────────────────────────────────────────────────────
+
 
 def compute_md5(file_path: Path) -> str:
     """Compute MD5 hash of a file."""
@@ -635,6 +659,7 @@ def compute_md5(file_path: Path) -> str:
 
 
 # ─── Changelog ───────────────────────────────────────────────────────
+
 
 def load_changelog() -> dict:
     """Load existing changelog.json or create empty structure."""
@@ -664,7 +689,7 @@ def add_changelog_entry(
         line = line.strip()
         if not line:
             continue
-        type_match = re.match(r'^\[(\w+)\]\s*(.*)', line)
+        type_match = re.match(r"^\[(\w+)\]\s*(.*)", line)
         if type_match:
             change_type = type_match.group(1).lower()
             text = type_match.group(2)
@@ -688,8 +713,10 @@ def add_changelog_entry(
 
 # ─── Build Commands ──────────────────────────────────────────────────
 
+
 def build_firmware(log_callback=None) -> Path | None:
     """Build firmware with PlatformIO. Returns path to .bin or None."""
+
     def log(msg):
         if log_callback:
             log_callback(msg)
@@ -740,6 +767,7 @@ def create_merged_binary(log_callback=None) -> Path | None:
     This binary can be flashed with:
       esptool.py write_flash 0x0 firmware-full.bin
     """
+
     def log(msg):
         if log_callback:
             log_callback(msg)
@@ -749,7 +777,7 @@ def create_merged_binary(log_callback=None) -> Path | None:
     # Expected files from PlatformIO build
     bootloader = PIO_BUILD_DIR / "bootloader.bin"
     partitions = PIO_BUILD_DIR / "partitions.bin"
-    firmware   = PIO_BUILD_DIR / "firmware.bin"
+    firmware = PIO_BUILD_DIR / "firmware.bin"
 
     # boot_app0.bin is in the framework packages or build dir
     boot_app0 = None
@@ -757,7 +785,11 @@ def create_merged_binary(log_callback=None) -> Path | None:
     pkg_base = pio_core / "packages"
     candidates = [
         PIO_BUILD_DIR / "boot_app0.bin",
-        pkg_base / "framework-arduinoespressif32" / "tools" / "partitions" / "boot_app0.bin",
+        pkg_base
+        / "framework-arduinoespressif32"
+        / "tools"
+        / "partitions"
+        / "boot_app0.bin",
         pkg_base / "framework-arduinoespressif32" / "tools" / "boot_app0.bin",
         pkg_base / "tool-esptoolpy" / "boot_app0.bin",
     ]
@@ -793,8 +825,8 @@ def create_merged_binary(log_callback=None) -> Path | None:
     #   0xE000  boot_app0.bin (OTA data init)
     #   0x10000 firmware.bin (app0 partition)
     offsets = {
-        0x1000:  bootloader,
-        0x8000:  partitions,
+        0x1000: bootloader,
+        0x8000: partitions,
         0x10000: firmware,
     }
 
@@ -802,7 +834,9 @@ def create_merged_binary(log_callback=None) -> Path | None:
         offsets[0xE000] = boot_app0
         log(f"  boot_app0.bin: {boot_app0}")
     else:
-        log("  WARNING: boot_app0.bin not found — merged binary may not support OTA boot switching")
+        log(
+            "  WARNING: boot_app0.bin not found — merged binary may not support OTA boot switching"
+        )
 
     # Calculate total size (from start to end of firmware)
     sorted_offsets = sorted(offsets.items())
@@ -810,11 +844,11 @@ def create_merged_binary(log_callback=None) -> Path | None:
     total_size = last_offset + last_file.stat().st_size
 
     # Create merged binary (fill gaps with 0xFF — flash erased state)
-    merged = bytearray(b'\xFF' * total_size)
+    merged = bytearray(b"\xff" * total_size)
 
     for offset, filepath in sorted_offsets:
         data = filepath.read_bytes()
-        merged[offset:offset + len(data)] = data
+        merged[offset : offset + len(data)] = data
         log(f"  @0x{offset:05X}: {filepath.name} ({len(data)} bytes)")
 
     # Write merged binary
@@ -828,6 +862,7 @@ def create_merged_binary(log_callback=None) -> Path | None:
 
 def build_apk(log_callback=None) -> Path | None:
     """Build APK with Flutter. Returns path to .apk or None."""
+
     def log(msg):
         if log_callback:
             log_callback(msg)
@@ -894,7 +929,9 @@ def build_apk(log_callback=None) -> Path | None:
             return None
 
         log("APK build successful!")
-        apk_path = mobile_dir / "build" / "app" / "outputs" / "flutter-apk" / "app-release.apk"
+        apk_path = (
+            mobile_dir / "build" / "app" / "outputs" / "flutter-apk" / "app-release.apk"
+        )
         if apk_path.exists():
             size_mb = apk_path.stat().st_size / (1024 * 1024)
             log(f"  app-release.apk: {size_mb:.1f} MB")
@@ -908,9 +945,12 @@ def build_apk(log_callback=None) -> Path | None:
 
 # ─── Package Release ─────────────────────────────────────────────────
 
-def package_firmware_release(version: str, bin_path: Path, log_callback=None,
-                             test_build: bool = False) -> bool:
+
+def package_firmware_release(
+    version: str, bin_path: Path, log_callback=None, test_build: bool = False
+) -> bool:
     """Copy firmware .bin to releases/firmware/ with proper naming and MD5."""
+
     def log(msg):
         if log_callback:
             log_callback(msg)
@@ -946,9 +986,11 @@ def package_firmware_release(version: str, bin_path: Path, log_callback=None,
     return True
 
 
-def package_app_release(version: str, apk_path: Path, log_callback=None,
-                        test_build: bool = False) -> bool:
+def package_app_release(
+    version: str, apk_path: Path, log_callback=None, test_build: bool = False
+) -> bool:
     """Copy APK to releases/app/ with proper naming and MD5."""
+
     def log(msg):
         if log_callback:
             log_callback(msg)
@@ -975,10 +1017,16 @@ def package_app_release(version: str, apk_path: Path, log_callback=None,
 # CLI Mode
 # =====================================================================
 
-def cli_release_firmware(bump_type: str = "patch", changelog: str = "",
-                         log_callback=None, test_build: bool = False,
-                         no_bump: bool = False):
+
+def cli_release_firmware(
+    bump_type: str = "patch",
+    changelog: str = "",
+    log_callback=None,
+    test_build: bool = False,
+    no_bump: bool = False,
+):
     """Build and release firmware from CLI."""
+
     def log(msg):
         if log_callback:
             log_callback(msg)
@@ -1001,8 +1049,7 @@ def cli_release_firmware(bump_type: str = "patch", changelog: str = "",
         log("ABORTED: Firmware build failed.")
         return False
 
-    package_firmware_release(version, bin_path, log_callback=log,
-                             test_build=test_build)
+    package_firmware_release(version, bin_path, log_callback=log, test_build=test_build)
 
     if changelog.strip():
         add_changelog_entry("firmware", version, changelog)
@@ -1013,16 +1060,23 @@ def cli_release_firmware(bump_type: str = "patch", changelog: str = "",
     log("Which binary to use:")
     log(f"  OTA update (from app/BLE):  evilcrow-v2-fw-v{version}-OTA.bin")
     log(f"  Web flasher / first flash:  evilcrow-v2-fw-v{version}-full.bin")
-    log(f"  esptool manual flash:       esptool.py write_flash 0x0 evilcrow-v2-fw-v{version}-full.bin")
+    log(
+        f"  esptool manual flash:       esptool.py write_flash 0x0 evilcrow-v2-fw-v{version}-full.bin"
+    )
     log("")
     log(f"  Git tag: git tag fw-v{version} && git push origin fw-v{version}")
     return True
 
 
-def cli_release_apk(bump_type: str = "patch", changelog: str = "",
-                     log_callback=None, test_build: bool = False,
-                     no_bump: bool = False):
+def cli_release_apk(
+    bump_type: str = "patch",
+    changelog: str = "",
+    log_callback=None,
+    test_build: bool = False,
+    no_bump: bool = False,
+):
     """Build and release APK from CLI."""
+
     def log(msg):
         if log_callback:
             log_callback(msg)
@@ -1045,8 +1099,7 @@ def cli_release_apk(bump_type: str = "patch", changelog: str = "",
         log("ABORTED: APK build failed.")
         return False
 
-    package_app_release(version, apk_path, log_callback=log,
-                        test_build=test_build)
+    package_app_release(version, apk_path, log_callback=log, test_build=test_build)
 
     if changelog.strip():
         add_changelog_entry("app", version, changelog)
@@ -1082,15 +1135,21 @@ def cli_interactive():
     if choice == "0":
         return
     elif choice == "1":
-        bump = input("Bump type [major/minor/patch] (default: patch): ").strip() or "patch"
+        bump = (
+            input("Bump type [major/minor/patch] (default: patch): ").strip() or "patch"
+        )
         cl = input("Changelog (one line, or empty): ").strip()
         cli_release_firmware(bump, cl)
     elif choice == "2":
-        bump = input("Bump type [major/minor/patch] (default: patch): ").strip() or "patch"
+        bump = (
+            input("Bump type [major/minor/patch] (default: patch): ").strip() or "patch"
+        )
         cl = input("Changelog (one line, or empty): ").strip()
         cli_release_apk(bump, cl)
     elif choice == "3":
-        bump = input("Bump type [major/minor/patch] (default: patch): ").strip() or "patch"
+        bump = (
+            input("Bump type [major/minor/patch] (default: patch): ").strip() or "patch"
+        )
         cl = input("Changelog (one line, or empty): ").strip()
         cli_release_firmware(bump, cl)
         cli_release_apk(bump, cl)
@@ -1108,6 +1167,7 @@ def cli_interactive():
 # GUI (Tkinter)
 # =====================================================================
 
+
 def launch_gui():
     """Launch the release builder GUI."""
     import tkinter as tk
@@ -1123,32 +1183,65 @@ def launch_gui():
     # Styling
     style = ttk.Style()
     style.theme_use("clam")
-    style.configure(".", background="#0a0a0a", foreground="#00e676",
-                    fieldbackground="#1a1a1a", font=("Consolas", 10))
-    style.configure("TLabel", background="#0a0a0a", foreground="#d4eed4",
-                    font=("Consolas", 10))
-    style.configure("TLabelframe", background="#0a0a0a", foreground="#00e676",
-                    font=("Consolas", 10, "bold"))
-    style.configure("TLabelframe.Label", background="#0a0a0a",
-                    foreground="#00e676", font=("Consolas", 10, "bold"))
-    style.configure("TButton", background="#1a3a1a", foreground="#00e676",
-                    font=("Consolas", 10, "bold"), padding=6)
-    style.map("TButton",
-              background=[("active", "#00e676")],
-              foreground=[("active", "#0a0a0a")])
-    style.configure("TRadiobutton", background="#0a0a0a", foreground="#d4eed4",
-                    font=("Consolas", 10))
-    style.configure("TCheckbutton", background="#0a0a0a", foreground="#d4eed4",
-                    font=("Consolas", 10))
+    style.configure(
+        ".",
+        background="#0a0a0a",
+        foreground="#00e676",
+        fieldbackground="#1a1a1a",
+        font=("Consolas", 10),
+    )
+    style.configure(
+        "TLabel", background="#0a0a0a", foreground="#d4eed4", font=("Consolas", 10)
+    )
+    style.configure(
+        "TLabelframe",
+        background="#0a0a0a",
+        foreground="#00e676",
+        font=("Consolas", 10, "bold"),
+    )
+    style.configure(
+        "TLabelframe.Label",
+        background="#0a0a0a",
+        foreground="#00e676",
+        font=("Consolas", 10, "bold"),
+    )
+    style.configure(
+        "TButton",
+        background="#1a3a1a",
+        foreground="#00e676",
+        font=("Consolas", 10, "bold"),
+        padding=6,
+    )
+    style.map(
+        "TButton",
+        background=[("active", "#00e676")],
+        foreground=[("active", "#0a0a0a")],
+    )
+    style.configure(
+        "TRadiobutton",
+        background="#0a0a0a",
+        foreground="#d4eed4",
+        font=("Consolas", 10),
+    )
+    style.configure(
+        "TCheckbutton",
+        background="#0a0a0a",
+        foreground="#d4eed4",
+        font=("Consolas", 10),
+    )
 
     # Read current versions
     current_fw = read_firmware_version()
     current_app = read_app_version()
 
     # ── Title ──
-    title_label = tk.Label(root, text="EvilCrow RF V2 — Release Builder",
-                           bg="#0a0a0a", fg="#00e676",
-                           font=("Consolas", 14, "bold"))
+    title_label = tk.Label(
+        root,
+        text="EvilCrow RF V2 — Release Builder",
+        bg="#0a0a0a",
+        fg="#00e676",
+        font=("Consolas", 14, "bold"),
+    )
     title_label.pack(pady=(10, 5))
 
     # ── Main frame ──
@@ -1169,13 +1262,15 @@ def launch_gui():
     fw_bump_var = tk.StringVar(value="patch")
     ttk.Label(fw_row1, text="  Bump:").pack(side=tk.LEFT, padx=(20, 5))
     for b in ("major", "minor", "patch"):
-        ttk.Radiobutton(fw_row1, text=b.capitalize(), value=b,
-                        variable=fw_bump_var).pack(side=tk.LEFT, padx=2)
+        ttk.Radiobutton(
+            fw_row1, text=b.capitalize(), value=b, variable=fw_bump_var
+        ).pack(side=tk.LEFT, padx=2)
 
     fw_new_ver = tk.StringVar(value=bump_version(current_fw, "patch"))
 
     def on_fw_bump_change(*_):
         fw_new_ver.set(bump_version(current_fw, fw_bump_var.get()))
+
     fw_bump_var.trace_add("write", on_fw_bump_change)
 
     fw_row2 = ttk.Frame(fw_frame)
@@ -1185,27 +1280,40 @@ def launch_gui():
     fw_ver_entry.pack(side=tk.LEFT, padx=5)
 
     fw_build_var = tk.BooleanVar(value=True)
-    ttk.Checkbutton(fw_row2, text="Build firmware (pio run)",
-                    variable=fw_build_var).pack(side=tk.LEFT, padx=10)
+    ttk.Checkbutton(
+        fw_row2, text="Build firmware (pio run)", variable=fw_build_var
+    ).pack(side=tk.LEFT, padx=10)
 
     fw_row3 = ttk.Frame(fw_frame)
     fw_row3.pack(fill=tk.X, padx=10, pady=2)
 
     fw_test_var = tk.BooleanVar(value=False)
-    ttk.Checkbutton(fw_row3, text="TEST BUILD (adds -TEST suffix, no version bump)",
-                    variable=fw_test_var).pack(side=tk.LEFT)
+    ttk.Checkbutton(
+        fw_row3,
+        text="TEST BUILD (adds -TEST suffix, no version bump)",
+        variable=fw_test_var,
+    ).pack(side=tk.LEFT)
 
     fw_nobump_var = tk.BooleanVar(value=False)
-    ttk.Checkbutton(fw_row3, text="Keep current version (no bump)",
-                    variable=fw_nobump_var).pack(side=tk.LEFT, padx=(20, 0))
+    ttk.Checkbutton(
+        fw_row3, text="Keep current version (no bump)", variable=fw_nobump_var
+    ).pack(side=tk.LEFT, padx=(20, 0))
 
     # Firmware changelog
-    ttk.Label(fw_frame, text="Changelog (one per line, optionally [feature]/[fix]/[improvement]):").pack(
-        anchor=tk.W, padx=10, pady=(4, 0))
+    ttk.Label(
+        fw_frame,
+        text="Changelog (one per line, optionally [feature]/[fix]/[improvement]):",
+    ).pack(anchor=tk.W, padx=10, pady=(4, 0))
     fw_changelog = scrolledtext.ScrolledText(
-        fw_frame, height=4, bg="#1a1a1a", fg="#d4eed4",
-        insertbackground="#00e676", font=("Consolas", 10),
-        relief=tk.FLAT, wrap=tk.WORD)
+        fw_frame,
+        height=4,
+        bg="#1a1a1a",
+        fg="#d4eed4",
+        insertbackground="#00e676",
+        font=("Consolas", 10),
+        relief=tk.FLAT,
+        wrap=tk.WORD,
+    )
     fw_changelog.pack(fill=tk.X, padx=10, pady=(2, 8))
 
     # ════════════════════════════════════════════
@@ -1222,13 +1330,15 @@ def launch_gui():
     app_bump_var = tk.StringVar(value="patch")
     ttk.Label(app_row1, text="  Bump:").pack(side=tk.LEFT, padx=(20, 5))
     for b in ("major", "minor", "patch"):
-        ttk.Radiobutton(app_row1, text=b.capitalize(), value=b,
-                        variable=app_bump_var).pack(side=tk.LEFT, padx=2)
+        ttk.Radiobutton(
+            app_row1, text=b.capitalize(), value=b, variable=app_bump_var
+        ).pack(side=tk.LEFT, padx=2)
 
     app_new_ver = tk.StringVar(value=bump_version(current_app, "patch"))
 
     def on_app_bump_change(*_):
         app_new_ver.set(bump_version(current_app, app_bump_var.get()))
+
     app_bump_var.trace_add("write", on_app_bump_change)
 
     app_row2 = ttk.Frame(app_frame)
@@ -1238,27 +1348,40 @@ def launch_gui():
     app_ver_entry.pack(side=tk.LEFT, padx=5)
 
     app_build_var = tk.BooleanVar(value=True)
-    ttk.Checkbutton(app_row2, text="Build APK (flutter build apk)",
-                    variable=app_build_var).pack(side=tk.LEFT, padx=10)
+    ttk.Checkbutton(
+        app_row2, text="Build APK (flutter build apk)", variable=app_build_var
+    ).pack(side=tk.LEFT, padx=10)
 
     app_row3 = ttk.Frame(app_frame)
     app_row3.pack(fill=tk.X, padx=10, pady=2)
 
     app_test_var = tk.BooleanVar(value=False)
-    ttk.Checkbutton(app_row3, text="TEST BUILD (adds -TEST suffix, no version bump)",
-                    variable=app_test_var).pack(side=tk.LEFT)
+    ttk.Checkbutton(
+        app_row3,
+        text="TEST BUILD (adds -TEST suffix, no version bump)",
+        variable=app_test_var,
+    ).pack(side=tk.LEFT)
 
     app_nobump_var = tk.BooleanVar(value=False)
-    ttk.Checkbutton(app_row3, text="Keep current version (no bump)",
-                    variable=app_nobump_var).pack(side=tk.LEFT, padx=(20, 0))
+    ttk.Checkbutton(
+        app_row3, text="Keep current version (no bump)", variable=app_nobump_var
+    ).pack(side=tk.LEFT, padx=(20, 0))
 
     # App changelog
-    ttk.Label(app_frame, text="Changelog (one per line, optionally [feature]/[fix]/[improvement]):").pack(
-        anchor=tk.W, padx=10, pady=(4, 0))
+    ttk.Label(
+        app_frame,
+        text="Changelog (one per line, optionally [feature]/[fix]/[improvement]):",
+    ).pack(anchor=tk.W, padx=10, pady=(4, 0))
     app_changelog = scrolledtext.ScrolledText(
-        app_frame, height=4, bg="#1a1a1a", fg="#d4eed4",
-        insertbackground="#00e676", font=("Consolas", 10),
-        relief=tk.FLAT, wrap=tk.WORD)
+        app_frame,
+        height=4,
+        bg="#1a1a1a",
+        fg="#d4eed4",
+        insertbackground="#00e676",
+        font=("Consolas", 10),
+        relief=tk.FLAT,
+        wrap=tk.WORD,
+    )
     app_changelog.pack(fill=tk.X, padx=10, pady=(2, 8))
 
     # ════════════════════════════════════════════
@@ -1276,16 +1399,22 @@ def launch_gui():
     def do_release_both():
         threading.Thread(target=_release_both, daemon=True).start()
 
-    ttk.Button(btn_frame, text="Release Firmware",
-               command=do_release_fw).pack(side=tk.LEFT, padx=4)
-    ttk.Button(btn_frame, text="Release App",
-               command=do_release_app).pack(side=tk.LEFT, padx=4)
-    ttk.Button(btn_frame, text="Release Both",
-               command=do_release_both).pack(side=tk.LEFT, padx=4)
-    ttk.Button(btn_frame, text="Prepare Environment",
-               command=lambda: threading.Thread(
-                   target=lambda: prepare_environment(log_callback=log),
-                   daemon=True).start()).pack(side=tk.LEFT, padx=4)
+    ttk.Button(btn_frame, text="Release Firmware", command=do_release_fw).pack(
+        side=tk.LEFT, padx=4
+    )
+    ttk.Button(btn_frame, text="Release App", command=do_release_app).pack(
+        side=tk.LEFT, padx=4
+    )
+    ttk.Button(btn_frame, text="Release Both", command=do_release_both).pack(
+        side=tk.LEFT, padx=4
+    )
+    ttk.Button(
+        btn_frame,
+        text="Prepare Environment",
+        command=lambda: threading.Thread(
+            target=lambda: prepare_environment(log_callback=log), daemon=True
+        ).start(),
+    ).pack(side=tk.LEFT, padx=4)
 
     # ════════════════════════════════════════════
     # Log output
@@ -1294,9 +1423,16 @@ def launch_gui():
     log_frame.pack(fill=tk.BOTH, expand=True, pady=(4, 0))
 
     log_text = scrolledtext.ScrolledText(
-        log_frame, height=10, bg="#020a02", fg="#00ff41",
-        insertbackground="#00e676", font=("Consolas", 10),
-        relief=tk.FLAT, wrap=tk.WORD, state=tk.DISABLED)
+        log_frame,
+        height=10,
+        bg="#020a02",
+        fg="#00ff41",
+        insertbackground="#00e676",
+        font=("Consolas", 10),
+        relief=tk.FLAT,
+        wrap=tk.WORD,
+        state=tk.DISABLED,
+    )
     log_text.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
 
     def log(msg: str):
@@ -1305,6 +1441,7 @@ def launch_gui():
             log_text.insert(tk.END, msg + "\n")
             log_text.see(tk.END)
             log_text.config(state=tk.DISABLED)
+
         root.after(0, _append)
 
     # ── Release logic ──
@@ -1320,7 +1457,7 @@ def launch_gui():
             label = "TEST BUILD" if is_test else "Release (no version bump)"
             log(f"=== Firmware {label} v{version} ===")
         else:
-            if not re.match(r'^\d+\.\d+\.\d+$', version):
+            if not re.match(r"^\d+\.\d+\.\d+$", version):
                 log("ERROR: Invalid firmware version format. Use X.Y.Z")
                 return
             log(f"=== Firmware Release v{version} ===")
@@ -1338,13 +1475,18 @@ def launch_gui():
         else:
             bin_path = PIO_BUILD_DIR / "firmware.bin"
             if not bin_path.exists():
-                log("ERROR: No firmware.bin found. Enable 'Build firmware' or run pio manually.")
+                log(
+                    "ERROR: No firmware.bin found. Enable 'Build firmware' or run pio manually."
+                )
                 return
-            log(f"Using existing firmware.bin ({bin_path.stat().st_size / 1024:.1f} KB)")
+            log(
+                f"Using existing firmware.bin ({bin_path.stat().st_size / 1024:.1f} KB)"
+            )
 
         # Package
-        package_firmware_release(version, bin_path, log_callback=log,
-                                 test_build=is_test)
+        package_firmware_release(
+            version, bin_path, log_callback=log, test_build=is_test
+        )
 
         # Changelog (skip for TEST builds)
         if not is_test:
@@ -1358,7 +1500,9 @@ def launch_gui():
         log("Which binary to use:")
         log(f"  OTA update (from app/BLE):  evilcrow-v2-fw-v{version}{suffix}-OTA.bin")
         log(f"  Web flasher / first flash:  evilcrow-v2-fw-v{version}{suffix}-full.bin")
-        log(f"  esptool manual flash:       esptool.py write_flash 0x0 evilcrow-v2-fw-v{version}{suffix}-full.bin")
+        log(
+            f"  esptool manual flash:       esptool.py write_flash 0x0 evilcrow-v2-fw-v{version}{suffix}-full.bin"
+        )
         if not is_test:
             log("")
             log(f"  Git tag: git tag fw-v{version} && git push origin fw-v{version}")
@@ -1374,7 +1518,7 @@ def launch_gui():
             label = "TEST BUILD" if is_test else "Release (no version bump)"
             log(f"=== App {label} v{version} ===")
         else:
-            if not re.match(r'^\d+\.\d+\.\d+$', version):
+            if not re.match(r"^\d+\.\d+\.\d+$", version):
                 log("ERROR: Invalid app version format. Use X.Y.Z")
                 return
             log(f"=== App Release v{version} ===")
@@ -1390,15 +1534,26 @@ def launch_gui():
                 log("ABORTED: APK build failed.")
                 return
         else:
-            apk_path = PROJECT_ROOT / "mobile_app" / "build" / "app" / "outputs" / "flutter-apk" / "app-release.apk"
+            apk_path = (
+                PROJECT_ROOT
+                / "mobile_app"
+                / "build"
+                / "app"
+                / "outputs"
+                / "flutter-apk"
+                / "app-release.apk"
+            )
             if not apk_path.exists():
-                log("ERROR: No app-release.apk found. Enable 'Build APK' or run flutter manually.")
+                log(
+                    "ERROR: No app-release.apk found. Enable 'Build APK' or run flutter manually."
+                )
                 return
-            log(f"Using existing APK ({apk_path.stat().st_size / (1024*1024):.1f} MB)")
+            log(
+                f"Using existing APK ({apk_path.stat().st_size / (1024 * 1024):.1f} MB)"
+            )
 
         # Package
-        package_app_release(version, apk_path, log_callback=log,
-                            test_build=is_test)
+        package_app_release(version, apk_path, log_callback=log, test_build=is_test)
 
         # Changelog (skip for TEST builds)
         if not is_test:
@@ -1434,6 +1589,7 @@ def launch_gui():
 # =====================================================================
 # Main entry point
 # =====================================================================
+
 
 def main():
     args = sys.argv[1:]

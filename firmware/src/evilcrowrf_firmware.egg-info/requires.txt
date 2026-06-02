@@ -1,0 +1,2 @@
+intelhex>=2.3.0
+platformio>=6.0
