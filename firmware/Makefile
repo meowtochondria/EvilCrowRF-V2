@@ -44,7 +44,7 @@ setup-esptoolpy:
 			echo "esptoolpy package.json already exists. Skipping."; \
 		fi
 
-setup-clangd-compile-commands:
+setup-with-clangd: setup
 	@uv run platformio run --target compiledb
 
 build: setup
