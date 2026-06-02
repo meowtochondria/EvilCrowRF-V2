@@ -1,18 +1,9 @@
 /**
  * @file BatteryModule.cpp
- * @brief Battery voltage monitoring implementation.
+ * @brief Battery voltage monitoring implementation (Arduino-compatible).
  *
- * Uses ESP-IDF 5.x ADC oneshot + calibration API for accurate readings.
- * GPIO 36 (VP) is an input-only pin with ADC1_CHANNEL_0.
- *
- * LiPo discharge curve approximation (3.7V nominal):
- *   4.20V = 100%
- *   4.10V = 90%
- *   3.95V = 75%
- *   3.80V = 50%
- *   3.70V = 25%
- *   3.50V = 10%
- *   3.20V = 0% (cutoff)
+ * Uses analogRead() with attenuation for battery monitoring on GPIO 36 (VP).
+ * LiPo discharge curve approximation remains the same.
  */
 
 #include "BatteryModule.h"
@@ -22,63 +13,20 @@
 static const char* TAG = "Battery";
 
 // Static members
-bool     BatteryModule::initialized_  = false;
-uint16_t BatteryModule::lastVoltage_  = 0;
-uint8_t  BatteryModule::lastPercent_  = 0;
-bool     BatteryModule::lastCharging_ = false;
-adc_oneshot_unit_handle_t BatteryModule::adcHandle_ = nullptr;
-adc_cali_handle_t         BatteryModule::caliHandle_ = nullptr;
+bool BatteryModule::initialized_ = false;
+uint16_t BatteryModule::lastVoltage_ = 0;
+uint8_t BatteryModule::lastPercent_ = 0;
+bool BatteryModule::lastCharging_ = false;
 TimerHandle_t BatteryModule::readTimer_ = nullptr;
 
 void BatteryModule::init() {
     if (initialized_) return;
 
-    // ── ADC oneshot unit init ───────────────────────────────────
-    adc_oneshot_unit_init_cfg_t unitCfg = {};
-    unitCfg.unit_id = ADC_UNIT_1;
-    unitCfg.ulp_mode = ADC_ULP_MODE_DISABLE;
-
-    esp_err_t err = adc_oneshot_new_unit(&unitCfg, &adcHandle_);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to init ADC unit: %s", esp_err_to_name(err));
-        return;
-    }
-
-    // ── Channel config (GPIO 36 = ADC1_CH0, 12dB attenuation for ~3.3V range) ──
-    adc_oneshot_chan_cfg_t chanCfg = {};
-    chanCfg.atten = ADC_ATTEN_DB_12;
-    chanCfg.bitwidth = ADC_BITWIDTH_12;
-
-    err = adc_oneshot_config_channel(adcHandle_, ADC_CHANNEL_0, &chanCfg);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to config ADC channel: %s", esp_err_to_name(err));
-        adc_oneshot_del_unit(adcHandle_);
-        adcHandle_ = nullptr;
-        return;
-    }
-
-    // ── Calibration (line fitting scheme for original ESP32) ────
-    //
-    // ESP32 supports line fitting calibration.
-    // Uses factory eFuse Vref or Two-Point values if available.
-#if ADC_CALI_SCHEME_LINE_FITTING_SUPPORTED
-    adc_cali_line_fitting_config_t caliCfg = {};
-    caliCfg.unit_id  = ADC_UNIT_1;
-    caliCfg.atten    = ADC_ATTEN_DB_12;
-    caliCfg.bitwidth = ADC_BITWIDTH_12;
-
-    err = adc_cali_create_scheme_line_fitting(&caliCfg, &caliHandle_);
-    if (err == ESP_OK) {
-        ESP_LOGI(TAG, "ADC calibration: line fitting");
-    } else {
-        ESP_LOGW(TAG, "ADC calibration failed (%s), using raw readings",
-                 esp_err_to_name(err));
-        caliHandle_ = nullptr;
-    }
-#else
-    ESP_LOGW(TAG, "ADC line fitting not supported, using raw readings");
-    caliHandle_ = nullptr;
-#endif
+    // Configure ADC for battery monitoring
+    // Set attenuation to 11dB to allow measurement up to ~3.9V
+    analogSetAttenuation(ADC_11db);
+    // Set resolution to 12-bit (0-4095)
+    analogReadResolution(12);
 
     // Take initial reading
     lastVoltage_ = readVoltage();
@@ -107,33 +55,16 @@ void BatteryModule::init() {
 }
 
 uint16_t BatteryModule::readVoltage() {
-    if (!adcHandle_) return 0;
-
     // Multisample for noise reduction
-    uint32_t rawSum = 0;
+    uint32_t sum = 0;
     for (int i = 0; i < ADC_SAMPLES; i++) {
-        int raw = 0;
-        if (adc_oneshot_read(adcHandle_, ADC_CHANNEL_0, &raw) == ESP_OK) {
-            rawSum += raw;
-        }
+        // Use analogReadMilliVolts for direct mV reading (includes attenuation factor)
+        sum += analogReadMilliVolts(36); // GPIO 36 (ADC1 channel 0)
     }
-    int rawAvg = (int)(rawSum / ADC_SAMPLES);
-
-    // Convert to calibrated millivolts if calibration is available
-    uint32_t voltage_mv;
-    if (caliHandle_) {
-        int mv = 0;
-        adc_cali_raw_to_voltage(caliHandle_, rawAvg, &mv);
-        voltage_mv = (uint32_t)mv;
-    } else {
-        // Fallback: approximate conversion for 12-bit / 12dB atten
-        // Full range ~3300mV over 4095 counts
-        voltage_mv = (uint32_t)rawAvg * 3300 / 4095;
-    }
+    uint32_t avg_mv = sum / ADC_SAMPLES;
 
     // Apply voltage divider ratio to get actual battery voltage
-    uint16_t batteryVoltage = (uint16_t)(voltage_mv * BATTERY_DIVIDER_RATIO);
-
+    uint16_t batteryVoltage = (uint16_t)(avg_mv * BATTERY_DIVIDER_RATIO);
     return batteryVoltage;
 }
 
@@ -182,14 +113,8 @@ uint8_t BatteryModule::voltageToPercent(uint16_t voltage_mv) {
 }
 
 bool BatteryModule::isCharging() {
-    // Charging detection: if voltage is above 4.15V and still rising,
-    // it's likely charging. A more robust approach would use a dedicated
-    // CHRG pin from the TP4056, but we approximate it from voltage.
-    //
-    // Heuristic: voltage > 4.15V suggests active charging or fully charged.
-    // The TP4056 CHRG pin (if connected to a GPIO) would be more reliable.
-    //
-    // TODO: If the schematic confirms a CHRG pin on a GPIO, read it directly.
+    // Charging detection: if voltage is above 4.15V, it's likely charging.
+    // A dedicated CHRG pin from TP4056 would be more reliable.
     return (lastVoltage_ > 4150);
 }
 

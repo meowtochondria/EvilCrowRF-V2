@@ -21,10 +21,8 @@
 
 #if BATTERY_MODULE_ENABLED
 
-#include <esp_adc/adc_oneshot.h>
-#include <esp_adc/adc_cali.h>
-#include <esp_adc/adc_cali_scheme.h>
 #include "core/ble/ClientsManager.h"
+#include <esp32-hal-adc.h>
 #include "esp_log.h"
 
 class BatteryModule {
@@ -76,8 +74,6 @@ private:
     static uint16_t lastVoltage_;
     static uint8_t lastPercent_;
     static bool lastCharging_;
-    static adc_oneshot_unit_handle_t adcHandle_;
-    static adc_cali_handle_t caliHandle_;
     static TimerHandle_t readTimer_;
 
     /// Timer callback — reads voltage and sends BLE notification.
