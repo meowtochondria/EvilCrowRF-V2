@@ -1,9 +1,11 @@
-import os
-
 Import("env")
 
+import json
+import os
+
 # include toolchain paths
-env.Replace(COMPILATIONDB_INCLUDE_TOOLCHAIN=True)
+# env.Replace(COMPILATIONDB_INCLUDE_TOOLCHAIN=True)
 
 # override compilation DB path
-env.Replace(COMPILATIONDB_PATH=env.GetProjectOption("COMPILATIONDB_PATH"))
+compilation_db_path = env.GetProjectOption("COMPILATIONDB_PATH")
+env.Replace(COMPILATIONDB_PATH=compilation_db_path)

@@ -44,6 +44,9 @@ setup-esptoolpy:
 			echo "esptoolpy package.json already exists. Skipping."; \
 		fi
 
+setup-clangd-compile-commands:
+	@uv run platformio run --target compiledb
+
 build: setup
 	@echo "Building ESP32 firmware (production)..."
 	@uv run platformio run --environment esp32dev
