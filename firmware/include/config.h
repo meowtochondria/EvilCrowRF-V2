@@ -69,7 +69,6 @@
 // Battery monitoring via ADC
 // GPIO 36 (VP) connected to battery through voltage divider
 // Voltage divider: GND---100K---GPIO36---220K---VBAT → ratio = (220+100)/100 = 3.2
-// TODO: Disable battery module as i am unable to resolve esp_adc/adc_oneshot.h: No such file or directory
 #define BATTERY_MODULE_ENABLED 1
 #define BATTERY_ADC_PIN 36         // GPIO 36 = ADC1_CH0 (input-only)
 #define BATTERY_DIVIDER_RATIO 3.2  // Voltage divider ratio: (R1+R2)/R2 = (220K+100K)/100K
