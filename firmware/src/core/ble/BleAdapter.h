@@ -56,6 +56,9 @@ private:
         public:
             CharacteristicCallbacks(BleAdapter* adapter) : adapter(adapter) {}
             void onWrite(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo) override;
+            void onSubscribe(NimBLECharacteristic* pCharacteristic,
+                             NimBLEConnInfo& connInfo,
+                             uint16_t subscriptionValue) override;
     };
 
     NimBLEServer* pServer;
@@ -111,6 +114,10 @@ private:
     void notifyError(const char *errorMsg);
     void cleanupOldUploads();
     bool handleUploadChunk(uint8_t chunkId, uint8_t chunkNum, uint8_t totalChunks, uint8_t *payload, size_t payloadLength);
+
+    // Heartbeat / keepalive
+    static TimerHandle_t heartbeatTimer;
+    static void heartbeatTimerCallback(TimerHandle_t xTimer);
 
     // Static instance for callbacks
     static BleAdapter* instance;

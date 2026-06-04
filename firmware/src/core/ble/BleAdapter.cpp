@@ -9,6 +9,20 @@
 
 static const char* TAG = "BleAdapter";
 
+void BleAdapter::heartbeatTimerCallback(TimerHandle_t xTimer) {
+    BleAdapter* adapter = static_cast<BleAdapter*>(pvTimerGetTimerID(xTimer));
+    if (adapter == nullptr || !adapter->deviceConnected || adapter->pTxCharacteristic == nullptr) {
+        return;
+    }
+    // Send a lightweight binary heartbeat packet (0x82) to refresh the
+    // BLE supervision timer on both sides. No ACK required; the act of
+    // notifying alone resets the link-layer supervision timer.
+    uint8_t heartbeat[] = { 0x82 };
+    NimBLEAttValue hbVal(heartbeat, 1);
+    adapter->pTxCharacteristic->notify(hbVal);
+    ESP_LOGV(TAG, "Heartbeat sent");
+}
+
 extern ClientsManager& clients;
 
 // Static member definitions
@@ -18,6 +32,7 @@ const char* BleAdapter::CHARACTERISTIC_UUID_RX = "6e400002-b5a3-f393-e0a9-e50e24
 
 BleAdapter* BleAdapter::instance = nullptr;
 SemaphoreHandle_t BleAdapter::sendChunkMutex = nullptr;
+TimerHandle_t BleAdapter::heartbeatTimer = nullptr;
 
 BleAdapter::BleAdapter() : pServer(nullptr), pService(nullptr), pTxCharacteristic(nullptr), pRxCharacteristic(nullptr), serverCallbacks(nullptr), characteristicCallbacks(nullptr) {
     instance = this;
@@ -98,8 +113,9 @@ void BleAdapter::begin() {
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->addServiceUUID(SERVICE_UUID);
     pAdvertising->enableScanResponse(true);
-    pAdvertising->start();
-    ESP_LOGD(TAG, "NimBLE advertising started");
+    bool advStarted = pAdvertising->start();
+    ESP_LOGI(TAG, "NimBLE advertising start() returned: %s", advStarted ? "SUCCESS" : "FAILED");
+    ESP_LOGI(TAG, "NimBLE advertising active check: %s", ble_gap_adv_active() ? "YES" : "NO");
 
     ESP_LOGI(TAG, "NimBLE Server started, waiting for connections...");
     ESP_LOGI(TAG, "Free heap after BLE init: %d bytes", ESP.getFreeHeap());
@@ -748,6 +764,8 @@ bool BleAdapter::handleUploadChunk(uint8_t chunkId, uint8_t chunkNum, uint8_t to
 // Server callbacks implementation
 void BleAdapter::ServerCallbacks::onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo) {
     (void)connInfo; // unused
+    // Set connected immediately so initial state responses flow.
+    // onSubscribe will fire shortly after when the phone enables CCCD.
     instance->deviceConnected = true;
     ESP_LOGI(TAG, "BLE Client connected");
 }
@@ -758,13 +776,48 @@ void BleAdapter::ServerCallbacks::onDisconnect(NimBLEServer* pServer, NimBLEConn
     instance->deviceConnected = false;
     ESP_LOGI(TAG, "BLE Client disconnected");
 
-    // Restart advertising — NimBLE handles this more efficiently than Bluedroid
-    vTaskDelay(pdMS_TO_TICKS(500));
+    // Stop heartbeat timer if it was created
+    if (instance->heartbeatTimer != nullptr) {
+        xTimerStop(instance->heartbeatTimer, 0);
+    }
+
+    // Restart advertising — minimal delay before re-advertising
+    vTaskDelay(pdMS_TO_TICKS(50));
     NimBLEDevice::startAdvertising();
     ESP_LOGI(TAG, "NimBLE Advertising restarted");
 }
 
 // Characteristic callbacks implementation
+void BleAdapter::CharacteristicCallbacks::onSubscribe(NimBLECharacteristic* pCharacteristic,
+                                                      NimBLEConnInfo& connInfo,
+                                                      uint16_t subscriptionValue) {
+    (void)pCharacteristic;
+    (void)connInfo;
+    if (subscriptionValue != 0) {
+        adapter->deviceConnected = true;
+        ESP_LOGI(TAG, "CCCD subscription confirmed, device marked as connected");
+
+        // Lazily create and start heartbeat timer
+        if (adapter->heartbeatTimer == nullptr) {
+            adapter->heartbeatTimer = xTimerCreate(
+                "ble_hb",
+                pdMS_TO_TICKS(2500),
+                pdTRUE,          // auto-reload
+                adapter,         // timer ID = adapter instance
+                BleAdapter::heartbeatTimerCallback
+            );
+        }
+        if (adapter->heartbeatTimer != nullptr) {
+            xTimerStart(adapter->heartbeatTimer, 0);
+            ESP_LOGD(TAG, "Heartbeat timer started");
+        } else {
+            ESP_LOGE(TAG, "Failed to create heartbeat timer");
+        }
+    } else {
+        ESP_LOGD(TAG, "CCCD subscription cancelled (subscriptionValue=0)");
+    }
+}
+
 void BleAdapter::CharacteristicCallbacks::onWrite(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo) {
     (void)connInfo; // unused
     // NimBLE getValue() returns NimBLEAttValue with direct byte access

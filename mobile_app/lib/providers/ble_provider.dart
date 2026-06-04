@@ -25,13 +25,13 @@ class BleProvider extends ChangeNotifier {
   BluetoothDevice? connectedDevice;
   BluetoothCharacteristic? txCharacteristic;
   BluetoothCharacteristic? rxCharacteristic;
-  
+
   // BLE stream subscriptions (stored for cleanup on reconnect/dispose)
   StreamSubscription<BluetoothAdapterState>? _adapterStateSubscription;
   StreamSubscription<BluetoothConnectionState>? _connectionStateSubscription;
   StreamSubscription<List<ScanResult>>? _scanResultsSubscription;
   StreamSubscription<List<int>>? _rxValueSubscription;
-  
+
   // OTA auto-reconnect state
   bool _otaRebootPending = false;
   String? _otaPreRebootVersion;
@@ -42,26 +42,28 @@ class BleProvider extends ChangeNotifier {
 
   // Callback for user-facing notifications (forwarded to NotificationProvider)
   Function(String level, String message)? _notificationCallback;
-  
+
   // File reading state
   String? _currentFileContent;
   Completer<String>? _pendingFileReadCompleter;
   bool isLoadingFileContent = false;
   double fileContentProgress = 0.0;
-  
+
   // File system operations completers
   Completer<Map<String, dynamic>>? _pendingRenameCompleter;
   Completer<Map<String, dynamic>>? _pendingDeleteCompleter;
   Completer<Map<String, dynamic>>? _pendingMkdirCompleter;
   Completer<Map<String, dynamic>>? _pendingDirectoryTreeCompleter;
-  
+
   // Method for setting logging callback
-  void setLogCallback(Function(String level, String message, {String? details}) callback) {
+  void setLogCallback(
+      Function(String level, String message, {String? details}) callback) {
     _logCallback = callback;
   }
 
   // Method for setting notification callback (for user-facing notifications)
-  void setNotificationCallback(Function(String level, String message) callback) {
+  void setNotificationCallback(
+      Function(String level, String message) callback) {
     _notificationCallback = callback;
   }
 
@@ -69,18 +71,18 @@ class BleProvider extends ChangeNotifier {
   void _notify(String level, String message) {
     _notificationCallback?.call(level, message);
   }
-  
+
   // Helper method for logging
   void _log(String level, String message, {String? details}) {
     _logCallback?.call(level, message, details: details);
   }
-  
+
   bool isScanning = false;
   bool isConnected = false;
   List<ScanResult> scanResults = [];
   String statusMessage = ''; // Will be set with localized strings
   String lastCommandMessage = ''; // Separate field for command messages
-  
+
   // List of supported device names (fallback)
   static const List<String> supportedDeviceNames = [
     'ESP32_CC1101',
@@ -88,33 +90,38 @@ class BleProvider extends ChangeNotifier {
     'ESP32_Binary',
     'ESP32',
   ];
-  
+
   // Our custom Service UUID for device identification
-  static const String evilCrowServiceUuid = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
-  
+  static const String evilCrowServiceUuid =
+      '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+
   // Nordic UART Service (NUS) UUIDs
   static const String serviceUuid = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
-  static const String txUuid = '6e400002-b5a3-f393-e0a9-e50e24dcca9e'; // Write characteristic
-  static const String rxUuid = '6e400003-b5a3-f393-e0a9-e50e24dcca9e'; // Notify characteristic
-  
+  static const String txUuid =
+      '6e400002-b5a3-f393-e0a9-e50e24dcca9e'; // Write characteristic
+  static const String rxUuid =
+      '6e400003-b5a3-f393-e0a9-e50e24dcca9e'; // Notify characteristic
+
   // EvilCrow Manufacturer ID and Device ID
   static const int evilCrowManufacturerId = 0x1234;
   static const List<int> evilCrowDeviceId = [0x01, 0x02, 0x03, 0x04];
   List<FileItem> fileList = [];
   String currentPath = '/';
-  int currentPathType = 5; // 0=/DATA/RECORDS, 1=/DATA/SIGNALS, 2=/DATA/PRESETS, 3=/DATA/TEMP, 4=INTERNAL (LittleFS), 5=SD Root
+  int currentPathType =
+      5; // 0=/DATA/RECORDS, 1=/DATA/SIGNALS, 2=/DATA/PRESETS, 3=/DATA/TEMP, 4=INTERNAL (LittleFS), 5=SD Root
   bool isLoadingFiles = false;
   double fileListProgress = 0.0; // Progress for file list loading (0.0 to 1.0)
-  bool isFormattingSD = false;   // True while SD format command is in progress
-  bool sdFormatSuccess = false;  // Result of last SD format
-  String sdFormatProgress = '';  // Progress message during SD format (e.g. "Deleting: /somefile")
+  bool isFormattingSD = false; // True while SD format command is in progress
+  bool sdFormatSuccess = false; // Result of last SD format
+  String sdFormatProgress =
+      ''; // Progress message during SD format (e.g. "Deleting: /somefile")
 
   // Scanner state
   List<DetectedSignal> detectedSignals = [];
   Map<String, double> frequencySpectrum = {};
   int selectedModule = 0;
   int rssiThreshold = -100;
-  
+
   // Device status
   Map<String, dynamic>? deviceStatus;
   int? freeHeap;
@@ -122,13 +129,16 @@ class BleProvider extends ChangeNotifier {
   int? core0Mhz;
   int? core1Mhz;
   List<Map<String, dynamic>>? cc1101Modules;
-  
+
   // Recorded files
   List<Map<String, dynamic>> recordedRuntimeFiles = [];
-  
+
   // Recording state for each module
   Map<int, bool> isRecording = {0: false, 1: false}; // Module -> is recording
-  Map<int, bool> isFrequencySearching = {0: false, 1: false}; // Module -> is frequency searching
+  Map<int, bool> isFrequencySearching = {
+    0: false,
+    1: false
+  }; // Module -> is frequency searching
   Map<int, bool> isJamming = {0: false, 1: false}; // Module -> is jamming
 
   // ── NRF24 state (reactive, used by NrfScreen via Consumer) ──
@@ -180,65 +190,69 @@ class BleProvider extends ChangeNotifier {
   int otaBytesWritten = 0;
   bool otaComplete = false;
   String? otaErrorMessage;
-  
+
   // Cache for file lists by paths
   final Map<String, List<FileItem>> _fileCache = {};
-  final Map<String, DateTime> _cacheTimestamps = {}; // Time of last update for each path
-  
+  final Map<String, DateTime> _cacheTimestamps =
+      {}; // Time of last update for each path
+
   // Streaming file list buffer (for accumulating files from multiple messages)
   final List<FileItem> _streamingFileBuffer = [];
   bool _isStreamingFileList = false;
-  int _streamingTotalFiles = 0;  // Total files expected (for progress)
-  
+  int _streamingTotalFiles = 0; // Total files expected (for progress)
+
   // Directory tree streaming state
   final List<String> _streamingDirectoryTreeBuffer = [];
   bool _isStreamingDirectoryTree = false;
-  int _streamingTotalDirs = 0;  // Total directories expected (for progress)
-  
+  int _streamingTotalDirs = 0; // Total directories expected (for progress)
+
   // Protection against multiple commands
   bool _isCommandInProgress = false;
   bool _isWriting = false; // Flag to prevent concurrent BLE writes
   DateTime? _lastCommandTime;
   static const Duration _commandCooldown = Duration(milliseconds: 200);
-  
+
   // Timeouts for commands
   Timer? _commandTimeout;
   static const Duration _commandTimeoutDuration = Duration(seconds: 15);
-  
+
   // Timeout for file list loading
   Timer? _fileListTimeout;
   static const Duration _fileListTimeoutDuration = Duration(seconds: 15);
-  
+
   // Buffers for chunks
   // Old chunk buffers removed - using firmware protocol now
-  
+
   // Current chunk state
   // Old chunk state variables removed - using firmware protocol now
-  
+
   // Old chunk processing variables removed - using firmware protocol now
-  
-  
+
   // Target device name - updated to match firmware
   static const String targetDeviceName = 'ESP32_CC1101';
-  
+
   // Known device storage
   String? _knownDeviceId;
   static const String _deviceIdKey = 'known_device_id';
-  
+
+  // Auto-reconnect state
+  Timer? _reconnectTimer;
+
   // Quick connect to known device
   Future<void> quickConnect() async {
     if (isConnected || isScanning) return;
-    
+
     try {
       // First try: Connect to known device if we have one
       if (_knownDeviceId != null) {
         print('Attempting direct connection to known device: $_knownDeviceId');
         statusMessage = 'connectingToKnownDevice'; // Key for localization
         notifyListeners();
-        
+
         try {
           BluetoothDevice knownDevice = BluetoothDevice.fromId(_knownDeviceId!);
-          print('Created device object for known device: ${knownDevice.name} (${knownDevice.id})');
+          print(
+              'Created device object for known device: ${knownDevice.name} (${knownDevice.id})');
           await connectToDevice(knownDevice);
           return; // Success, exit early
         } catch (e) {
@@ -247,17 +261,17 @@ class BleProvider extends ChangeNotifier {
           await _clearKnownDevice();
         }
       }
-      
+
       // Second try: Scan for target device
       print('Scanning for target device: $targetDeviceName');
       statusMessage = 'Scanning for device...';
       notifyListeners();
-      
+
       await startScan();
-      
+
       // Wait for scan results (reduced timeout)
       await Future.delayed(const Duration(seconds: 2));
-      
+
       // Look for target device in supported scan results
       List<ScanResult> supportedDevices = supportedScanResults;
       for (var result in supportedDevices) {
@@ -269,13 +283,13 @@ class BleProvider extends ChangeNotifier {
           break;
         }
       }
-      
+
       // If no device found, show error
       if (!isConnected) {
-        statusMessage = 'Device not found. Make sure it\'s powered on and nearby.';
+        statusMessage =
+            'Device not found. Make sure it\'s powered on and nearby.';
         notifyListeners();
       }
-      
     } catch (e) {
       statusMessage = 'Connection error: $e';
       notifyListeners();
@@ -291,7 +305,7 @@ class BleProvider extends ChangeNotifier {
   Future<void> _initializeBle() async {
     // Request permissions
     await requestPermissions();
-    
+
     // Listen to Bluetooth state changes
     _adapterStateSubscription?.cancel();
     _adapterStateSubscription = FlutterBluePlus.adapterState.listen((state) {
@@ -306,7 +320,7 @@ class BleProvider extends ChangeNotifier {
       notifyListeners();
     });
   }
-  
+
   Future<void> _loadKnownDevice() async {
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -322,12 +336,13 @@ class BleProvider extends ChangeNotifier {
   Future<void> _loadTempOffsetPref() async {
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
-      _cpuTempOffsetDeciC = (prefs.getInt('cpuTempOffsetDeciC') ?? -200).clamp(-500, 500);
+      _cpuTempOffsetDeciC =
+          (prefs.getInt('cpuTempOffsetDeciC') ?? -200).clamp(-500, 500);
     } catch (e) {
       print('Error loading cpu temp offset: $e');
     }
   }
-  
+
   Future<void> saveKnownDevice(String deviceId) async {
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -338,7 +353,7 @@ class BleProvider extends ChangeNotifier {
       print('Error saving known device: $e');
     }
   }
-  
+
   Future<void> _clearKnownDevice() async {
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -349,7 +364,7 @@ class BleProvider extends ChangeNotifier {
       print('Error clearing known device: $e');
     }
   }
-  
+
   /// Clear saved device cache
   Future<void> clearDeviceCache() async {
     await _clearKnownDevice();
@@ -361,33 +376,34 @@ class BleProvider extends ChangeNotifier {
     if (await Permission.bluetooth.isDenied) {
       await Permission.bluetooth.request();
     }
-    
+
     // Android 12+ specific permissions
     if (await Permission.bluetoothScan.isDenied) {
       await Permission.bluetoothScan.request();
     }
-    
+
     if (await Permission.bluetoothConnect.isDenied) {
       await Permission.bluetoothConnect.request();
     }
-    
+
     if (await Permission.bluetoothAdvertise.isDenied) {
       await Permission.bluetoothAdvertise.request();
     }
-    
+
     // Location permission (required for scanning)
     if (await Permission.location.isDenied) {
       await Permission.location.request();
     }
-    
+
     // Check if all permissions are granted
     bool allGranted = await Permission.bluetooth.isGranted &&
-                      await Permission.bluetoothScan.isGranted &&
-                      await Permission.bluetoothConnect.isGranted &&
-                      await Permission.location.isGranted;
-    
+        await Permission.bluetoothScan.isGranted &&
+        await Permission.bluetoothConnect.isGranted &&
+        await Permission.location.isGranted;
+
     if (!allGranted) {
-      statusMessage = 'Some permissions denied. Bluetooth may not work properly.';
+      statusMessage =
+          'Some permissions denied. Bluetooth may not work properly.';
       notifyListeners();
     } else {
       statusMessage = 'All permissions granted. Bluetooth ready.';
@@ -397,52 +413,54 @@ class BleProvider extends ChangeNotifier {
 
   Future<void> startScan() async {
     if (isScanning) return;
-    
+
     // Check permissions before scanning
     if (!await _checkScanPermissions()) {
       statusMessage = 'Bluetooth scan permissions not granted';
       notifyListeners();
       return;
     }
-    
+
     try {
       isScanning = true;
       scanResults.clear();
       statusMessage = 'scanningForDevices'; // Key for localization
       notifyListeners();
-      
+
       // Start scanning
       await FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
-      
+
       // Listen to scan results
       _scanResultsSubscription?.cancel();
       _scanResultsSubscription = FlutterBluePlus.scanResults.listen((results) {
         scanResults = results;
         print('Scan results updated: ${results.length} devices found');
-        
+
         // Log all devices
         for (var result in results) {
           print('Found device: ${result.device.name} (${result.device.id})');
         }
-        
+
         // Log supported devices count only
         List<ScanResult> supportedDevices = supportedScanResults;
         if (supportedDevices.isNotEmpty) {
           print('Found ${supportedDevices.length} supported device(s)');
         }
-        
+
         notifyListeners();
       });
-      
+
       await Future.delayed(const Duration(seconds: 10));
       await stopScan();
-      
+
       // Show scan results
       List<ScanResult> supportedDevices = supportedScanResults;
       if (supportedDevices.isNotEmpty) {
-        statusMessage = 'foundSupportedDevices:${supportedDevices.length}'; // Key with count for localization
+        statusMessage =
+            'foundSupportedDevices:${supportedDevices.length}'; // Key with count for localization
       } else {
-        statusMessage = 'No supported devices found. Make sure ESP32 is powered on and nearby.';
+        statusMessage =
+            'No supported devices found. Make sure ESP32 is powered on and nearby.';
       }
       notifyListeners();
     } catch (e) {
@@ -453,10 +471,10 @@ class BleProvider extends ChangeNotifier {
 
   Future<bool> _checkScanPermissions() async {
     return await Permission.bluetooth.isGranted &&
-           await Permission.bluetoothScan.isGranted &&
-           await Permission.location.isGranted;
+        await Permission.bluetoothScan.isGranted &&
+        await Permission.location.isGranted;
   }
-  
+
   // Filter scan results to show only supported devices
   List<ScanResult> get supportedScanResults {
     return scanResults.where((result) {
@@ -464,7 +482,7 @@ class BleProvider extends ChangeNotifier {
       if (result.advertisementData.serviceUuids.contains(evilCrowServiceUuid)) {
         return true;
       }
-      
+
       // Secondary method: Check Manufacturer Data
       var manufacturerData = result.advertisementData.manufacturerData;
       if (manufacturerData.containsKey(evilCrowManufacturerId)) {
@@ -482,19 +500,19 @@ class BleProvider extends ChangeNotifier {
           }
         }
       }
-      
+
       // Fallback method: Check device name
       String deviceName = result.device.name;
-      bool nameMatch = supportedDeviceNames.any((supportedName) => 
-        deviceName.toLowerCase().contains(supportedName.toLowerCase()));
-      
+      bool nameMatch = supportedDeviceNames.any((supportedName) =>
+          deviceName.toLowerCase().contains(supportedName.toLowerCase()));
+
       return nameMatch;
     }).toList();
   }
 
   Future<void> stopScan() async {
     if (!isScanning) return;
-    
+
     try {
       await FlutterBluePlus.stopScan();
       isScanning = false;
@@ -508,113 +526,134 @@ class BleProvider extends ChangeNotifier {
 
   Future<void> connectToDevice(BluetoothDevice device) async {
     try {
+      // Cancel any pending auto-reconnect from a previous disconnection
+      _reconnectTimer?.cancel();
+      _reconnectTimer = null;
+
       statusMessage = 'connecting'; // Key for localization
-      _log('info', 'Attempting to connect to device', details: 'Device: ${device.name} (${device.id})');
+      _log('info', 'Attempting to connect to device',
+          details: 'Device: ${device.name} (${device.id})');
       print('Connecting to device: ${device.name} (${device.id})');
       notifyListeners();
-      
+
       await device.connect(timeout: const Duration(seconds: 10));
       connectedDevice = device;
-      
+
       // Set up connection state monitoring (cancel previous subscription on reconnect)
       _connectionStateSubscription?.cancel();
       _connectionStateSubscription = device.connectionState.listen((state) {
-        bool isConnected = state == BluetoothConnectionState.connected;
-        print('Connection state changed: $isConnected');
-        if (!isConnected) {
+        bool isCurrentlyConnected = state == BluetoothConnectionState.connected;
+        print('Connection state changed: $isCurrentlyConnected');
+        if (!isCurrentlyConnected && connectedDevice != null) {
+          // Only react to disconnection if we fully finished setup
+          // (connectedDevice is set after characteristic discovery).
           print('Device disconnected, resetting state');
           _resetConnectionState();
         }
       });
-      
+
       // Discover services
       List<BluetoothService> services = await device.discoverServices();
-      
+
       // Find our service
       BluetoothService? targetService;
       print('Discovered services:');
       for (BluetoothService service in services) {
         print('  Service UUID: ${service.uuid.toString()}');
-        if (service.uuid.toString().toUpperCase() == serviceUuid.toUpperCase()) {
+        if (service.uuid.toString().toUpperCase() ==
+            serviceUuid.toUpperCase()) {
           targetService = service;
           print('  Found target service!');
           break;
         }
       }
-      
+
       if (targetService != null) {
         // Find characteristics
         print('Target service characteristics:');
-        for (BluetoothCharacteristic characteristic in targetService.characteristics) {
+        for (BluetoothCharacteristic characteristic
+            in targetService.characteristics) {
           print('  Characteristic UUID: ${characteristic.uuid.toString()}');
-          if (characteristic.uuid.toString().toUpperCase() == txUuid.toUpperCase()) {
+          if (characteristic.uuid.toString().toUpperCase() ==
+              txUuid.toUpperCase()) {
             txCharacteristic = characteristic;
             print('  Found TX characteristic!');
-          } else if (characteristic.uuid.toString().toUpperCase() == rxUuid.toUpperCase()) {
+          } else if (characteristic.uuid.toString().toUpperCase() ==
+              rxUuid.toUpperCase()) {
             rxCharacteristic = characteristic;
             print('  Found RX characteristic!');
           }
         }
-        
+
         if (txCharacteristic != null && rxCharacteristic != null) {
           isConnected = true;
           statusMessage = 'Connected to ${device.name}';
-          _log('info', 'Successfully connected to device', details: 'Device: ${device.name} (${device.id})');
-          
+          _log('info', 'Successfully connected to device',
+              details: 'Device: ${device.name} (${device.id})');
+
           // Save this device for future quick connections
           await saveKnownDevice(device.id.toString());
-          
-         // Listen to notifications on RX characteristic (cancel previous on reconnect)
-         await rxCharacteristic!.setNotifyValue(true);
-         
-         // Request MTU increase for better performance
-         try {
-           int mtu = await device.requestMtu(512);
-           print('MTU negotiated: $mtu');
-           _log('info', 'MTU negotiated', details: 'MTU: $mtu');
-         } catch (e) {
-           print('MTU negotiation failed: $e');
-           _log('warning', 'MTU negotiation failed', details: 'Error: $e');
-         }
-         
-         _rxValueSubscription?.cancel();
-         _rxValueSubscription = rxCharacteristic!.onValueReceived.listen((value) {
-            _log('debug', 'Received data', details: 'Length: ${value.length} bytes');
-            
+
+          // IMPORTANT: Request MTU increase BEFORE enabling notifications.
+          // Many Android BLE stacks require the MTU exchange to complete
+          // before data flow starts, otherwise notifications arrive at
+          // the default 23-byte ATT_MTU causing fragmentation.
+          try {
+            int mtu = await device.requestMtu(512);
+            print('MTU negotiated: $mtu');
+            _log('info', 'MTU negotiated', details: 'MTU: $mtu');
+          } catch (e) {
+            print('MTU negotiation failed: $e');
+            _log('warning', 'MTU negotiation failed', details: 'Error: $e');
+          }
+
+          // Listen to notifications on RX characteristic (cancel previous on reconnect)
+          await rxCharacteristic!.setNotifyValue(true);
+
+          _rxValueSubscription?.cancel();
+          _rxValueSubscription =
+              rxCharacteristic!.onValueReceived.listen((value) {
+            _log('debug', 'Received data',
+                details: 'Length: ${value.length} bytes');
+
             // Check if we're hitting MTU limits
-            if (value.length >= 20) { // Close to typical BLE MTU
+            if (value.length >= 20) {
+              // Close to typical BLE MTU
               // Large packet received - this is normal for chunked responses
             }
-            
+
             try {
               // Try to parse as firmware protocol response
-              Map<String, dynamic> response = FirmwareBinaryProtocol.parseResponse(Uint8List.fromList(value));
+              Map<String, dynamic> response =
+                  FirmwareBinaryProtocol.parseResponse(
+                      Uint8List.fromList(value));
               _log('debug', 'Parsed response', details: response.toString());
-              
+
               // Handle the parsed response
               _handleFirmwareResponse(response);
             } catch (e) {
               // Fallback: log parse error (legacy chunk path removed)
               if (value.isNotEmpty && value[0] == 0xAA) {
-                print('BLE protocol parse error for 0xAA packet (${value.length} bytes): $e');
+                print(
+                    'BLE protocol parse error for 0xAA packet (${value.length} bytes): $e');
               } else {
-                // Fallback to text processing
-                String message = String.fromCharCodes(value);
+                // Fallback to text processing — decode as UTF-8 to handle
+                // non-ASCII bytes in file paths, version strings, etc.
+                String message = utf8.decode(value, allowMalformed: true);
                 print('Received text: $message');
                 _log('debug', 'Received text', details: message);
                 // Old message handling removed - using firmware protocol now
               }
             }
           });
-          
+
           // Send initialization command to get device state
           await Future.delayed(const Duration(milliseconds: 500));
           await sendGetStateCommand();
-          
+
           // Send current time to ESP32 for synchronization
           await Future.delayed(const Duration(milliseconds: 200));
           await sendSetTimeCommand();
-          
         } else {
           statusMessage = 'Required characteristics not found';
           await disconnect();
@@ -629,7 +668,7 @@ class BleProvider extends ChangeNotifier {
         }
         await disconnect();
       }
-      
+
       notifyListeners();
     } catch (e) {
       statusMessage = 'Connection error: $e';
@@ -643,10 +682,10 @@ class BleProvider extends ChangeNotifier {
     _connectionStateSubscription = null;
     _rxValueSubscription?.cancel();
     _rxValueSubscription = null;
-    
+
     // Check if we should auto-reconnect after OTA reboot
     final shouldAutoReconnect = _otaRebootPending;
-    
+
     connectedDevice = null;
     txCharacteristic = null;
     rxCharacteristic = null;
@@ -661,12 +700,12 @@ class BleProvider extends ChangeNotifier {
     _commandTimeout = null;
     recordedRuntimeFiles.clear();
     detectedSignals.clear();
-    
+
     // Reset recording and frequency searching state for all modules
     isRecording.clear();
     isRecording[0] = false;
     isRecording[1] = false;
-    
+
     isFrequencySearching.clear();
     isFrequencySearching[0] = false;
     isFrequencySearching[1] = false;
@@ -676,52 +715,66 @@ class BleProvider extends ChangeNotifier {
 
     // Reset ProtoPirate state
     _resetPPState();
-    
+
     notifyListeners();
-    
+
     // Schedule auto-reconnect after OTA reboot (device needs time to boot)
     if (shouldAutoReconnect) {
       _otaRebootPending = false;
       _scheduleOtaReconnect();
+      return;
+    }
+
+    // Auto-reconnect with exponential backoff when a known device exists.
+    // This eliminates the single largest user-visible instability: spontaneous
+    // disconnection without any recovery attempt.
+    if (_knownDeviceId != null) {
+      _scheduleReconnect(0);
     }
   }
 
   Future<void> disconnect() async {
     if (connectedDevice != null) {
       try {
-        _log('info', 'Disconnecting from device', details: 'Device: ${connectedDevice!.name}');
+        _log('info', 'Disconnecting from device',
+            details: 'Device: ${connectedDevice!.name}');
         await connectedDevice!.disconnect();
       } catch (e) {
         print('Disconnect error: $e');
         _log('error', 'Error during disconnect', details: 'Error: $e');
       }
     }
-    
+
     // Reset all connection state
     _resetConnectionState();
     _log('info', 'Disconnected from device');
+
+    // Cancel auto-reconnect timer (user-initiated disconnect)
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+
     isLoadingFiles = false;
     isFormattingSD = false;
-    
+
     // Clear cache on disconnect
     _fileCache.clear();
     _cacheTimestamps.clear();
-    
+
     // Old chunk buffer clearing removed - using firmware protocol now
-    
+
     // Reset command state
     _isCommandInProgress = false;
     _lastCommandTime = null;
-    
+
     // Cancel command timeout
     _cancelCommandTimeout();
-    
+
     // Clear chunk buffers
     _clearChunkBuffers();
-    
+
     notifyListeners();
   }
-  
+
   /// Call BEFORE sending OTA_REBOOT command.
   /// Saves current version and sets flag for auto-reconnect after reboot.
   void notifyOtaReboot() {
@@ -729,7 +782,7 @@ class BleProvider extends ChangeNotifier {
     _otaRebootPending = true;
     _log('info', 'OTA reboot pending — will auto-reconnect after disconnect');
   }
-  
+
   /// Auto-reconnect after OTA reboot.
   /// Waits 5 seconds (device boot time), then attempts quickConnect.
   /// On success, verifies the firmware version changed.
@@ -737,27 +790,30 @@ class BleProvider extends ChangeNotifier {
     _otaReconnectTimer?.cancel();
     statusMessage = 'otaRebooting'; // Device is rebooting
     notifyListeners();
-    
+
     _log('info', 'Waiting 5 seconds for device to reboot...');
-    
+
     _otaReconnectTimer = Timer(const Duration(seconds: 5), () async {
       _log('info', 'Attempting auto-reconnect after OTA reboot...');
       statusMessage = 'reconnecting';
       notifyListeners();
-      
+
       try {
         await quickConnect();
-        
+
         // After reconnect, check if firmware version changed
         if (isConnected && _otaPreRebootVersion != null) {
           // Wait a moment for getState response with version info
           await Future.delayed(const Duration(seconds: 2));
-          
-          if (_firmwareVersion.isNotEmpty && _firmwareVersion != _otaPreRebootVersion) {
-            _log('info', 'OTA verification: firmware updated from $_otaPreRebootVersion to $_firmwareVersion');
+
+          if (_firmwareVersion.isNotEmpty &&
+              _firmwareVersion != _otaPreRebootVersion) {
+            _log('info',
+                'OTA verification: firmware updated from $_otaPreRebootVersion to $_firmwareVersion');
             _notify('success', 'Firmware updated to v$_firmwareVersion');
           } else if (_firmwareVersion == _otaPreRebootVersion) {
-            _log('warning', 'OTA verification: firmware version unchanged ($_firmwareVersion)');
+            _log('warning',
+                'OTA verification: firmware version unchanged ($_firmwareVersion)');
             _notify('warning', 'Firmware version unchanged after OTA');
           }
         }
@@ -766,18 +822,56 @@ class BleProvider extends ChangeNotifier {
         statusMessage = 'reconnectFailed';
         notifyListeners();
       }
-      
+
       _otaPreRebootVersion = null;
     });
   }
-  
+
+  /// Auto-reconnect with exponential backoff after unexpected disconnection.
+  /// Attempts: 0 → 500 ms, 1 → 1000 ms, 2 → 2000 ms, then gives up.
+  void _scheduleReconnect(int attempt) {
+    const backoffs = [500, 1000, 2000];
+    final delayMs = backoffs[attempt.clamp(0, backoffs.length - 1)];
+
+    _reconnectTimer?.cancel();
+    _reconnectTimer = Timer(Duration(milliseconds: delayMs), () async {
+      if (isConnected || _knownDeviceId == null) return;
+
+      _log('info', 'Auto-reconnect attempt $attempt',
+          details: 'Device: $_knownDeviceId');
+      statusMessage = 'reconnecting';
+      notifyListeners();
+
+      try {
+        final device = BluetoothDevice.fromId(_knownDeviceId!);
+        await connectToDevice(device);
+        if (isConnected) {
+          _log('info', 'Auto-reconnect succeeded');
+          _notify('success', 'Reconnected to device');
+        }
+      } catch (e) {
+        _log('warning', 'Auto-reconnect attempt $attempt failed',
+            details: 'Error: $e');
+        if (attempt < 2) {
+          // Wait for next backoff attempt
+          _scheduleReconnect(attempt + 1);
+        } else {
+          _log('error', 'Auto-reconnect exhausted — giving up');
+          statusMessage = 'disconnected';
+          notifyListeners();
+        }
+      }
+    });
+  }
+
   // Clear known device (useful for troubleshooting)
   Future<void> clearKnownDevice() async {
     await _clearKnownDevice();
-    statusMessage = 'Known device cleared. Next connection will scan for devices.';
+    statusMessage =
+        'Known device cleared. Next connection will scan for devices.';
     notifyListeners();
   }
-  
+
   /// Send reboot command to device
   /// Device will disconnect and reboot. Auto-reconnect will be attempted if OTA was pending.
   Future<void> rebootDevice() async {
@@ -785,17 +879,17 @@ class BleProvider extends ChangeNotifier {
       _notify('error', 'Device not connected');
       return;
     }
-    
+
     try {
       _log('info', 'Sending reboot command to device');
       _notify('info', 'Rebooting device...');
-      
+
       // Notify about pending OTA reboot if applicable
       notifyOtaReboot();
-      
+
       // Send reboot command
       await sendCommand('REBOOT');
-      
+
       // Wait a moment for disconnect to happen
       await Future.delayed(const Duration(milliseconds: 500));
     } catch (e) {
@@ -807,58 +901,63 @@ class BleProvider extends ChangeNotifier {
   Future<void> sendCommand(String command) async {
     if (!isConnected || txCharacteristic == null) {
       statusMessage = 'Not connected';
-      _log('error', 'Failed to send command: Not connected', details: 'Command: $command');
+      _log('error', 'Failed to send command: Not connected',
+          details: 'Command: $command');
       notifyListeners();
       return;
     }
-    
+
     // Send command directly (legacy text queue removed)
     await _sendCommandDirect(command);
   }
-  
+
   Future<void> _sendCommandDirect(String command) async {
     // Wait for any ongoing write operation to complete
     while (_isWriting) {
       print('Waiting for previous BLE write to complete...');
       await Future.delayed(const Duration(milliseconds: 50));
     }
-    
+
     // Check timeout between commands
     if (_lastCommandTime != null) {
       final timeSinceLastCommand = DateTime.now().difference(_lastCommandTime!);
       if (timeSinceLastCommand < _commandCooldown) {
         final remainingTime = _commandCooldown - timeSinceLastCommand;
-        print('Command cooldown active, waiting: $command (${remainingTime.inMilliseconds}ms remaining)');
+        print(
+            'Command cooldown active, waiting: $command (${remainingTime.inMilliseconds}ms remaining)');
         await Future.delayed(remainingTime);
       }
     }
-    
+
     _lastCommandTime = DateTime.now();
-    
+
     print('Sending command: "$command" (length: ${command.length})');
     _log('command', 'Sent command: $command');
-    
+
     try {
       _isWriting = true; // Set write flag
-      
+
       // Convert command to firmware protocol
       Uint8List commandBytes = _convertCommandToFirmwareProtocol(command);
       print('Command bytes length: ${commandBytes.length}');
-      print('Command bytes: ${commandBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}');
-      
-      // Add timeout to BLE write
+      print(
+          'Command bytes: ${commandBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}');
+
+      // Add timeout to BLE write (3s max — longer commands have their own
+      // application-layer timeout via _startCommandTimeout)
       await txCharacteristic!.write(commandBytes).timeout(
-        const Duration(seconds: 10),
+        const Duration(seconds: 3),
         onTimeout: () {
-          throw Exception('BLE write timeout after 10 seconds');
+          throw TimeoutException(
+              'BLE write timeout', const Duration(seconds: 3));
         },
       );
       print('BLE write completed successfully');
-      
+
       lastCommandMessage = 'Command sent: $command';
       // Don't update statusMessage for commands to avoid interfering with connection messages
       notifyListeners();
-      
+
       // Start timeout for commands that expect a response
       if (_shouldWaitForResponse(command)) {
         _startCommandTimeout(command);
@@ -866,7 +965,8 @@ class BleProvider extends ChangeNotifier {
     } catch (e) {
       print('BLE write failed: $e');
       statusMessage = 'Send error: $e';
-      _log('error', 'Failed to send command', details: 'Command: $command, Error: $e');
+      _log('error', 'Failed to send command',
+          details: 'Command: $command, Error: $e');
       notifyListeners();
       rethrow; // Re-throw to be caught by queue processor
     } finally {
@@ -877,24 +977,25 @@ class BleProvider extends ChangeNotifier {
   // Checks whether a command should wait for a response
   bool _shouldWaitForResponse(String command) {
     // Commands that expect a response
-    return command.startsWith('sd.list') || 
-           command.startsWith('sd.info') ||
-           command.startsWith('sd.read');
+    return command.startsWith('sd.list') ||
+        command.startsWith('sd.info') ||
+        command.startsWith('sd.read');
   }
 
   // Starts timeout for a command
   void _startCommandTimeout(String command) {
     _commandTimeout?.cancel();
-    
+
     // Increase timeout for file list commands
-    final timeoutDuration = command.startsWith('sd.list') 
-        ? const Duration(seconds: 20) 
+    final timeoutDuration = command.startsWith('sd.list')
+        ? const Duration(seconds: 20)
         : _commandTimeoutDuration;
-    
+
     _commandTimeout = Timer(timeoutDuration, () {
       print('Command timeout: $command');
-      _log('warning', 'Command timeout - no response received', details: 'Command: $command');
-      
+      _log('warning', 'Command timeout - no response received',
+          details: 'Command: $command');
+
       // Reset file loading state
       if (isLoadingFiles) {
         isLoadingFiles = false;
@@ -911,140 +1012,141 @@ class BleProvider extends ChangeNotifier {
   }
 
   // Old binary packet processing removed - using firmware protocol now
-  
-  
+
   // Old binary data processing removed - using firmware protocol now
-  
+
   // Old binary packet handling methods removed - using firmware protocol now
   // Old binary packet handling methods removed - using firmware protocol now
-  
-  
-  
-
-
-
 
   // Old chunk data handling removed - using firmware protocol now
-  
+
   // Old chunk timeout and assembly methods removed - using firmware protocol now
 
   // Old chunk end handling removed - using firmware protocol now
-  
+
   // Old raw chunk data handling removed - using firmware protocol now
 
   // Old complete chunked data processing removed - using firmware protocol now
 
   // Old chunk cleanup removed - using firmware protocol now
 
-  Future<void> refreshFileList({bool forceRefresh = false, int? pathType}) async {
+  Future<void> refreshFileList(
+      {bool forceRefresh = false, int? pathType}) async {
     if (!isConnected) return;
-    
+
     // Immediately block repeated presses
     if (isLoadingFiles) return;
-    
+
     // Use currentPathType if pathType not specified
     int effectivePathType = pathType ?? currentPathType;
-    
+
     // Check cache if not forced refresh
     if (!forceRefresh && _fileCache.containsKey(currentPath)) {
       fileList = List.from(_fileCache[currentPath]!);
       notifyListeners();
       return;
     }
-    
+
     isLoadingFiles = true;
     notifyListeners();
-    
+
     // Clear chunk buffers before new request
     _clearChunkBuffers();
-    
+
     // Cancel previous timeout if exists
     _fileListTimeout?.cancel();
-    
+
     // Set timeout for file list loading
     _fileListTimeout = Timer(_fileListTimeoutDuration, () {
       if (isLoadingFiles) {
         print('File list loading timeout');
-        _log('warning', 'File list loading timeout', details: 'Path: $currentPath, PathType: $effectivePathType');
+        _log('warning', 'File list loading timeout',
+            details: 'Path: $currentPath, PathType: $effectivePathType');
         isLoadingFiles = false;
         fileListProgress = 0.0;
         statusMessage = 'File list loading timeout - please try again';
         notifyListeners();
       }
     });
-    
+
     // Use binary command with pathType (no need to escape quotes for binary protocol)
-    print('refreshFileList: currentPath="$currentPath", pathType=$effectivePathType');
-    final command = FirmwareBinaryProtocol.createGetFilesListCommand(currentPath, pathType: effectivePathType);
+    print(
+        'refreshFileList: currentPath="$currentPath", pathType=$effectivePathType');
+    final command = FirmwareBinaryProtocol.createGetFilesListCommand(
+        currentPath,
+        pathType: effectivePathType);
     await sendBinaryCommand(command);
   }
 
   Future<void> navigateToDirectory(String directoryName) async {
     if (!isConnected) return;
-    
+
     // Immediately block repeated presses
     if (isLoadingFiles) return;
-    
+
     print('Navigating to directory: "$directoryName"');
     print('Current path before navigation: "$currentPath"');
-    
+
     // Update current path
     if (currentPath.endsWith('/')) {
       currentPath += directoryName;
     } else {
       currentPath += '/$directoryName';
     }
-    
+
     // Ensure the path starts with /
     if (!currentPath.startsWith('/')) {
       currentPath = '/$currentPath';
     }
-    
+
     print('New current path: "$currentPath"');
-    
+
     // Check cache before loading
     if (_fileCache.containsKey(currentPath)) {
       fileList = List.from(_fileCache[currentPath]!);
       notifyListeners();
       return;
     }
-    
+
     isLoadingFiles = true;
     notifyListeners();
-    
+
     // Clear chunk buffers before new request
     _clearChunkBuffers();
-    
+
     // Cancel previous timeout if exists
     _fileListTimeout?.cancel();
-    
+
     // Set timeout for file list loading
     _fileListTimeout = Timer(_fileListTimeoutDuration, () {
       if (isLoadingFiles) {
         print('File list loading timeout in navigateToDirectory');
-        _log('warning', 'File list loading timeout', details: 'Path: $currentPath');
+        _log('warning', 'File list loading timeout',
+            details: 'Path: $currentPath');
         isLoadingFiles = false;
         fileListProgress = 0.0;
         statusMessage = 'File list loading timeout - please try again';
         notifyListeners();
       }
     });
-    
+
     // Use binary command with pathType (no need to escape quotes for binary protocol)
-    final command = FirmwareBinaryProtocol.createGetFilesListCommand(currentPath, pathType: currentPathType);
+    final command = FirmwareBinaryProtocol.createGetFilesListCommand(
+        currentPath,
+        pathType: currentPathType);
     await sendBinaryCommand(command);
   }
 
   Future<void> navigateUp() async {
     if (!isConnected) return;
-    
+
     // Immediately block repeated presses
     if (isLoadingFiles) return;
-    
+
     if (currentPath == '/' || currentPath.isEmpty) {
       return; // Already at root
     }
-    
+
     // Remove the last path segment
     int lastSlash = currentPath.lastIndexOf('/');
     if (lastSlash > 0) {
@@ -1052,54 +1154,58 @@ class BleProvider extends ChangeNotifier {
     } else {
       currentPath = '/';
     }
-    
+
     // Check cache before loading
     if (_fileCache.containsKey(currentPath)) {
       fileList = List.from(_fileCache[currentPath]!);
       notifyListeners();
       return;
     }
-    
+
     isLoadingFiles = true;
     notifyListeners();
-    
+
     // Clear chunk buffers before new request
     _clearChunkBuffers();
-    
+
     // Cancel previous timeout if exists
     _fileListTimeout?.cancel();
-    
+
     // Set timeout for file list loading
     _fileListTimeout = Timer(_fileListTimeoutDuration, () {
       if (isLoadingFiles) {
         print('File list loading timeout in navigateUp');
-        _log('warning', 'File list loading timeout', details: 'Path: $currentPath');
+        _log('warning', 'File list loading timeout',
+            details: 'Path: $currentPath');
         isLoadingFiles = false;
         fileListProgress = 0.0;
         statusMessage = 'File list loading timeout - please try again';
         notifyListeners();
       }
     });
-    
+
     // Use binary command with pathType (no need to escape quotes for binary protocol)
-    final command = FirmwareBinaryProtocol.createGetFilesListCommand(currentPath, pathType: currentPathType);
+    final command = FirmwareBinaryProtocol.createGetFilesListCommand(
+        currentPath,
+        pathType: currentPathType);
     await sendBinaryCommand(command);
   }
 
   /// Switch to a different path type (directory)
   Future<void> switchPathType(int pathType) async {
     if (pathType < 0 || pathType > 5) {
-      _log('error', 'Invalid pathType', details: 'pathType must be 0-5, got $pathType');
+      _log('error', 'Invalid pathType',
+          details: 'pathType must be 0-5, got $pathType');
       return;
     }
-    
+
     currentPathType = pathType;
     currentPath = '/'; // Reset to root of the selected directory
-    
+
     // Clear cache for old path
     _fileCache.clear();
     _cacheTimestamps.clear();
-    
+
     // Refresh file list for new path type
     await refreshFileList(forceRefresh: true);
   }
@@ -1127,7 +1233,8 @@ class BleProvider extends ChangeNotifier {
       return '/';
     }
     // Remove leading slash if present
-    String normalizedPath = filePath.startsWith('/') ? filePath.substring(1) : filePath;
+    String normalizedPath =
+        filePath.startsWith('/') ? filePath.substring(1) : filePath;
     // Find last slash
     int lastSlashIndex = normalizedPath.lastIndexOf('/');
     if (lastSlashIndex == -1) {
@@ -1140,23 +1247,23 @@ class BleProvider extends ChangeNotifier {
   /// Extract relative path from full path (removes base directory like /DATA/RECORDS)
   String _extractRelativePath(String fullPath, int pathType) {
     if (fullPath.isEmpty) return '/';
-    
+
     // Base paths for each pathType
     const basePaths = [
-      '/DATA/RECORDS',  // 0
-      '/DATA/SIGNALS',  // 1
-      '/DATA/PRESETS',  // 2
-      '/DATA/TEMP',     // 3
-      '/',              // 4
-      '/',              // 5
+      '/DATA/RECORDS', // 0
+      '/DATA/SIGNALS', // 1
+      '/DATA/PRESETS', // 2
+      '/DATA/TEMP', // 3
+      '/', // 4
+      '/', // 5
     ];
-    
+
     if (pathType < 0 || pathType >= basePaths.length) {
       return '/';
     }
-    
+
     String basePath = basePaths[pathType];
-    
+
     // Remove base path prefix
     if (fullPath.startsWith(basePath)) {
       String relative = fullPath.substring(basePath.length);
@@ -1171,7 +1278,7 @@ class BleProvider extends ChangeNotifier {
       // Get directory path (remove filename)
       return _getDirectoryPath(relative);
     }
-    
+
     // If base path not found, try to extract relative path anyway
     return _getDirectoryPath(fullPath);
   }
@@ -1191,35 +1298,37 @@ class BleProvider extends ChangeNotifier {
   double get chunkProgress {
     return 0.0; // Old chunk progress removed
   }
-  
+
   // Check if chunks are being loaded (old variables removed)
   bool get isChunking {
     return false; // Old chunking removed
   }
-  
+
   // Getter for total file count in directory
   int get totalFilesInDirectory => _streamingTotalFiles;
-  
+
   // Getter for saved device
   String? get savedDeviceId => _knownDeviceId;
   String get savedDeviceName => _knownDeviceId != null ? 'EvilCrow_RF2' : '';
 
   // Methods for working with files
-  
+
   /// Reads file content from ESP
   Future<String> readFileContent(String filePath, {int? pathType}) async {
     if (!isConnected) {
       throw Exception('Device not connected');
     }
-    
+
     // Use provided pathType or default to RECORDS (0)
     int effectivePathType = pathType ?? 0;
-    
+
     // For pathType 0-3 (RECORDS, SIGNALS, PRESETS, TEMP), extract relative path
     // because firmware adds /DATA/XXXX/ prefix automatically.
     // For pathType 4-5 (LittleFS root, SD root), keep full absolute path.
     String pathToUse = filePath;
-    if (effectivePathType >= 0 && effectivePathType < 4 && filePath.startsWith('/DATA/')) {
+    if (effectivePathType >= 0 &&
+        effectivePathType < 4 &&
+        filePath.startsWith('/DATA/')) {
       // Extract relative path from /DATA/RECORDS/... or /DATA/SIGNALS/...
       final parts = filePath.split('/');
       if (parts.length > 3) {
@@ -1228,27 +1337,30 @@ class BleProvider extends ChangeNotifier {
         pathToUse = parts.last;
       }
     }
-    
-    _log('INFO', 'Reading file content: $pathToUse (pathType: $effectivePathType)');
-    
+
+    _log('INFO',
+        'Reading file content: $pathToUse (pathType: $effectivePathType)');
+
     // Set loading flag
     isLoadingFileContent = true;
     fileContentProgress = 0.0;
     notifyListeners();
-    
+
     // Clear previous state
     _currentFileContent = null;
     _pendingFileReadCompleter?.completeError('New file read started');
     final completer = Completer<String>();
     _pendingFileReadCompleter = completer;
-    
+
     // Use binary command with path type
-    final command = FirmwareBinaryProtocol.createLoadFileDataCommand(pathToUse, pathType: effectivePathType);
-    _log('INFO', 'Sending binary command for file: $pathToUse (pathType: $effectivePathType, command length: ${command.length})');
-    
+    final command = FirmwareBinaryProtocol.createLoadFileDataCommand(pathToUse,
+        pathType: effectivePathType);
+    _log('INFO',
+        'Sending binary command for file: $pathToUse (pathType: $effectivePathType, command length: ${command.length})');
+
     // Send binary file read command
     await sendBinaryCommand(command);
-    
+
     // Set timeout
     Timer timeout = Timer(const Duration(seconds: 60), () {
       if (!completer.isCompleted) {
@@ -1260,7 +1372,7 @@ class BleProvider extends ChangeNotifier {
         notifyListeners();
       }
     });
-    
+
     try {
       final result = await completer.future;
       return result;
@@ -1273,7 +1385,7 @@ class BleProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
-  
+
   /// Downloads file from ESP with progress (uses binary protocol)
   Future<String?> downloadFile(
     String filePath, {
@@ -1282,23 +1394,24 @@ class BleProvider extends ChangeNotifier {
     if (!isConnected) {
       throw Exception('Device not connected');
     }
-    
+
     _log('INFO', 'Downloading file: $filePath');
-    
+
     // Using readFileContent, which already uses binary protocol
     try {
-      final content = await readFileContent(filePath, pathType: currentPathType);
-      
+      final content =
+          await readFileContent(filePath, pathType: currentPathType);
+
       // Call progress callback if available
       onProgress?.call(1.0);
-      
+
       return content;
     } catch (e) {
       _log('ERROR', 'Error downloading file: $e');
       rethrow;
     }
   }
-  
+
   /// Gets base path for pathType
   String? _getBasePathForPathType(int pathType) {
     switch (pathType) {
@@ -1318,7 +1431,7 @@ class BleProvider extends ChangeNotifier {
         return '/';
     }
   }
-  
+
   /// Clears chunk buffers
   /// [clearStreamingBuffer] - if true, also clears streaming buffers (default true)
   void _clearChunkBuffers({bool clearStreamingBuffer = true}) {
@@ -1335,33 +1448,33 @@ class BleProvider extends ChangeNotifier {
       _streamingTotalFiles = 0;
     }
   }
-  
+
   /// Clears stale chunk buffers (older than _chunkTimeout or if chunks stop arriving)
   /// Does NOT clear streaming buffers - they are managed separately
   void _cleanupStaleChunkBuffers() {
     final now = DateTime.now();
     final staleChunkIds = <int>[];
-    
+
     for (var chunkId in _chunkStartTimes.keys) {
       final startTime = _chunkStartTimes[chunkId]!;
       final age = now.difference(startTime);
-      
+
       // Check if buffer is too old (overall timeout)
       if (age > _chunkTimeout) {
         staleChunkIds.add(chunkId);
         continue;
       }
-      
+
       // Check if chunks haven't been received recently (stale after initial creation)
       if (_chunkLastReceived.containsKey(chunkId)) {
         final lastReceived = _chunkLastReceived[chunkId]!;
         final timeSinceLastChunk = now.difference(lastReceived);
-        
+
         // If no chunks received for a while, consider stale
         if (timeSinceLastChunk > _chunkStaleTimeout) {
           final received = _receivedChunks[chunkId] ?? <int>{};
           final expected = _expectedChunks[chunkId] ?? 0;
-          
+
           // Only mark as stale if we're missing chunks (not just waiting)
           if (received.length < expected) {
             staleChunkIds.add(chunkId);
@@ -1369,39 +1482,65 @@ class BleProvider extends ChangeNotifier {
         }
       }
     }
-    
+
     if (staleChunkIds.isNotEmpty) {
-      print('Cleaning up ${staleChunkIds.length} stale chunk buffers: $staleChunkIds');
+      print(
+          'Cleaning up ${staleChunkIds.length} stale chunk buffers: $staleChunkIds');
       for (var chunkId in staleChunkIds) {
+        final received = _receivedChunks[chunkId] ?? <int>{};
+        final expected = _expectedChunks[chunkId] ?? 0;
+        _log('warning', 'Stale chunk buffer cleaned',
+            details:
+                'chunkId=$chunkId, received=${received.length}/$expected chunks');
+
         _chunkData.remove(chunkId);
         _expectedChunks.remove(chunkId);
         _receivedChunks.remove(chunkId);
         _chunkStartTimes.remove(chunkId);
         _chunkLastReceived.remove(chunkId);
+
+        // Surface stale chunk event so the caller can trigger a re-fetch
+        // instead of silently stalling.
+        if (_pendingFileReadCompleter != null &&
+            !_pendingFileReadCompleter!.isCompleted) {
+          _pendingFileReadCompleter!.completeError(
+              'Chunk transfer timed out: received ${received.length}/$expected chunks (stale)');
+          _pendingFileReadCompleter = null;
+        }
       }
+      // Also update UI to indicate data may be incomplete
+      statusMessage = 'chunkTimeout';
+      notifyListeners();
     }
   }
-  
+
   // Callback functions for chunks (will be set temporarily)
   Function(int sessionId, String data)? _onChunkComplete;
   Function(int sessionId, double progress)? _onChunkProgress;
-  
+
   // Chunked response handling for firmware protocol
-  final Map<int, Map<int, Uint8List>> _chunkData = {}; // chunkId -> chunkNumber -> data (allows overwriting duplicates)
+  final Map<int, Map<int, Uint8List>> _chunkData =
+      {}; // chunkId -> chunkNumber -> data (allows overwriting duplicates)
   final Map<int, int> _expectedChunks = {}; // chunkId -> total chunks expected
-  final Map<int, Set<int>> _receivedChunks = {}; // chunkId -> set of received chunk numbers
-  final Map<int, DateTime> _chunkStartTimes = {}; // chunkId -> timestamp when chunk buffer was created
-  final Map<int, DateTime> _chunkLastReceived = {}; // chunkId -> timestamp when last chunk was received
-  static const Duration _chunkTimeout = Duration(seconds: 10); // Overall timeout for chunked messages
-  static const Duration _chunkStaleTimeout = Duration(seconds: 2); // Timeout if chunks stop arriving
-  
+  final Map<int, Set<int>> _receivedChunks =
+      {}; // chunkId -> set of received chunk numbers
+  final Map<int, DateTime> _chunkStartTimes =
+      {}; // chunkId -> timestamp when chunk buffer was created
+  final Map<int, DateTime> _chunkLastReceived =
+      {}; // chunkId -> timestamp when last chunk was received
+  static const Duration _chunkTimeout =
+      Duration(seconds: 10); // Overall timeout for chunked messages
+  static const Duration _chunkStaleTimeout = Duration(
+      seconds:
+          4); // Timeout if chunks stop arriving (increased from 2s for Android isolate scheduling jitter)
+
   // Callback for JSON responses
   Function(dynamic jsonData)? _onJsonReceived;
 
   /// Convert text command to firmware binary protocol
   Uint8List _convertCommandToFirmwareProtocol(String command) {
     print('Converting command to enhanced protocol: "$command"');
-    
+
     // Parse command and convert to appropriate firmware protocol
     if (command == 'getState') {
       return FirmwareBinaryProtocol.createGetStateCommand();
@@ -1425,16 +1564,18 @@ class BleProvider extends ChangeNotifier {
     } else if (command.startsWith('sd.list')) {
       // Parse list command: "sd.list <path>" or "sd.list "<path>""
       String path = command.substring(7).trim();
-      
+
       // Remove quotes if present
       if (path.startsWith('"') && path.endsWith('"')) {
         path = path.substring(1, path.length - 1);
       }
-      
+
       if (path.isEmpty || path == '/') path = ''; // Don't send '/' prefix
-      print('Creating getFilesList command for path: "$path" with pathType: $currentPathType');
+      print(
+          'Creating getFilesList command for path: "$path" with pathType: $currentPathType');
       // Use currentPathType instead of hardcoded 0 - ensures all storage types work correctly
-      return FirmwareBinaryProtocol.createGetFilesListCommand(path, pathType: currentPathType);
+      return FirmwareBinaryProtocol.createGetFilesListCommand(path,
+          pathType: currentPathType);
     } else if (command.startsWith('sd.read')) {
       // Parse read command: "sd.read <path>"
       String path = command.substring(7).trim();
@@ -1456,8 +1597,10 @@ class BleProvider extends ChangeNotifier {
       if (parts.length >= 3) {
         String fromPath = parts[1];
         String toPath = parts[2];
-        if (fromPath.startsWith('/')) fromPath = fromPath.substring(1); // Remove leading '/'
-        if (toPath.startsWith('/')) toPath = toPath.substring(1); // Remove leading '/'
+        if (fromPath.startsWith('/'))
+          fromPath = fromPath.substring(1); // Remove leading '/'
+        if (toPath.startsWith('/'))
+          toPath = toPath.substring(1); // Remove leading '/'
         return FirmwareBinaryProtocol.createRenameFileCommand(fromPath, toPath);
       }
     } else if (command.startsWith('tx.file')) {
@@ -1472,12 +1615,13 @@ class BleProvider extends ChangeNotifier {
         double frequency = double.tryParse(parts[1]) ?? 433.92;
         int pulseDuration = int.tryParse(parts[2]) ?? 100;
         String data = parts.sublist(3).join(' ');
-        return FirmwareBinaryProtocol.createTransmitBinaryCommand(frequency, pulseDuration, data);
+        return FirmwareBinaryProtocol.createTransmitBinaryCommand(
+            frequency, pulseDuration, data);
       }
     } else if (command == 'REBOOT') {
       return FirmwareBinaryProtocol.createRebootCommand();
     }
-    
+
     // Default: send as getState command
     print('Unknown command, defaulting to getState');
     return FirmwareBinaryProtocol.createGetStateCommand();
@@ -1494,20 +1638,24 @@ class BleProvider extends ChangeNotifier {
     bool isBinary = response['isBinary'] ?? false;
     Uint8List? payloadBytes = response['payloadBytes'];
     String payloadString = response['payload'] ?? '';
-    
-    _log('debug', 'Handling firmware response', details: 'PacketType: $packetType, Chunked: $isChunked, totalChunks: $totalChunks, Binary: $isBinary');
-    
+
+    _log('debug', 'Handling firmware response',
+        details:
+            'PacketType: $packetType, Chunked: $isChunked, totalChunks: $totalChunks, Binary: $isBinary');
+
     // CRITICAL: Always check totalChunks > 1, not just isChunked flag
     // This ensures chunked messages are never processed as single messages
     if (totalChunks > 1) {
-      print('Processing as chunked: chunkId=$chunkId, chunkNumber=$chunkNumber, totalChunks=$totalChunks, isLastChunk=$isLastChunk');
-      _handleChunkedResponse(chunkId, chunkNumber, totalChunks, isLastChunk, isBinary, payloadBytes, payloadString);
+      print(
+          'Processing as chunked: chunkId=$chunkId, chunkNumber=$chunkNumber, totalChunks=$totalChunks, isLastChunk=$isLastChunk');
+      _handleChunkedResponse(chunkId, chunkNumber, totalChunks, isLastChunk,
+          isBinary, payloadBytes, payloadString);
     } else {
       // Single packet - handle directly
       // Check if this is a system message that should be processed even with active chunk buffers
       bool isSystemMessage = false;
       bool isFileListMessage = false;
-      
+
       if (isBinary && payloadBytes != null && payloadBytes.isNotEmpty) {
         // Binary system messages: Heartbeat is 0x82, Status is 0x81, FileList is 0xA1
         int messageType = payloadBytes[0];
@@ -1535,7 +1683,7 @@ class BleProvider extends ChangeNotifier {
           // If check fails, continue with normal processing
         }
       }
-      
+
       // Additional safety: check if we have active chunk buffers (shouldn't happen for single packet)
       // Exception: system messages and file list messages should be processed even with active chunk buffers
       // File list messages can arrive as separate single packets during streaming
@@ -1553,7 +1701,7 @@ class BleProvider extends ChangeNotifier {
           return;
         }
       }
-      
+
       if (isBinary && payloadBytes != null) {
         _handleBinaryMessage(payloadBytes);
       } else {
@@ -1561,14 +1709,22 @@ class BleProvider extends ChangeNotifier {
       }
     }
   }
-  
+
   /// Handle chunked responses from firmware protocol
-  void _handleChunkedResponse(int chunkId, int chunkNumber, int totalChunks, bool isLastChunk, bool isBinary, Uint8List? payloadBytes, String payloadString) {
-    int payloadLength = isBinary ? (payloadBytes?.length ?? 0) : payloadString.length;
-    
+  void _handleChunkedResponse(
+      int chunkId,
+      int chunkNumber,
+      int totalChunks,
+      bool isLastChunk,
+      bool isBinary,
+      Uint8List? payloadBytes,
+      String payloadString) {
+    int payloadLength =
+        isBinary ? (payloadBytes?.length ?? 0) : payloadString.length;
+
     // Clean up stale chunk buffers periodically
     _cleanupStaleChunkBuffers();
-    
+
     // Initialize chunk storage if needed
     final now = DateTime.now();
     if (!_chunkData.containsKey(chunkId)) {
@@ -1577,30 +1733,33 @@ class BleProvider extends ChangeNotifier {
       _receivedChunks[chunkId] = <int>{};
       _chunkStartTimes[chunkId] = now;
       _chunkLastReceived[chunkId] = now;
-      print('Initialized chunk buffer for chunkId $chunkId, expecting $totalChunks chunks');
+      print(
+          'Initialized chunk buffer for chunkId $chunkId, expecting $totalChunks chunks');
     } else {
       // Update last received time
       _chunkLastReceived[chunkId] = now;
     }
-    
+
     // Allow out-of-order delivery: buffer chunks even if chunk 1 isn't received yet.
     // Some BLE stacks can deliver notifications out-of-order under load.
     if (chunkNumber > 1 && !_receivedChunks[chunkId]!.contains(1)) {
       final bufferAge = now.difference(_chunkStartTimes[chunkId]!);
-      print('INFO: Chunk $chunkNumber/$totalChunks arrived for chunkId $chunkId before chunk 1 (age: ${bufferAge.inMilliseconds}ms)');
+      print(
+          'INFO: Chunk $chunkNumber/$totalChunks arrived for chunkId $chunkId before chunk 1 (age: ${bufferAge.inMilliseconds}ms)');
     }
-    
+
     // Handle duplicate chunks: overwrite data (safe since data is identical)
     // This handles BLE stack retransmissions gracefully
     bool isDuplicate = _receivedChunks[chunkId]!.contains(chunkNumber);
-    
+
     if (isDuplicate) {
-      print('INFO: Duplicate chunk $chunkNumber/$totalChunks for chunkId $chunkId, overwriting (BLE retransmission)');
+      print(
+          'INFO: Duplicate chunk $chunkNumber/$totalChunks for chunkId $chunkId, overwriting (BLE retransmission)');
     } else {
       // Mark chunk as received only if it's new
       _receivedChunks[chunkId]!.add(chunkNumber);
     }
-    
+
     // Store chunk data by chunk number (allows overwriting duplicates)
     Uint8List chunkBytes;
     if (isBinary && payloadBytes != null) {
@@ -1608,10 +1767,10 @@ class BleProvider extends ChangeNotifier {
     } else {
       chunkBytes = Uint8List.fromList(utf8.encode(payloadString));
     }
-    
+
     // Overwrite if duplicate (safe - data is identical)
     _chunkData[chunkId]![chunkNumber] = chunkBytes;
-    
+
     // Update progress for file list or file content loading
     if (totalChunks > 1) {
       double progress = _receivedChunks[chunkId]!.length / totalChunks;
@@ -1623,8 +1782,7 @@ class BleProvider extends ChangeNotifier {
         notifyListeners();
       }
     }
-    
-    
+
     // Check if we have all chunks
     if (_receivedChunks[chunkId]!.length == totalChunks) {
       // Rebuild complete message from chunks in order
@@ -1637,7 +1795,7 @@ class BleProvider extends ChangeNotifier {
           return; // Don't process incomplete data
         }
       }
-      
+
       // CRITICAL: Clean up chunk storage BEFORE processing to avoid false positives in _handleBinaryMessage
       // Save data and remove from active buffers first
       Uint8List completeBytes = completeBuilder.toBytes();
@@ -1646,7 +1804,7 @@ class BleProvider extends ChangeNotifier {
       _receivedChunks.remove(chunkId);
       _chunkStartTimes.remove(chunkId);
       _chunkLastReceived.remove(chunkId);
-      
+
       // Process complete chunked response
       // Check if binary message (first byte >= 0x80)
       if (completeBytes.isNotEmpty && completeBytes[0] >= 0x80) {
@@ -1658,17 +1816,19 @@ class BleProvider extends ChangeNotifier {
           dynamic jsonData = jsonDecode(completeData);
           _handleCompleteResponse(jsonData);
         } catch (e) {
-          String completeData = utf8.decode(completeBytes, allowMalformed: true);
+          String completeData =
+              utf8.decode(completeBytes, allowMalformed: true);
           _handleCompleteResponse(completeData);
         }
       }
     }
   }
-  
+
   /// Handle single (non-chunked) responses
   void _handleSingleResponse(String payload) {
-    print('Handling single response: ${payload.substring(0, payload.length > 100 ? 100 : payload.length)}${payload.length > 100 ? '...' : ''}');
-    
+    print(
+        'Handling single response: ${payload.substring(0, payload.length > 100 ? 100 : payload.length)}${payload.length > 100 ? '...' : ''}');
+
     // CRITICAL: Check if this might be part of a chunked message first
     // If we have active chunk buffers, check if this is a system message
     if (_chunkData.isNotEmpty) {
@@ -1687,15 +1847,17 @@ class BleProvider extends ChangeNotifier {
       } catch (e) {
         // If check fails, treat as non-system
       }
-      
+
       if (!isSystemNotification) {
-        print('WARNING: Received single response while chunk buffers are active, ignoring to avoid processing incomplete data');
+        print(
+            'WARNING: Received single response while chunk buffers are active, ignoring to avoid processing incomplete data');
         return;
       } else {
-        print('INFO: Processing system notification even with active chunk buffers');
+        print(
+            'INFO: Processing system notification even with active chunk buffers');
       }
     }
-    
+
     // BINARY MESSAGE CHECK: Check if this is a binary message (0x80-0xFF)
     if (payload.isNotEmpty) {
       final firstByte = payload.codeUnitAt(0);
@@ -1705,7 +1867,7 @@ class BleProvider extends ChangeNotifier {
         return;
       }
     }
-    
+
     try {
       // Try to parse as JSON
       dynamic jsonData = jsonDecode(payload);
@@ -1719,7 +1881,8 @@ class BleProvider extends ChangeNotifier {
             // Try to extract just the data part
             int dataStart = payload.indexOf('"data":');
             if (dataStart != -1) {
-              String dataPart = payload.substring(dataStart + 7); // Skip '"data":'
+              String dataPart =
+                  payload.substring(dataStart + 7); // Skip '"data":'
               if (dataPart.startsWith('{')) {
                 // Find matching closing brace
                 int braceCount = 0;
@@ -1752,14 +1915,14 @@ class BleProvider extends ChangeNotifier {
       _log('info', 'Plain text response received', details: payload);
     }
   }
-  
+
   /// Handle complete responses (both chunked and single)
   void _handleCompleteResponse(dynamic data) {
     print('_handleCompleteResponse called with data type: ${data.runtimeType}');
     if (data is Map) {
       String type = data['type'] ?? 'unknown';
       print('Processing response type: $type');
-      
+
       switch (type) {
         case 'state':
         case 'State':
@@ -1787,7 +1950,8 @@ class BleProvider extends ChangeNotifier {
           _handleFileSystemResponse(data);
           break;
         case 'DirectoryTree':
-          _handleFileSystemResponse(data); // DirectoryTree also goes through FileSystem handler
+          _handleFileSystemResponse(
+              data); // DirectoryTree also goes through FileSystem handler
           break;
         case 'file_data':
           _handleFileDataResponse(data);
@@ -1944,7 +2108,7 @@ class BleProvider extends ChangeNotifier {
             sdrModulation = d['modulation'] ?? 2;
           }
           _log('info', 'SDR mode ${sdrModeActive ? "ON" : "OFF"}',
-               details: d.toString());
+              details: d.toString());
           notifyListeners();
           break;
         // ── OTA notifications ──
@@ -1972,7 +2136,8 @@ class BleProvider extends ChangeNotifier {
           break;
         default:
           print('Unknown response type: $type');
-          _log('warning', 'Unknown response type', details: 'Type: $type, Data: $data');
+          _log('warning', 'Unknown response type',
+              details: 'Type: $type, Data: $data');
       }
     } else {
       // Handle plain text responses
@@ -1980,7 +2145,6 @@ class BleProvider extends ChangeNotifier {
       _log('info', 'Plain text response received', details: data.toString());
     }
   }
-
 
   /// Handle scan result
   void _handleScanResult(dynamic data) {
@@ -1994,7 +2158,7 @@ class BleProvider extends ChangeNotifier {
   void _handleFilesListResponse(dynamic data) {
     print('Files list response: $data');
     _log('info', 'Files list received', details: data.toString());
-    
+
     if (data is List) {
       fileList.clear();
       for (var item in data) {
@@ -2010,24 +2174,26 @@ class BleProvider extends ChangeNotifier {
   void _handleFileDataResponse(dynamic data) {
     print('File data response: $data');
     _log('info', 'File data received', details: data.toString());
-    
+
     // Handle file content response
     if (data is Map<String, dynamic>) {
       if (data.containsKey('content')) {
         String fileContent = data['content'];
-        print('File content received via file_data, length: ${fileContent.length}');
-        
+        print(
+            'File content received via file_data, length: ${fileContent.length}');
+
         // Store the file content for the current file reading operation
         _currentFileContent = fileContent;
-        
+
         // If we have a pending file reading operation, complete it
-        if (_pendingFileReadCompleter != null && !_pendingFileReadCompleter!.isCompleted) {
+        if (_pendingFileReadCompleter != null &&
+            !_pendingFileReadCompleter!.isCompleted) {
           _pendingFileReadCompleter!.complete(fileContent);
           _pendingFileReadCompleter = null;
         }
       }
     }
-    
+
     notifyListeners();
   }
 
@@ -2035,7 +2201,7 @@ class BleProvider extends ChangeNotifier {
   void _handleErrorResponse(dynamic data) {
     print('Error response: $data');
     _log('error', 'Error response received', details: data.toString());
-    
+
     // Extract error message
     String errorMessage = 'Unknown error';
     if (data is Map<String, dynamic>) {
@@ -2047,7 +2213,7 @@ class BleProvider extends ChangeNotifier {
     } else if (data is String) {
       errorMessage = data;
     }
-    
+
     statusMessage = 'Error: $errorMessage';
     notifyListeners();
   }
@@ -2064,15 +2230,15 @@ class BleProvider extends ChangeNotifier {
   void _handleSignalDetectedResponse(dynamic data) {
     print('Signal detected: $data');
     _log('info', 'Signal detected', details: data.toString());
-    
+
     // Parse the signal data and add to detected signals list
     if (data is Map<String, dynamic> && data.containsKey('data')) {
       Map<String, dynamic> signalData = data['data'];
       print('SignalDetected: Parsing signal data: $signalData');
-      
+
       // Get module number
       int module = int.tryParse(signalData['module']?.toString() ?? '0') ?? 0;
-      
+
       // In binary protocol, isBackgroundScanner is always false (sent as string 'false')
       // Parse it safely - can be bool or String
       bool isBackgroundScanner = false;
@@ -2084,7 +2250,7 @@ class BleProvider extends ChangeNotifier {
           isBackgroundScanner = value.toLowerCase() == 'true';
         }
       }
-      
+
       // Create DetectedSignal from the data first
       DetectedSignal signal = DetectedSignal(
         frequency: signalData['frequency']?.toString() ?? '0',
@@ -2095,25 +2261,29 @@ class BleProvider extends ChangeNotifier {
         module: module,
         isBackgroundScanner: isBackgroundScanner,
       );
-      
+
       // Note: Frequency search state will be updated by ModeSwitch message
       // when the module transitions back to Idle after detecting signal
       // But add a fallback in case ModeSwitch doesn't arrive
-      print('Signal detected for module $module - waiting for ModeSwitch to update state');
-      
+      print(
+          'Signal detected for module $module - waiting for ModeSwitch to update state');
+
       // Fallback: if ModeSwitch doesn't arrive within 2 seconds, stop search manually
       if (!signal.isBackgroundScanner && isFrequencySearching[module] == true) {
         Future.delayed(const Duration(seconds: 2), () {
           // Only stop if ModeSwitch hasn't already stopped the search
           if (isFrequencySearching[module] == true) {
             isFrequencySearching[module] = false;
-            print('Module $module frequency search stopped (fallback after signal detection)');
-            _log('info', 'Frequency search stopped (fallback)', details: 'Module: $module');
-            
+            print(
+                'Module $module frequency search stopped (fallback after signal detection)');
+            _log('info', 'Frequency search stopped (fallback)',
+                details: 'Module: $module');
+
             // Also update module state in cc1101Modules if it exists
             if (cc1101Modules != null && module < cc1101Modules!.length) {
               cc1101Modules![module]['mode'] = 'Idle';
-              print('Updated module $module mode in cc1101Modules to Idle (fallback)');
+              print(
+                  'Updated module $module mode in cc1101Modules to Idle (fallback)');
             } else if (cc1101Modules == null) {
               // Initialize if needed
               cc1101Modules = [];
@@ -2125,35 +2295,36 @@ class BleProvider extends ChangeNotifier {
               }
               cc1101Modules![module]['mode'] = 'Idle';
               cc1101Modules![module]['id'] = module;
-              print('Created module $module in cc1101Modules with mode Idle (fallback)');
+              print(
+                  'Created module $module in cc1101Modules with mode Idle (fallback)');
             }
-            
+
             notifyListeners();
           }
         });
       }
-      
+
       print('SignalDetected: Created signal: $signal');
-      
+
       // Only add to detected signals list if it's NOT a background scanner
       // Background scanner signals should only appear on scanner screen
       if (!signal.isBackgroundScanner) {
-      detectedSignals.insert(0, signal);
-      
-      // Limit list size (max 100 signals)
-      if (detectedSignals.length > 100) {
-        detectedSignals = detectedSignals.take(100).toList();
-      }
-      
-      // Sort by timestamp (newest first)
-      detectedSignals.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-      
-      print('Added signal to list. Total signals: ${detectedSignals.length}');
+        detectedSignals.insert(0, signal);
+
+        // Limit list size (max 100 signals)
+        if (detectedSignals.length > 100) {
+          detectedSignals = detectedSignals.take(100).toList();
+        }
+
+        // Sort by timestamp (newest first)
+        detectedSignals.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+        print('Added signal to list. Total signals: ${detectedSignals.length}');
       } else {
         print('Background scanner signal - not adding to main list');
       }
     }
-    
+
     notifyListeners();
   }
 
@@ -2161,7 +2332,7 @@ class BleProvider extends ChangeNotifier {
   void _handleSignalRecordedResponse(dynamic data) {
     print('Signal recorded: $data');
     _log('info', 'Signal recorded', details: data.toString());
-    
+
     // Add the new file to recorded files list
     String? filename;
     if (data is Map<String, dynamic>) {
@@ -2173,28 +2344,28 @@ class BleProvider extends ChangeNotifier {
         filename = data['filename'];
       }
     }
-    
+
     if (filename != null) {
       final newFile = {
         'filename': filename,
         'date': DateTime.now().toIso8601String(),
         'type': 'recorded'
       };
-      
+
       // Add to the beginning of the list
       recordedRuntimeFiles.insert(0, newFile);
-      
+
       // Limit list size to prevent memory issues
       if (recordedRuntimeFiles.length > 50) {
         recordedRuntimeFiles = recordedRuntimeFiles.take(50).toList();
       }
-      
+
       _notify('success', 'Signal recorded: $filename');
       print('Added new recorded file: $filename');
     } else {
       print('Could not extract filename from SignalRecorded data: $data');
     }
-    
+
     notifyListeners();
   }
 
@@ -2250,35 +2421,37 @@ class BleProvider extends ChangeNotifier {
   void _handleFileSystemResponse(dynamic data) {
     print('File system response: $data');
     _log('info', 'File system response', details: data.toString());
-    
+
     // Handle file system operations
     if (data is Map<String, dynamic>) {
       // Handle DirectoryTree response FIRST (top-level type check)
       // Structure from BinaryMessageParser: {type: 'DirectoryTree', data: {pathType: 0, paths: [...], streaming: bool, totalDirs: int}}
       if (data.containsKey('type') && data['type'] == 'DirectoryTree') {
         print('DirectoryTree response detected (top-level): $data');
-        
+
         if (data.containsKey('data') && data['data'] is Map<String, dynamic>) {
           Map<String, dynamic> directoryTreeData = data['data'];
-          
+
           // Check for errors first
           if (directoryTreeData.containsKey('error')) {
             print('Directory tree error: ${directoryTreeData['error']}');
             _isStreamingDirectoryTree = false;
             _streamingDirectoryTreeBuffer.clear();
             _streamingTotalDirs = 0;
-            
-            if (_pendingDirectoryTreeCompleter != null && !_pendingDirectoryTreeCompleter!.isCompleted) {
-              _pendingDirectoryTreeCompleter!.completeError('Error getting directory tree: ${directoryTreeData['error']}');
+
+            if (_pendingDirectoryTreeCompleter != null &&
+                !_pendingDirectoryTreeCompleter!.isCompleted) {
+              _pendingDirectoryTreeCompleter!.completeError(
+                  'Error getting directory tree: ${directoryTreeData['error']}');
               _pendingDirectoryTreeCompleter = null;
             }
             return;
           }
-          
+
           bool isStreaming = directoryTreeData['streaming'] == true;
           int totalDirs = directoryTreeData['totalDirs'] ?? 0;
           List<dynamic> paths = directoryTreeData['paths'] ?? [];
-          
+
           if (isStreaming) {
             // Streaming mode: accumulate paths in buffer
             if (!_isStreamingDirectoryTree) {
@@ -2287,17 +2460,19 @@ class BleProvider extends ChangeNotifier {
               // 0xFFFF (65535) means total is unknown
               _streamingTotalDirs = (totalDirs == 65535) ? 0 : totalDirs;
               _isStreamingDirectoryTree = true;
-              print('Directory tree streaming started, totalDirs: $_streamingTotalDirs');
+              print(
+                  'Directory tree streaming started, totalDirs: $_streamingTotalDirs');
             }
-            
+
             // Add paths from this message
             for (var path in paths) {
               if (path is String) {
                 _streamingDirectoryTreeBuffer.add(path);
               }
             }
-            
-            print('Directory tree streaming: ${_streamingDirectoryTreeBuffer.length} paths received${_streamingTotalDirs > 0 ? ' / $_streamingTotalDirs' : ''}');
+
+            print(
+                'Directory tree streaming: ${_streamingDirectoryTreeBuffer.length} paths received${_streamingTotalDirs > 0 ? ' / $_streamingTotalDirs' : ''}');
           } else {
             // Final or single message
             if (_isStreamingDirectoryTree) {
@@ -2307,7 +2482,7 @@ class BleProvider extends ChangeNotifier {
                   _streamingDirectoryTreeBuffer.add(path);
                 }
               }
-              
+
               // Create response with all accumulated paths
               Map<String, dynamic> directoryTreeResponse = {
                 'type': 'DirectoryTree',
@@ -2316,26 +2491,32 @@ class BleProvider extends ChangeNotifier {
                   'paths': List<String>.from(_streamingDirectoryTreeBuffer),
                 },
               };
-              
+
               _streamingDirectoryTreeBuffer.clear();
               _streamingTotalDirs = 0;
               _isStreamingDirectoryTree = false;
-              
-              print('Directory tree stream complete: ${directoryTreeResponse['data']['paths'].length} paths total');
-              
-              if (_pendingDirectoryTreeCompleter != null && !_pendingDirectoryTreeCompleter!.isCompleted) {
+
+              print(
+                  'Directory tree stream complete: ${directoryTreeResponse['data']['paths'].length} paths total');
+
+              if (_pendingDirectoryTreeCompleter != null &&
+                  !_pendingDirectoryTreeCompleter!.isCompleted) {
                 _pendingDirectoryTreeCompleter!.complete(directoryTreeResponse);
-                print('Directory tree completer completed successfully (streaming)');
+                print(
+                    'Directory tree completer completed successfully (streaming)');
               }
             } else {
               // Single message (non-streaming)
               print('Directory tree single message: ${paths.length} paths');
-              
-              if (_pendingDirectoryTreeCompleter != null && !_pendingDirectoryTreeCompleter!.isCompleted) {
+
+              if (_pendingDirectoryTreeCompleter != null &&
+                  !_pendingDirectoryTreeCompleter!.isCompleted) {
                 _pendingDirectoryTreeCompleter!.complete(data);
-                print('Directory tree completer completed successfully (single message)');
+                print(
+                    'Directory tree completer completed successfully (single message)');
               } else {
-                print('Warning: Directory tree completer is null or already completed');
+                print(
+                    'Warning: Directory tree completer is null or already completed');
               }
             }
           }
@@ -2344,16 +2525,18 @@ class BleProvider extends ChangeNotifier {
         }
         return; // Don't process further
       }
-      
+
       if (data.containsKey('data') && data['data'] is Map<String, dynamic>) {
         Map<String, dynamic> responseData = data['data'];
-        
+
         // Handle file list response (supports streaming protocol)
-        if (responseData.containsKey('action') && responseData['action'] == 'list') {
+        if (responseData.containsKey('action') &&
+            responseData['action'] == 'list') {
           // Check for errors first
           if (responseData.containsKey('error')) {
             print('File list error: ${responseData['error']}');
-            _log('error', 'File list error', details: responseData['error'].toString());
+            _log('error', 'File list error',
+                details: responseData['error'].toString());
             isLoadingFiles = false;
             fileListProgress = 0.0;
             _isStreamingFileList = false;
@@ -2365,12 +2548,13 @@ class BleProvider extends ChangeNotifier {
             notifyListeners();
             return;
           }
-          
-          if (responseData.containsKey('files') && responseData['files'] is List) {
+
+          if (responseData.containsKey('files') &&
+              responseData['files'] is List) {
             List<dynamic> files = responseData['files'];
             bool isStreaming = responseData['streaming'] == true;
             int totalFiles = responseData['totalFiles'] ?? 0;
-            
+
             // Parse files from this message
             List<FileItem> parsedFiles = [];
             for (var file in files) {
@@ -2382,7 +2566,7 @@ class BleProvider extends ChangeNotifier {
                 }
               }
             }
-            
+
             // CRITICAL: Check streaming flag FIRST before checking _isStreamingFileList
             // This ensures we properly handle the first streaming message
             if (isStreaming) {
@@ -2394,27 +2578,30 @@ class BleProvider extends ChangeNotifier {
                 // 0xFFFF (65535) means total is unknown
                 _streamingTotalFiles = (totalFiles == 65535) ? 0 : totalFiles;
                 _isStreamingFileList = true;
-                _log('info', 'File list streaming started', 
-                     details: 'Total files: ${_streamingTotalFiles > 0 ? _streamingTotalFiles : "unknown"}');
+                _log('info', 'File list streaming started',
+                    details:
+                        'Total files: ${_streamingTotalFiles > 0 ? _streamingTotalFiles : "unknown"}');
               }
-              
+
               // Add files to buffer (accumulate across all streaming messages)
               final filesBefore = _streamingFileBuffer.length;
               _streamingFileBuffer.addAll(parsedFiles);
               final filesAfter = _streamingFileBuffer.length;
-              
+
               // Update progress based on received/total files
               // If total is unknown (0 or was 65535), use indeterminate progress
               if (_streamingTotalFiles > 0) {
-                fileListProgress = _streamingFileBuffer.length / _streamingTotalFiles;
+                fileListProgress =
+                    _streamingFileBuffer.length / _streamingTotalFiles;
               } else {
                 // Indeterminate progress
                 fileListProgress = 0.5;
               }
-              
-              _log('debug', 'File list streaming', 
-                   details: 'Added ${filesAfter - filesBefore} files, total in buffer: ${_streamingFileBuffer.length}${_streamingTotalFiles > 0 ? '/$_streamingTotalFiles' : ''}');
-              
+
+              _log('debug', 'File list streaming',
+                  details:
+                      'Added ${filesAfter - filesBefore} files, total in buffer: ${_streamingFileBuffer.length}${_streamingTotalFiles > 0 ? '/$_streamingTotalFiles' : ''}');
+
               // CRITICAL: Update fileList during streaming so UI shows accumulated files
               // This ensures all files are visible, not just the last packet
               fileList = List.from(_streamingFileBuffer);
@@ -2425,8 +2612,9 @@ class BleProvider extends ChangeNotifier {
                 // End of stream - combine buffer with this final message
                 _streamingFileBuffer.addAll(parsedFiles);
                 fileList = List.from(_streamingFileBuffer);
-                _log('info', 'File list streaming complete', 
-                     details: 'Total files: ${fileList.length} (buffer had ${_streamingFileBuffer.length - parsedFiles.length}, final message added ${parsedFiles.length})');
+                _log('info', 'File list streaming complete',
+                    details:
+                        'Total files: ${fileList.length} (buffer had ${_streamingFileBuffer.length - parsedFiles.length}, final message added ${parsedFiles.length})');
                 _streamingFileBuffer.clear();
                 _streamingTotalFiles = 0;
                 _isStreamingFileList = false;
@@ -2434,15 +2622,16 @@ class BleProvider extends ChangeNotifier {
                 // Single message (non-streaming) - no previous streaming
                 fileList = parsedFiles;
               }
-              
-              _log('info', 'File list complete', details: 'Path: $currentPath, Files: ${fileList.length}');
-              
+
+              _log('info', 'File list complete',
+                  details: 'Path: $currentPath, Files: ${fileList.length}');
+
               // Save to cache
               if (fileList.isNotEmpty || files.isEmpty) {
                 _fileCache[currentPath] = List.from(fileList);
                 _cacheTimestamps[currentPath] = DateTime.now();
               }
-              
+
               isLoadingFiles = false;
               fileListProgress = 0.0;
               _fileListTimeout?.cancel();
@@ -2452,7 +2641,8 @@ class BleProvider extends ChangeNotifier {
           } else {
             // Invalid response format
             print('Invalid file list response format');
-            _log('warning', 'Invalid file list response', details: 'Missing or invalid files array');
+            _log('warning', 'Invalid file list response',
+                details: 'Missing or invalid files array');
             isLoadingFiles = false;
             fileListProgress = 0.0;
             _isStreamingFileList = false;
@@ -2464,59 +2654,69 @@ class BleProvider extends ChangeNotifier {
           }
         }
       }
-      
+
       // Handle file load response (direct response, not nested in 'data')
       if (data.containsKey('action') && data['action'] == 'load') {
         print('File load response received (direct)');
         _handleFileLoadResponse(data);
       }
-      
+
       // Handle file load response (nested in 'data' field)
       if (data.containsKey('data') && data['data'] is Map<String, dynamic>) {
         Map<String, dynamic> responseData = data['data'];
-        if (responseData.containsKey('action') && responseData['action'] == 'load') {
+        if (responseData.containsKey('action') &&
+            responseData['action'] == 'load') {
           print('File load response received (nested in data)');
           _handleFileLoadResponse(responseData);
         }
-        
+
         // Handle rename response
-        if (responseData.containsKey('action') && responseData['action'] == 'rename') {
+        if (responseData.containsKey('action') &&
+            responseData['action'] == 'rename') {
           print('Rename response received: $responseData');
-          if (_pendingRenameCompleter != null && !_pendingRenameCompleter!.isCompleted) {
+          if (_pendingRenameCompleter != null &&
+              !_pendingRenameCompleter!.isCompleted) {
             _pendingRenameCompleter!.complete(responseData);
           }
         }
-        
+
         // Handle delete response
-        if (responseData.containsKey('action') && responseData['action'] == 'delete') {
+        if (responseData.containsKey('action') &&
+            responseData['action'] == 'delete') {
           print('Delete response received: $responseData');
-          if (_pendingDeleteCompleter != null && !_pendingDeleteCompleter!.isCompleted) {
+          if (_pendingDeleteCompleter != null &&
+              !_pendingDeleteCompleter!.isCompleted) {
             _pendingDeleteCompleter!.complete(responseData);
           }
         }
-        
+
         // Handle create-directory response
-        if (responseData.containsKey('action') && responseData['action'] == 'create-directory') {
+        if (responseData.containsKey('action') &&
+            responseData['action'] == 'create-directory') {
           print('Create directory response received: $responseData');
-          if (_pendingMkdirCompleter != null && !_pendingMkdirCompleter!.isCompleted) {
+          if (_pendingMkdirCompleter != null &&
+              !_pendingMkdirCompleter!.isCompleted) {
             _pendingMkdirCompleter!.complete(responseData);
           }
         }
-        
+
         // Handle upload response
-        if (responseData.containsKey('action') && responseData['action'] == 'upload') {
+        if (responseData.containsKey('action') &&
+            responseData['action'] == 'upload') {
           print('Upload response received: $responseData');
           _handleFileUploadResponse(responseData);
         }
-        
+
         // Handle format-sd response
-        if (responseData.containsKey('action') && responseData['action'] == 'format-sd') {
+        if (responseData.containsKey('action') &&
+            responseData['action'] == 'format-sd') {
           print('Format SD response received: $responseData');
-          
+
           // Check if this is a progress update (errorCode 0xFF) or final result
           if (responseData['isProgress'] == true) {
             // Progress update — update message but keep formatting state
-            sdFormatProgress = responseData['progressMessage']?.toString() ?? '';
+            sdFormatProgress =
+                responseData['progressMessage']?.toString() ?? '';
             _log('info', 'SD format progress: $sdFormatProgress');
             notifyListeners();
           } else {
@@ -2524,70 +2724,80 @@ class BleProvider extends ChangeNotifier {
             isFormattingSD = false;
             sdFormatProgress = '';
             sdFormatSuccess = responseData['success'] == true;
-            _log('info', 'SD format ${sdFormatSuccess ? 'succeeded' : 'failed'}');
+            _log('info',
+                'SD format ${sdFormatSuccess ? 'succeeded' : 'failed'}');
             notifyListeners();
           }
         }
 
         // Handle copy response
-        if (responseData.containsKey('action') && responseData['action'] == 'copy') {
+        if (responseData.containsKey('action') &&
+            responseData['action'] == 'copy') {
           print('Copy response received: $responseData');
-          if (_pendingCopyCompleter != null && !_pendingCopyCompleter!.isCompleted) {
+          if (_pendingCopyCompleter != null &&
+              !_pendingCopyCompleter!.isCompleted) {
             _pendingCopyCompleter!.complete(responseData);
           }
         }
-        
+
         // Handle move response
-        if (responseData.containsKey('action') && responseData['action'] == 'move') {
+        if (responseData.containsKey('action') &&
+            responseData['action'] == 'move') {
           print('Move response received: $responseData');
-          if (_pendingMoveCompleter != null && !_pendingMoveCompleter!.isCompleted) {
+          if (_pendingMoveCompleter != null &&
+              !_pendingMoveCompleter!.isCompleted) {
             _pendingMoveCompleter!.complete(responseData);
           }
         }
       }
-      
+
       // Handle copy response (direct, not nested)
       if (data.containsKey('action') && data['action'] == 'copy') {
         print('Copy response received (direct): $data');
-        if (_pendingCopyCompleter != null && !_pendingCopyCompleter!.isCompleted) {
+        if (_pendingCopyCompleter != null &&
+            !_pendingCopyCompleter!.isCompleted) {
           _pendingCopyCompleter!.complete(data);
         }
       }
-      
+
       // Handle move response (direct, not nested)
       if (data.containsKey('action') && data['action'] == 'move') {
         print('Move response received (direct): $data');
-        if (_pendingMoveCompleter != null && !_pendingMoveCompleter!.isCompleted) {
+        if (_pendingMoveCompleter != null &&
+            !_pendingMoveCompleter!.isCompleted) {
           _pendingMoveCompleter!.complete(data);
         }
       }
-      
+
       // Handle upload response (direct, not nested)
       if (data.containsKey('action') && data['action'] == 'upload') {
         print('Upload response received (direct): $data');
         _handleFileUploadResponse(data);
       }
     }
-    
+
     notifyListeners();
   }
 
   /// Handle file load response
   void _handleFileLoadResponse(Map<String, dynamic> data) {
     print('Handling file load response: $data');
-    
+
     if (data.containsKey('success') && data['success'] == true) {
       if (data.containsKey('content')) {
         String fileContent = data['content'];
         print('File content received, length: ${fileContent.length}');
-        print('File content preview: ${fileContent.substring(0, fileContent.length > 100 ? 100 : fileContent.length)}...');
-        
+        print(
+            'File content preview: ${fileContent.substring(0, fileContent.length > 100 ? 100 : fileContent.length)}...');
+
         // Store the file content for the current file reading operation
         _currentFileContent = fileContent;
-        
+
         // If we have a pending file reading operation, complete it
-        if (_pendingFileReadCompleter != null && !_pendingFileReadCompleter!.isCompleted) {
-          print('Completing pending file read completer with content length: ${fileContent.length}');
+        if (_pendingFileReadCompleter != null &&
+            !_pendingFileReadCompleter!.isCompleted) {
+          print(
+              'Completing pending file read completer with content length: ${fileContent.length}');
           _pendingFileReadCompleter!.complete(fileContent);
           _pendingFileReadCompleter = null;
         } else {
@@ -2595,15 +2805,18 @@ class BleProvider extends ChangeNotifier {
         }
       } else {
         print('File load response missing content field');
-        if (_pendingFileReadCompleter != null && !_pendingFileReadCompleter!.isCompleted) {
-          _pendingFileReadCompleter!.completeError('File content missing from response');
+        if (_pendingFileReadCompleter != null &&
+            !_pendingFileReadCompleter!.isCompleted) {
+          _pendingFileReadCompleter!
+              .completeError('File content missing from response');
           _pendingFileReadCompleter = null;
         }
       }
     } else {
       String error = data['error'] ?? 'Unknown error loading file';
       print('File load failed: $error');
-      if (_pendingFileReadCompleter != null && !_pendingFileReadCompleter!.isCompleted) {
+      if (_pendingFileReadCompleter != null &&
+          !_pendingFileReadCompleter!.isCompleted) {
         _pendingFileReadCompleter!.completeError(error);
         _pendingFileReadCompleter = null;
       }
@@ -2614,9 +2827,10 @@ class BleProvider extends ChangeNotifier {
   void _handleFileUploadResponse(dynamic data) {
     print('File upload response: $data');
     _log('info', 'File upload response', details: data.toString());
-    
+
     // Check if we have a pending upload completer
-    if (_pendingUploadCompleter != null && !_pendingUploadCompleter!.isCompleted) {
+    if (_pendingUploadCompleter != null &&
+        !_pendingUploadCompleter!.isCompleted) {
       if (data is Map<String, dynamic>) {
         if (data['success'] == true) {
           _pendingUploadCompleter!.complete(data);
@@ -2629,7 +2843,7 @@ class BleProvider extends ChangeNotifier {
       }
       _pendingUploadCompleter = null;
     }
-    
+
     notifyListeners();
   }
 
@@ -2667,9 +2881,12 @@ class BleProvider extends ChangeNotifier {
       // First chunk contains: [0x0D][pathLength:1][pathType:1][path:variable] in payload
       // Subsequent chunks contain only file data
       // Payload size = MAX_CHUNK_SIZE - PACKET_HEADER_SIZE - checksum(1)
-      const int maxChunkDataSize = FirmwareBinaryProtocol.MAX_CHUNK_SIZE - FirmwareBinaryProtocol.PACKET_HEADER_SIZE - 1;
-      final int totalChunks = 1 + ((fileSize + maxChunkDataSize - 1) ~/ maxChunkDataSize);
-      
+      const int maxChunkDataSize = FirmwareBinaryProtocol.MAX_CHUNK_SIZE -
+          FirmwareBinaryProtocol.PACKET_HEADER_SIZE -
+          1;
+      final int totalChunks =
+          1 + ((fileSize + maxChunkDataSize - 1) ~/ maxChunkDataSize);
+
       _log('INFO', 'Total chunks: $totalChunks');
 
       // Generate chunk ID
@@ -2701,39 +2918,44 @@ class BleProvider extends ChangeNotifier {
         int offset = 0;
         while (offset < chunk.length) {
           final int remaining = chunk.length - offset;
-          final int chunkSize = remaining > maxChunkDataSize ? maxChunkDataSize : remaining;
-          
-          final Uint8List chunkData = Uint8List.fromList(chunk.sublist(offset, offset + chunkSize));
-          
+          final int chunkSize =
+              remaining > maxChunkDataSize ? maxChunkDataSize : remaining;
+
+          final Uint8List chunkData =
+              Uint8List.fromList(chunk.sublist(offset, offset + chunkSize));
+
           // Create and send chunk
-          final chunkCommand = FirmwareBinaryProtocol.createUploadFileChunkCommand(
+          final chunkCommand =
+              FirmwareBinaryProtocol.createUploadFileChunkCommand(
             chunkData,
             chunkId,
             chunkNum,
             totalChunks,
           );
-          
+
           await sendBinaryCommand(chunkCommand);
-          
+
           totalSent += chunkSize;
           offset += chunkSize;
           chunkNum++;
-          
+
           // Update progress
           _uploadProgress = totalSent / fileSize;
           onProgress?.call(_uploadProgress);
           notifyListeners();
-          
+
           // Small delay to avoid overwhelming BLE stack
           await Future.delayed(const Duration(milliseconds: 10));
         }
       }
 
-      _log('INFO', 'File upload completed: $totalSent bytes sent in ${chunkNum - 1} chunks');
+      _log('INFO',
+          'File upload completed: $totalSent bytes sent in ${chunkNum - 1} chunks');
 
       // Wait for upload response with timeout
       final timeout = Timer(const Duration(seconds: 30), () {
-        if (_pendingUploadCompleter != null && !_pendingUploadCompleter!.isCompleted) {
+        if (_pendingUploadCompleter != null &&
+            !_pendingUploadCompleter!.isCompleted) {
           _pendingUploadCompleter!.completeError('Upload timeout');
           _pendingUploadCompleter = null;
         }
@@ -2774,13 +2996,16 @@ class BleProvider extends ChangeNotifier {
     Function(double progress)? onProgress,
   }) async {
     final tempDir = await getTemporaryDirectory();
-    final tempFile = File('${tempDir.path}/_upload_tmp_${DateTime.now().millisecondsSinceEpoch}');
+    final tempFile = File(
+        '${tempDir.path}/_upload_tmp_${DateTime.now().millisecondsSinceEpoch}');
     try {
       await tempFile.writeAsBytes(bytes);
       return await uploadFile(tempFile, targetPath,
           pathType: pathType, onProgress: onProgress);
     } finally {
-      try { await tempFile.delete(); } catch (_) {}
+      try {
+        await tempFile.delete();
+      } catch (_) {}
     }
   }
 
@@ -2812,19 +3037,21 @@ class BleProvider extends ChangeNotifier {
   }
 
   // === Methods for working with signals ===
-  
+
   /// Signal file parsing
   /// [fileContent] - file content
   /// [filename] - file name (optional)
   /// Returns SignalData or null if parsing failed
   SignalData? parseSignalFile(String fileContent, {String? filename}) {
     try {
-      final result = FileParserFactory.parseFile(fileContent, filename: filename);
+      final result =
+          FileParserFactory.parseFile(fileContent, filename: filename);
       if (result.success) {
         _log('info', 'Successfully parsed signal file', details: filename);
         return result.signalData;
       } else {
-        _log('error', 'Failed to parse signal file', details: result.errors.join(', '));
+        _log('error', 'Failed to parse signal file',
+            details: result.errors.join(', '));
         return null;
       }
     } catch (e) {
@@ -2832,19 +3059,22 @@ class BleProvider extends ChangeNotifier {
       return null;
     }
   }
-  
+
   /// Signal file generation
   /// [signalData] - signal data
   /// [format] - file format
   /// Returns file content or null if generation failed
   String? generateSignalFile(SignalData signalData, SignalFormat format) {
     try {
-      final result = SignalGeneratorFactory.generateFromSignalData(signalData, format);
+      final result =
+          SignalGeneratorFactory.generateFromSignalData(signalData, format);
       if (result.success) {
-        _log('info', 'Successfully generated signal file', details: format.description);
+        _log('info', 'Successfully generated signal file',
+            details: format.description);
         return result.content;
       } else {
-        _log('error', 'Failed to generate signal file', details: result.errors.join(', '));
+        _log('error', 'Failed to generate signal file',
+            details: result.errors.join(', '));
         return null;
       }
     } catch (e) {
@@ -2852,47 +3082,54 @@ class BleProvider extends ChangeNotifier {
       return null;
     }
   }
-  
+
   /// Recording parameters validation
   /// [config] - recording configuration
   /// Returns list of errors (empty if all valid)
   List<String> validateRecordConfig(RecordConfig config) {
     final errors = <String>[];
-    
+
     // Frequency validation
     if (!CC1101Values.isValidFrequency(config.frequency)) {
       final closest = CC1101Values.getClosestValidFrequency(config.frequency);
       if (closest != null) {
-        errors.add('Invalid frequency ${config.frequency.toStringAsFixed(2)} MHz. Closest valid: ${closest.toStringAsFixed(2)} MHz');
+        errors.add(
+            'Invalid frequency ${config.frequency.toStringAsFixed(2)} MHz. Closest valid: ${closest.toStringAsFixed(2)} MHz');
       } else {
-        errors.add('Invalid frequency ${config.frequency.toStringAsFixed(2)} MHz');
+        errors.add(
+            'Invalid frequency ${config.frequency.toStringAsFixed(2)} MHz');
       }
     }
-    
+
     // Module validation
     if (config.module < 0) {
       errors.add('Invalid module number: ${config.module}');
     }
-    
+
     // Advanced mode parameters validation
     if (config.advancedMode) {
-      if (config.dataRate != null && !CC1101Values.isValidDataRate(config.dataRate!)) {
-        errors.add('Invalid data rate ${config.dataRate!.toStringAsFixed(2)} kBaud');
+      if (config.dataRate != null &&
+          !CC1101Values.isValidDataRate(config.dataRate!)) {
+        errors.add(
+            'Invalid data rate ${config.dataRate!.toStringAsFixed(2)} kBaud');
       }
-      
-      if (config.deviation != null && !CC1101Values.isValidDeviation(config.deviation!)) {
-        errors.add('Invalid deviation ${config.deviation!.toStringAsFixed(2)} kHz');
+
+      if (config.deviation != null &&
+          !CC1101Values.isValidDeviation(config.deviation!)) {
+        errors.add(
+            'Invalid deviation ${config.deviation!.toStringAsFixed(2)} kHz');
       }
     }
-    
+
     return errors;
   }
-  
+
   /// Get signal file information
   /// [fileContent] - file content
   /// [filename] - file name (optional)
   /// Returns file information
-  Map<String, dynamic>? getSignalFileInfo(String fileContent, {String? filename}) {
+  Map<String, dynamic>? getSignalFileInfo(String fileContent,
+      {String? filename}) {
     try {
       return FileParserFactory.getFileInfo(fileContent, filename: filename);
     } catch (e) {
@@ -2900,19 +3137,19 @@ class BleProvider extends ChangeNotifier {
       return null;
     }
   }
-  
+
   /// Get list of supported file formats
   /// Returns list of file extensions
   List<String> getSupportedFileExtensions() {
     return FileParserFactory.getSupportedExtensions();
   }
-  
+
   /// Get list of supported generation formats
   /// Returns list of formats
   List<SignalFormat> getSupportedGenerationFormats() {
     return SignalGeneratorFactory.getSupportedFormats();
   }
-  
+
   /// Create recording configuration from SignalData
   /// [signalData] - signal data
   /// [module] - module number
@@ -2920,26 +3157,28 @@ class BleProvider extends ChangeNotifier {
   RecordConfig createRecordConfigFromSignal(SignalData signalData, int module) {
     return RecordConfig.fromSignalData(signalData, module);
   }
-  
+
   /// Get CC1101 calculator
   /// Returns calculator instance
   CC1101Calculator getCC1101Calculator() {
     return CC1101Calculator();
   }
-  
+
   /// Get CC1101 values
   /// Returns class with predefined values
   CC1101Values getCC1101Values() {
     return CC1101Values();
   }
-  
+
   /// Send binary command via Enhanced Protocol
   /// [command] - binary command to send
   // Transmit signal from file
-  Future<void> transmitFromFile(String filePath, {int? module, int repeat = 1, int? pathType}) async {
+  Future<void> transmitFromFile(String filePath,
+      {int? module, int repeat = 1, int? pathType}) async {
     if (!isConnected || txCharacteristic == null) {
       statusMessage = 'Not connected';
-      _log('error', 'Failed to transmit: Not connected', details: 'File: $filePath');
+      _log('error', 'Failed to transmit: Not connected',
+          details: 'File: $filePath');
       notifyListeners();
       throw Exception('Not connected to device');
     }
@@ -2951,42 +3190,50 @@ class BleProvider extends ChangeNotifier {
         // Find first idle module
         if (cc1101Modules != null) {
           for (int i = 0; i < cc1101Modules!.length; i++) {
-            final moduleMode = cc1101Modules![i]['mode']?.toString().toLowerCase();
+            final moduleMode =
+                cc1101Modules![i]['mode']?.toString().toLowerCase();
             if (moduleMode == 'idle') {
               selectedModule = i;
               break;
             }
           }
         }
-        
+
         // If no idle module found, throw error
         if (selectedModule == null) {
           statusMessage = 'No idle module available';
-          _log('error', 'Failed to transmit: No idle module', details: 'File: $filePath');
+          _log('error', 'Failed to transmit: No idle module',
+              details: 'File: $filePath');
           notifyListeners();
           throw Exception('No idle module available for transmission');
         }
       } else {
         // Check if specified module is idle
         if (cc1101Modules != null && selectedModule < cc1101Modules!.length) {
-          final moduleMode = cc1101Modules![selectedModule]['mode']?.toString().toLowerCase();
+          final moduleMode =
+              cc1101Modules![selectedModule]['mode']?.toString().toLowerCase();
           if (moduleMode != 'idle') {
             statusMessage = 'Module $selectedModule is not idle';
-            _log('error', 'Failed to transmit: Module not idle', details: 'File: $filePath, Module: $selectedModule, Mode: $moduleMode');
+            _log('error', 'Failed to transmit: Module not idle',
+                details:
+                    'File: $filePath, Module: $selectedModule, Mode: $moduleMode');
             notifyListeners();
-            throw Exception('Module $selectedModule is not idle (current mode: $moduleMode)');
+            throw Exception(
+                'Module $selectedModule is not idle (current mode: $moduleMode)');
           }
         }
       }
-      
+
       // Use provided pathType or current
       int effectivePathType = pathType ?? currentPathType;
-      
+
       // For pathType 0-3 (RECORDS, SIGNALS, PRESETS, TEMP), extract relative path
       // because firmware adds /DATA/XXXX/ prefix automatically.
       // For pathType 4-5 (LittleFS root, SD root), keep full absolute path.
       String pathToUse = filePath;
-      if (effectivePathType >= 0 && effectivePathType < 4 && filePath.startsWith('/DATA/')) {
+      if (effectivePathType >= 0 &&
+          effectivePathType < 4 &&
+          filePath.startsWith('/DATA/')) {
         // Extract relative path from /DATA/RECORDS/... or /DATA/SIGNALS/...
         final parts = filePath.split('/');
         if (parts.length > 3) {
@@ -2995,17 +3242,23 @@ class BleProvider extends ChangeNotifier {
           pathToUse = parts.last;
         }
       }
-      
-      _log('info', 'Transmitting signal from file', details: 'File: $pathToUse, pathType: $effectivePathType, Module: $selectedModule, Repeat: $repeat');
-      
+
+      _log('info', 'Transmitting signal from file',
+          details:
+              'File: $pathToUse, pathType: $effectivePathType, Module: $selectedModule, Repeat: $repeat');
+
       // Use FirmwareBinaryProtocol to create properly formatted command with pathType and module
-      final command = FirmwareBinaryProtocol.createTransmitFromFileCommand(pathToUse, pathType: effectivePathType, module: selectedModule);
-      
-      _log('debug', 'Sending transmitFromFile command', 
-           details: 'File: $pathToUse, pathType: $effectivePathType, Module: $selectedModule, Command length: ${command.length} bytes');
-      
+      final command = FirmwareBinaryProtocol.createTransmitFromFileCommand(
+          pathToUse,
+          pathType: effectivePathType,
+          module: selectedModule);
+
+      _log('debug', 'Sending transmitFromFile command',
+          details:
+              'File: $pathToUse, pathType: $effectivePathType, Module: $selectedModule, Command length: ${command.length} bytes');
+
       await sendBinaryCommand(command);
-      
+
       statusMessage = 'transmittingSignal';
       lastCommandMessage = 'Transmitting from $filePath';
       notifyListeners();
@@ -3017,15 +3270,16 @@ class BleProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> sendBinaryCommand(Uint8List command, {bool withoutResponse = false}) async {
+  Future<void> sendBinaryCommand(Uint8List command,
+      {bool withoutResponse = false}) async {
     if (!isConnected || txCharacteristic == null) {
       throw Exception('Device not connected');
     }
-    
+
     try {
       // Only use writeWithoutResponse if the characteristic actually supports it
-      final useNoResp = withoutResponse &&
-          txCharacteristic!.properties.writeWithoutResponse;
+      final useNoResp =
+          withoutResponse && txCharacteristic!.properties.writeWithoutResponse;
       await txCharacteristic!.write(command, withoutResponse: useNoResp);
     } catch (e) {
       print('Error sending binary command: $e');
@@ -3048,9 +3302,10 @@ class BleProvider extends ChangeNotifier {
       _log('error', 'Cannot start jam: not connected');
       throw Exception('Not connected');
     }
-    
-    _log('command', 'Starting jam on module $module: freq=$frequency, power=$power, pattern=$patternType');
-    
+
+    _log('command',
+        'Starting jam on module $module: freq=$frequency, power=$power, pattern=$patternType');
+
     final command = FirmwareBinaryProtocol.createStartJamCommand(
       module: module,
       frequency: frequency,
@@ -3060,7 +3315,7 @@ class BleProvider extends ChangeNotifier {
       cooldownMs: cooldownMs,
       customPattern: customPattern,
     );
-    
+
     await sendBinaryCommand(command);
   }
 
@@ -3082,7 +3337,7 @@ class BleProvider extends ChangeNotifier {
       rxBandwidth: rxBandwidth,
       dataRate: dataRate,
     );
-    
+
     await sendBinaryCommand(command);
   }
 
@@ -3103,7 +3358,7 @@ class BleProvider extends ChangeNotifier {
       pulseDuration,
       data,
     );
-    
+
     await sendBinaryCommand(command);
   }
 
@@ -3115,11 +3370,14 @@ class BleProvider extends ChangeNotifier {
     }
 
     try {
-      final command = FirmwareBinaryProtocol.createSetTimeCommand(DateTime.now());
+      final command =
+          FirmwareBinaryProtocol.createSetTimeCommand(DateTime.now());
       await sendBinaryCommand(command);
-      _log('info', 'Time synchronization command sent', details: 'Time: ${DateTime.now().toIso8601String()}');
+      _log('info', 'Time synchronization command sent',
+          details: 'Time: ${DateTime.now().toIso8601String()}');
     } catch (e) {
-      _log('error', 'Failed to send time synchronization command', details: e.toString());
+      _log('error', 'Failed to send time synchronization command',
+          details: e.toString());
       // Don't throw - time sync is not critical
     }
   }
@@ -3175,9 +3433,9 @@ class BleProvider extends ChangeNotifier {
   int get fwPatch => _fwPatch;
 
   // --- Battery status (received via 0xC3 periodically + on connect) ---
-  int _batteryVoltage = 0;       // millivolts
+  int _batteryVoltage = 0; // millivolts
   int get batteryVoltage => _batteryVoltage;
-  int _batteryPercent = -1;      // -1 = unknown, 0-100
+  int _batteryPercent = -1; // -1 = unknown, 0-100
   int get batteryPercent => _batteryPercent;
   bool _batteryCharging = false;
   bool get batteryCharging => _batteryCharging;
@@ -3273,7 +3531,8 @@ class BleProvider extends ChangeNotifier {
       throw Exception('Not connected');
     }
 
-    _log('command', 'Starting custom De Bruijn: bits=$bits te=$te ratio=$ratio freq=$frequencyMhz');
+    _log('command',
+        'Starting custom De Bruijn: bits=$bits te=$te ratio=$ratio freq=$frequencyMhz');
 
     final command = FirmwareBinaryProtocol.createCustomDeBruijnCommand(
       bits: bits,
@@ -3375,15 +3634,17 @@ class BleProvider extends ChangeNotifier {
   /// Set bruter inter-frame delay (sent to firmware)
   Future<void> setBruterDelay(int delayMs) async {
     _bruterDelayMs = delayMs.clamp(1, 1000);
-    
+
     if (!isConnected || txCharacteristic == null) {
-      _log('info', 'Bruter delay set locally to $_bruterDelayMs ms (will sync on connect)');
+      _log('info',
+          'Bruter delay set locally to $_bruterDelayMs ms (will sync on connect)');
       notifyListeners();
       return;
     }
 
     _log('command', 'Setting bruter delay to $_bruterDelayMs ms');
-    final command = FirmwareBinaryProtocol.createBruterSetDelayCommand(_bruterDelayMs);
+    final command =
+        FirmwareBinaryProtocol.createBruterSetDelayCommand(_bruterDelayMs);
     await sendBinaryCommand(command);
     notifyListeners();
   }
@@ -3391,7 +3652,8 @@ class BleProvider extends ChangeNotifier {
   /// Set the CC1101 module used for brute force (0=Module 1, 1=Module 2)
   Future<void> setBruterModule(int module) async {
     if (!isConnected || txCharacteristic == null) {
-      _log('info', 'Bruter module set locally to $module (will sync on connect)');
+      _log('info',
+          'Bruter module set locally to $module (will sync on connect)');
       return;
     }
     _log('command', 'Setting bruter module to $module');
@@ -3406,7 +3668,7 @@ class BleProvider extends ChangeNotifier {
     _bruterPercentage = data['percentage'] ?? 0;
     _bruterCodesPerSec = data['codesPerSec'] ?? 0;
     int menuId = data['menuId'] ?? 0;
-    
+
     // Ensure running state is correct, but do not override a paused state.
     // Late progress messages (queued before pause took effect) must not
     // re-set _isBruterRunning after the pause handler cleared it.
@@ -3414,7 +3676,7 @@ class BleProvider extends ChangeNotifier {
       _isBruterRunning = true;
       _bruterActiveProtocol = menuId;
     }
-    
+
     notifyListeners();
   }
 
@@ -3423,20 +3685,23 @@ class BleProvider extends ChangeNotifier {
     int menuId = data['menuId'] ?? 0;
     int status = data['status'] ?? 0; // 0=completed, 1=cancelled, 2=error
     int totalSent = data['totalSent'] ?? 0;
-    
-    String statusStr = status == 0 ? 'completed' : (status == 1 ? 'cancelled' : 'error');
-    _log('info', 'Brute force $statusStr: protocol $menuId, $totalSent codes sent');
-    
+
+    String statusStr =
+        status == 0 ? 'completed' : (status == 1 ? 'cancelled' : 'error');
+    _log('info',
+        'Brute force $statusStr: protocol $menuId, $totalSent codes sent');
+
     _isBruterRunning = false;
     _bruterActiveProtocol = 0;
     _bruterPercentage = status == 0 ? 100 : _bruterPercentage;
     _bruterCodesPerSec = 0;
-    
+
     // Store completion info for UI notification
     _lastBruterCompletionStatus = status;
     _lastBruterCompletionMenuId = menuId;
 
-    _notify(status == 0 ? 'success' : 'warning', 'Bruter $statusStr ($totalSent codes)');
+    _notify(status == 0 ? 'success' : 'warning',
+        'Bruter $statusStr ($totalSent codes)');
     notifyListeners();
   }
 
@@ -3447,7 +3712,8 @@ class BleProvider extends ChangeNotifier {
     int totalCodes = data['totalCodes'] ?? 0;
     int percentage = data['percentage'] ?? 0;
 
-    _log('info', 'Brute force paused: protocol $menuId at $currentCode/$totalCodes ($percentage%)');
+    _log('info',
+        'Brute force paused: protocol $menuId at $currentCode/$totalCodes ($percentage%)');
 
     _isBruterRunning = false;
     _bruterActiveProtocol = 0;
@@ -3469,7 +3735,8 @@ class BleProvider extends ChangeNotifier {
     int resumeCode = data['resumeCode'] ?? 0;
     int totalCodes = data['totalCodes'] ?? 0;
 
-    _log('info', 'Brute force resumed: protocol $menuId from code $resumeCode/$totalCodes');
+    _log('info',
+        'Brute force resumed: protocol $menuId from code $resumeCode/$totalCodes');
 
     _isBruterRunning = true;
     _bruterActiveProtocol = menuId;
@@ -3485,7 +3752,8 @@ class BleProvider extends ChangeNotifier {
     int totalCodes = data['totalCodes'] ?? 0;
     int percentage = data['percentage'] ?? 0;
 
-    _log('info', 'Saved bruter state available: protocol $menuId at $percentage%');
+    _log('info',
+        'Saved bruter state available: protocol $menuId at $percentage%');
 
     _bruterSavedStateAvailable = true;
     _bruterSavedMenuId = menuId;
@@ -3549,12 +3817,14 @@ class BleProvider extends ChangeNotifier {
   bool get ppSaveSuccess => _ppSaveSuccess;
 
   /// Start ProtoPirate decoding
-  Future<void> ppStartDecode({int module = 0, double frequency = 433.92}) async {
+  Future<void> ppStartDecode(
+      {int module = 0, double frequency = 433.92}) async {
     if (!isConnected || txCharacteristic == null) {
       throw Exception('Not connected');
     }
     _log('command', 'PP StartDecode: module=$module freq=$frequency');
-    final cmd = FirmwareBinaryProtocol.createPPStartDecodeCommand(module, frequency);
+    final cmd =
+        FirmwareBinaryProtocol.createPPStartDecodeCommand(module, frequency);
     await sendBinaryCommand(cmd);
     _ppDecoding = true;
     _ppModule = module;
@@ -3726,7 +3996,8 @@ class BleProvider extends ChangeNotifier {
     _ppModule = data['module'] ?? -1;
     _ppFrequency = (data['frequency'] as num?)?.toDouble() ?? 433.92;
     _ppSignalCount = data['signalCount'] ?? 0;
-    _log('debug', 'PP status: decoding=$_ppDecoding module=$_ppModule freq=$_ppFrequency signals=$_ppSignalCount');
+    _log('debug',
+        'PP status: decoding=$_ppDecoding module=$_ppModule freq=$_ppFrequency signals=$_ppSignalCount');
     notifyListeners();
   }
 
@@ -3760,7 +4031,8 @@ class BleProvider extends ChangeNotifier {
   void _handlePPSaveResult(Map<String, dynamic> data) {
     _ppSaveSuccess = data['success'] ?? false;
     _ppLastSavePath = data['path'] ?? '';
-    _log('info', 'PP save result: ${_ppSaveSuccess ? "OK" : "FAIL"} path=$_ppLastSavePath');
+    _log('info',
+        'PP save result: ${_ppSaveSuccess ? "OK" : "FAIL"} path=$_ppLastSavePath');
     notifyListeners();
   }
 
@@ -3782,8 +4054,8 @@ class BleProvider extends ChangeNotifier {
   /// Handle settings sync from firmware (0xC0).
   /// Updates local settings to match the device state.
   void _handleSettingsSync(Map<String, dynamic> data) {
-    _scannerRssi   = data['scannerRssi'] ?? -80;
-    _bruterPower   = data['bruterPower'] ?? 7;
+    _scannerRssi = data['scannerRssi'] ?? -80;
+    _bruterPower = data['bruterPower'] ?? 7;
     _bruterDelayMs = data['bruterDelay'] ?? 10;
     _bruterRepeats = data['bruterRepeats'] ?? 4;
     _radioPowerMod1 = data['radioPowerMod1'] ?? 10;
@@ -3797,7 +4069,8 @@ class BleProvider extends ChangeNotifier {
     }
     _settingsSynced = true;
 
-    _log('info', 'Settings synced from device: rssi=$_scannerRssi power=$_bruterPower delay=$_bruterDelayMs reps=$_bruterRepeats mod1=$_radioPowerMod1 mod2=$_radioPowerMod2 tempOff=$_cpuTempOffsetDeciC');
+    _log('info',
+        'Settings synced from device: rssi=$_scannerRssi power=$_bruterPower delay=$_bruterDelayMs reps=$_bruterRepeats mod1=$_radioPowerMod1 mod2=$_radioPowerMod2 tempOff=$_cpuTempOffsetDeciC');
     notifyListeners();
   }
 
@@ -3827,7 +4100,8 @@ class BleProvider extends ChangeNotifier {
     _batteryVoltage = data['voltage_mv'] ?? 0;
     _batteryPercent = data['percentage'] ?? 0;
     _batteryCharging = data['charging'] ?? false;
-    _log('info', 'Battery: ${_batteryVoltage}mV ${_batteryPercent}% charging=$_batteryCharging');
+    _log('info',
+        'Battery: ${_batteryVoltage}mV ${_batteryPercent}% charging=$_batteryCharging');
     notifyListeners();
   }
 
@@ -3838,7 +4112,8 @@ class BleProvider extends ChangeNotifier {
     deviceBtn2Action = data['btn2Action'] ?? 0;
     deviceBtn1PathType = data['btn1PathType'] ?? 0;
     deviceBtn2PathType = data['btn2PathType'] ?? 0;
-    _log('info', 'HwButtonStatus: btn1=$deviceBtn1Action btn2=$deviceBtn2Action');
+    _log('info',
+        'HwButtonStatus: btn1=$deviceBtn1Action btn2=$deviceBtn2Action');
     notifyListeners();
   }
 
@@ -3847,7 +4122,8 @@ class BleProvider extends ChangeNotifier {
     sdMounted = data['mounted'] ?? false;
     sdTotalMB = data['totalMB'] ?? 0;
     sdFreeMB = data['freeMB'] ?? 0;
-    _log('info', 'SdStatus: mounted=$sdMounted total=${sdTotalMB}MB free=${sdFreeMB}MB');
+    _log('info',
+        'SdStatus: mounted=$sdMounted total=${sdTotalMB}MB free=${sdFreeMB}MB');
     notifyListeners();
   }
 
@@ -3861,7 +4137,8 @@ class BleProvider extends ChangeNotifier {
     nrfScanning = (state == 2);
     nrfAttacking = (state == 3);
     nrfSpectrumRunning = (state == 4);
-    _log('info', 'NrfModuleStatus: present=$nrfPresent init=$nrfInitialized state=$state');
+    _log('info',
+        'NrfModuleStatus: present=$nrfPresent init=$nrfInitialized state=$state');
     notifyListeners();
   }
 
@@ -3901,19 +4178,23 @@ class BleProvider extends ChangeNotifier {
 
     // Build binary command: 9-byte payload
     final payload = Uint8List(9);
-    payload[0] = _scannerRssi < 0 ? (_scannerRssi + 256) & 0xFF : _scannerRssi; // int8_t
+    payload[0] =
+        _scannerRssi < 0 ? (_scannerRssi + 256) & 0xFF : _scannerRssi; // int8_t
     payload[1] = _bruterPower;
     payload[2] = _bruterDelayMs & 0xFF;
     payload[3] = (_bruterDelayMs >> 8) & 0xFF;
     payload[4] = _bruterRepeats;
-    payload[5] = _radioPowerMod1 < 0 ? (_radioPowerMod1 + 256) & 0xFF : _radioPowerMod1;
-    payload[6] = _radioPowerMod2 < 0 ? (_radioPowerMod2 + 256) & 0xFF : _radioPowerMod2;
+    payload[5] =
+        _radioPowerMod1 < 0 ? (_radioPowerMod1 + 256) & 0xFF : _radioPowerMod1;
+    payload[6] =
+        _radioPowerMod2 < 0 ? (_radioPowerMod2 + 256) & 0xFF : _radioPowerMod2;
     payload[7] = _cpuTempOffsetDeciC & 0xFF;
     payload[8] = (_cpuTempOffsetDeciC >> 8) & 0xFF;
 
     final command = FirmwareBinaryProtocol.createSettingsUpdateCommand(payload);
     await sendBinaryCommand(command);
-    _log('command', 'Settings sent to device: rssi=$_scannerRssi power=$_bruterPower delay=$_bruterDelayMs reps=$_bruterRepeats mod1=$_radioPowerMod1 mod2=$_radioPowerMod2 tempOff=$_cpuTempOffsetDeciC');
+    _log('command',
+        'Settings sent to device: rssi=$_scannerRssi power=$_bruterPower delay=$_bruterDelayMs reps=$_bruterRepeats mod1=$_radioPowerMod1 mod2=$_radioPowerMod2 tempOff=$_cpuTempOffsetDeciC');
     notifyListeners();
   }
 
@@ -3922,7 +4203,7 @@ class BleProvider extends ChangeNotifier {
   int get lastBruterCompletionStatus => _lastBruterCompletionStatus;
   int _lastBruterCompletionMenuId = 0;
   int get lastBruterCompletionMenuId => _lastBruterCompletionMenuId;
-  
+
   /// Clear completion notification (called by UI after displaying)
   void clearBruterCompletion() {
     _lastBruterCompletionStatus = -1;
@@ -3934,8 +4215,6 @@ class BleProvider extends ChangeNotifier {
     await sendBinaryCommand(command);
   }
 
-
-
   /// Handle module mode switch
   /// Handle binary message (0x80-0xFF)
   void _handleBinaryMessage(Uint8List data) {
@@ -3945,18 +4224,20 @@ class BleProvider extends ChangeNotifier {
     if (_chunkData.isNotEmpty) {
       // Don't return - allow processing since buffers should be cleaned up before this call
     }
-    
+
     try {
       // Parse binary message and convert to JSON-compatible format
       final jsonData = BinaryMessageParser.parseBinaryMessage(data);
-      
+
       if (jsonData != null) {
-        _log('debug', 'Binary message received', details: '${jsonData['type']}: ${data.length} bytes');
-        
+        _log('debug', 'Binary message received',
+            details: '${jsonData['type']}: ${data.length} bytes');
+
         // Handle as if it was JSON (maintains compatibility with existing code)
         _handleCompleteResponse(jsonData);
       } else {
-        _log('warning', 'Unknown binary message type', details: '0x${data[0].toRadixString(16)}');
+        _log('warning', 'Unknown binary message type',
+            details: '0x${data[0].toRadixString(16)}');
       }
     } catch (e, stackTrace) {
       _log('error', 'Binary message parse error', details: '$e\n$stackTrace');
@@ -3968,10 +4249,11 @@ class BleProvider extends ChangeNotifier {
     int module = int.tryParse(modeData['module']?.toString() ?? '0') ?? 0;
     String mode = modeData['mode'] ?? 'Unknown';
     String previousMode = modeData['previousMode'] ?? 'Unknown';
-    
+
     print('Mode switch: module=$module, mode=$mode, previous=$previousMode');
-    print('Current cc1101Modules state before update: ${cc1101Modules?.map((m) => 'Module ${m['id']}: ${m['mode']}').join(', ')}');
-    
+    print(
+        'Current cc1101Modules state before update: ${cc1101Modules?.map((m) => 'Module ${m['id']}: ${m['mode']}').join(', ')}');
+
     // Update recording state
     if (mode == 'RecordSignal') {
       isRecording[module] = true;
@@ -3980,7 +4262,7 @@ class BleProvider extends ChangeNotifier {
       isRecording[module] = false;
       print('Module $module stopped recording');
     }
-    
+
     // Update jamming state
     if (mode == 'Jamming') {
       isJamming[module] = true;
@@ -3991,19 +4273,21 @@ class BleProvider extends ChangeNotifier {
         print('Module $module stopped jamming');
       }
     }
-    
+
     // Update frequency search state
     if (mode == 'DetectSignal') {
       // Always set frequency search flag on transition to DetectSignal
       isFrequencySearching[module] = true;
-      print('Module $module frequency search started (ModeSwitch to DetectSignal)');
+      print(
+          'Module $module frequency search started (ModeSwitch to DetectSignal)');
       _log('info', 'Frequency search started', details: 'Module: $module');
     } else if (mode == 'Idle' && previousMode == 'DetectSignal') {
       // Simplified logic: on transition from DetectSignal to Idle, reset flag immediately
       // Controller automatically transitions to Idle after signal detection
       if (isFrequencySearching[module] == true) {
         isFrequencySearching[module] = false;
-        print('Module $module frequency search stopped (ModeSwitch from DetectSignal to Idle)');
+        print(
+            'Module $module frequency search stopped (ModeSwitch from DetectSignal to Idle)');
         _log('info', 'Frequency search stopped', details: 'Module: $module');
       }
     } else if (mode == 'Idle') {
@@ -4013,7 +4297,7 @@ class BleProvider extends ChangeNotifier {
         print('Module $module frequency search stopped (ModeSwitch to Idle)');
       }
     }
-    
+
     // Update module state in cc1101Modules for UI display
     if (cc1101Modules != null && module < cc1101Modules!.length) {
       cc1101Modules![module]['mode'] = mode;
@@ -4032,7 +4316,7 @@ class BleProvider extends ChangeNotifier {
       cc1101Modules![module]['id'] = module;
       print('Created/updated module $module in cc1101Modules with mode: $mode');
     }
-    
+
     // Notify UI of changes
     notifyListeners();
   }
@@ -4041,10 +4325,11 @@ class BleProvider extends ChangeNotifier {
   void _handleStateResponse(Map<String, dynamic> stateData) {
     // Check if data is nested under 'data' key
     Map<String, dynamic> actualData = stateData;
-    if (stateData.containsKey('data') && stateData['data'] is Map<String, dynamic>) {
+    if (stateData.containsKey('data') &&
+        stateData['data'] is Map<String, dynamic>) {
       actualData = Map<String, dynamic>.from(stateData['data']);
     }
-    
+
     // Update device state
     if (actualData['device'] != null) {
       deviceStatus = actualData['device'];
@@ -4056,17 +4341,17 @@ class BleProvider extends ChangeNotifier {
       core0Mhz = c0 is num ? c0.toInt() : null;
       core1Mhz = c1 is num ? c1.toInt() : null;
     }
-    
+
     if (actualData['cc1101'] != null) {
       cc1101Modules = List<Map<String, dynamic>>.from(actualData['cc1101']);
-      
+
       // Update recording state based on current module modes
       for (var module in cc1101Modules!) {
         int moduleId = module['id'] ?? 0;
         String mode = module['mode'] ?? 'Unknown';
-        
+
         print('Module $moduleId: mode=$mode');
-        
+
         // Update recording state
         if (mode == 'RecordSignal') {
           isRecording[moduleId] = true;
@@ -4075,7 +4360,7 @@ class BleProvider extends ChangeNotifier {
           isRecording[moduleId] = false;
           print('Module $moduleId is not recording');
         }
-        
+
         // Update jamming state
         if (mode == 'Jamming') {
           isJamming[moduleId] = true;
@@ -4085,10 +4370,10 @@ class BleProvider extends ChangeNotifier {
           print('Module $moduleId is not jamming');
         }
       }
-      
+
       print('Final recording state: $isRecording');
     }
-    
+
     print('Calling notifyListeners()');
     notifyListeners();
   }
@@ -4109,14 +4394,15 @@ class BleProvider extends ChangeNotifier {
   }
 
   /// Rename file
-  Future<bool> renameFile(String oldPath, String newName, {int? pathType}) async {
+  Future<bool> renameFile(String oldPath, String newName,
+      {int? pathType}) async {
     if (!isConnected || txCharacteristic == null) return false;
-    
+
     try {
       // Use provided pathType or current
       int effectivePathType = pathType ?? currentPathType;
       String relativePath = oldPath;
-      
+
       // Extract relative path (remove /DATA/xxx prefix if present)
       if (relativePath.startsWith('/DATA/')) {
         // Find the base path and extract the rest
@@ -4128,7 +4414,7 @@ class BleProvider extends ChangeNotifier {
           relativePath = parts.last;
         }
       }
-      
+
       // Build new path by preserving directory structure
       // e.g., "subdir/file.txt" -> "subdir/newname.txt"
       String newPath;
@@ -4141,31 +4427,36 @@ class BleProvider extends ChangeNotifier {
         // File is in root
         newPath = newName;
       }
-      
-      _log('command', 'Renaming file: $relativePath -> $newPath (pathType: $effectivePathType)');
-      
+
+      _log('command',
+          'Renaming file: $relativePath -> $newPath (pathType: $effectivePathType)');
+
       // Use binary command with pathType
-      final command = FirmwareBinaryProtocol.createRenameFileCommand(relativePath, newPath, pathType: effectivePathType);
-      
+      final command = FirmwareBinaryProtocol.createRenameFileCommand(
+          relativePath, newPath,
+          pathType: effectivePathType);
+
       // Create completer to wait for response
       _pendingRenameCompleter?.completeError('New rename operation started');
       _pendingRenameCompleter = Completer<Map<String, dynamic>>();
-      
+
       await sendBinaryCommand(command);
-      
+
       // Set timeout
       Timer timeout = Timer(const Duration(seconds: 10), () {
-        if (_pendingRenameCompleter != null && !_pendingRenameCompleter!.isCompleted) {
-          _pendingRenameCompleter!.completeError('Timeout waiting for rename response');
+        if (_pendingRenameCompleter != null &&
+            !_pendingRenameCompleter!.isCompleted) {
+          _pendingRenameCompleter!
+              .completeError('Timeout waiting for rename response');
           _pendingRenameCompleter = null;
         }
       });
-      
+
       try {
         // Wait for response
         final response = await _pendingRenameCompleter!.future;
         timeout.cancel();
-        
+
         final success = response['success'] ?? false;
         if (success) {
           _log('info', 'File renamed successfully');
@@ -4191,12 +4482,12 @@ class BleProvider extends ChangeNotifier {
   /// Delete file
   Future<bool> deleteFile(String filePath, {int? pathType}) async {
     if (!isConnected || txCharacteristic == null) return false;
-    
+
     try {
       // Use provided pathType or current
       int effectivePathType = pathType ?? currentPathType;
       String fileName = filePath;
-      
+
       // For pathType 0-3 (DATA sub-dirs), strip the "/DATA/<DIR>/" prefix
       // since buildFullPath on firmware will re-add it.
       // For pathType 4/5 (root-based), send the relative path as-is
@@ -4218,30 +4509,34 @@ class BleProvider extends ChangeNotifier {
           fileName = fileName.substring(1);
         }
       }
-      
-      _log('command', 'Deleting file: $fileName (pathType: $effectivePathType)');
-      
+
+      _log(
+          'command', 'Deleting file: $fileName (pathType: $effectivePathType)');
+
       // Use FirmwareBinaryProtocol to create properly formatted command
-      final command = FirmwareBinaryProtocol.createRemoveFileCommand(fileName, pathType: effectivePathType);
-      
+      final command = FirmwareBinaryProtocol.createRemoveFileCommand(fileName,
+          pathType: effectivePathType);
+
       // Create completer to wait for firmware response
       _pendingDeleteCompleter?.completeError('New delete operation started');
       _pendingDeleteCompleter = Completer<Map<String, dynamic>>();
-      
+
       await sendBinaryCommand(command);
-      
+
       // Set timeout
       Timer timeout = Timer(const Duration(seconds: 10), () {
-        if (_pendingDeleteCompleter != null && !_pendingDeleteCompleter!.isCompleted) {
-          _pendingDeleteCompleter!.completeError('Timeout waiting for delete response');
+        if (_pendingDeleteCompleter != null &&
+            !_pendingDeleteCompleter!.isCompleted) {
+          _pendingDeleteCompleter!
+              .completeError('Timeout waiting for delete response');
           _pendingDeleteCompleter = null;
         }
       });
-      
+
       try {
         final response = await _pendingDeleteCompleter!.future;
         timeout.cancel();
-        
+
         final success = response['success'] ?? false;
         if (success) {
           _log('info', 'File deleted successfully');
@@ -4265,22 +4560,24 @@ class BleProvider extends ChangeNotifier {
   }
 
   /// Move file
-  Future<bool> moveFile(String sourcePath, String destinationPath, {int? sourcePathType, int? destPathType}) async {
+  Future<bool> moveFile(String sourcePath, String destinationPath,
+      {int? sourcePathType, int? destPathType}) async {
     if (!isConnected || txCharacteristic == null) {
       throw Exception('Device not connected');
     }
-    
+
     try {
       // Use provided pathTypes or current (for backward compatibility)
       int effectiveSourcePathType = sourcePathType ?? currentPathType;
       int effectiveDestPathType = destPathType ?? currentPathType;
-      
-      _log('command', 'Moving file: $sourcePath -> $destinationPath (sourcePathType: $effectiveSourcePathType, destPathType: $effectiveDestPathType)');
-      
+
+      _log('command',
+          'Moving file: $sourcePath -> $destinationPath (sourcePathType: $effectiveSourcePathType, destPathType: $effectiveDestPathType)');
+
       // Create completer for move response
       _pendingMoveCompleter?.completeError('New move request started');
       _pendingMoveCompleter = Completer<Map<String, dynamic>>();
-      
+
       // Create binary command with separate pathTypes
       final command = FirmwareBinaryProtocol.createMoveFileCommand(
         sourcePath,
@@ -4288,32 +4585,34 @@ class BleProvider extends ChangeNotifier {
         sourcePathType: effectiveSourcePathType,
         destPathType: effectiveDestPathType,
       );
-      
+
       // Send command
       await sendBinaryCommand(command);
-      
+
       // Wait for response with timeout
       final timeout = Timer(const Duration(seconds: 30), () {
-        if (_pendingMoveCompleter != null && !_pendingMoveCompleter!.isCompleted) {
+        if (_pendingMoveCompleter != null &&
+            !_pendingMoveCompleter!.isCompleted) {
           _pendingMoveCompleter!.completeError('Move timeout');
           _pendingMoveCompleter = null;
         }
       });
-      
+
       try {
         final response = await _pendingMoveCompleter!.future;
         timeout.cancel();
-        
+
         if (response['success'] == true) {
           _log('info', 'File moved successfully');
-          
+
           // Extract destination path from response
           String? destPath = response['path'] as String?;
           if (destPath != null) {
             // Extract relative directory path from full path (removes /DATA/RECORDS etc.)
             // Use effectiveDestPathType (destination storage) for path extraction
-            String destDirectory = _extractRelativePath(destPath, effectiveDestPathType);
-            
+            String destDirectory =
+                _extractRelativePath(destPath, effectiveDestPathType);
+
             // Check if we're currently viewing the destination directory
             if (destDirectory == currentPath) {
               // Same directory - refresh the list
@@ -4326,7 +4625,7 @@ class BleProvider extends ChangeNotifier {
             // If dest path not in response, just refresh current directory
             await refreshFileList(forceRefresh: true);
           }
-          
+
           return true;
         } else {
           String error = response['error'] ?? 'Unknown error';
@@ -4348,7 +4647,7 @@ class BleProvider extends ChangeNotifier {
 
   /// Copy file
   Completer<Map<String, dynamic>>? _pendingCopyCompleter;
-  
+
   /// Move file
   Completer<Map<String, dynamic>>? _pendingMoveCompleter;
 
@@ -4356,45 +4655,47 @@ class BleProvider extends ChangeNotifier {
     if (!isConnected || txCharacteristic == null) {
       throw Exception('Device not connected');
     }
-    
+
     try {
       _log('command', 'Copying file: $sourcePath -> $destinationPath');
-      
+
       // Create completer for copy response
       _pendingCopyCompleter?.completeError('New copy request started');
       _pendingCopyCompleter = Completer<Map<String, dynamic>>();
-      
+
       // Create binary command
       final command = FirmwareBinaryProtocol.createCopyFileCommand(
         sourcePath,
         destinationPath,
         pathType: currentPathType,
       );
-      
+
       // Send command
       await sendBinaryCommand(command);
-      
+
       // Wait for response with timeout
       final timeout = Timer(const Duration(seconds: 30), () {
-        if (_pendingCopyCompleter != null && !_pendingCopyCompleter!.isCompleted) {
+        if (_pendingCopyCompleter != null &&
+            !_pendingCopyCompleter!.isCompleted) {
           _pendingCopyCompleter!.completeError('Copy timeout');
           _pendingCopyCompleter = null;
         }
       });
-      
+
       try {
         final response = await _pendingCopyCompleter!.future;
         timeout.cancel();
-        
+
         if (response['success'] == true) {
           _log('info', 'File copied successfully');
-          
+
           // Extract destination path from response
           String? destPath = response['dest'] as String?;
           if (destPath != null) {
             // Extract relative directory path from full path (removes /DATA/RECORDS etc.)
-            String destDirectory = _extractRelativePath(destPath, currentPathType);
-            
+            String destDirectory =
+                _extractRelativePath(destPath, currentPathType);
+
             // Check if we're currently viewing the destination directory
             if (destDirectory == currentPath) {
               // Same directory - refresh the list
@@ -4407,7 +4708,7 @@ class BleProvider extends ChangeNotifier {
             // If dest path not in response, just refresh current directory
             await refreshFileList(forceRefresh: true);
           }
-          
+
           return true;
         } else {
           final error = response['error'] ?? 'Copy failed';
@@ -4430,40 +4731,45 @@ class BleProvider extends ChangeNotifier {
   /// Create directory
   Future<bool> createDirectory(String path, {int? pathType}) async {
     if (!isConnected || txCharacteristic == null) return false;
-    
+
     try {
       // Use provided pathType or current
       int effectivePathType = pathType ?? currentPathType;
       String dirName = path;
-      
+
       // Extract directory name if full path provided
       if (path.startsWith('/DATA/')) {
         dirName = path.split('/').last;
       }
-      
-      _log('command', 'Creating directory: $dirName (pathType: $effectivePathType)');
-      
+
+      _log('command',
+          'Creating directory: $dirName (pathType: $effectivePathType)');
+
       // Use binary command with pathType
-      final command = FirmwareBinaryProtocol.createCreateDirectoryCommand(dirName, pathType: effectivePathType);
-      
+      final command = FirmwareBinaryProtocol.createCreateDirectoryCommand(
+          dirName,
+          pathType: effectivePathType);
+
       // Create completer to wait for firmware response
       _pendingMkdirCompleter?.completeError('New mkdir operation started');
       _pendingMkdirCompleter = Completer<Map<String, dynamic>>();
-      
+
       await sendBinaryCommand(command);
-      
+
       // Set timeout
       Timer timeout = Timer(const Duration(seconds: 10), () {
-        if (_pendingMkdirCompleter != null && !_pendingMkdirCompleter!.isCompleted) {
-          _pendingMkdirCompleter!.completeError('Timeout waiting for mkdir response');
+        if (_pendingMkdirCompleter != null &&
+            !_pendingMkdirCompleter!.isCompleted) {
+          _pendingMkdirCompleter!
+              .completeError('Timeout waiting for mkdir response');
           _pendingMkdirCompleter = null;
         }
       });
-      
+
       try {
         final response = await _pendingMkdirCompleter!.future;
         timeout.cancel();
-        
+
         final success = response['success'] ?? false;
         if (success) {
           _log('info', 'Directory created successfully');
@@ -4491,66 +4797,77 @@ class BleProvider extends ChangeNotifier {
     if (!isConnected || txCharacteristic == null) {
       throw Exception('Device not connected');
     }
-    
+
     _log('info', 'Getting directory tree', details: 'pathType: $pathType');
-    
+
     // Cancel previous request if exists
-    if (_pendingDirectoryTreeCompleter != null && !_pendingDirectoryTreeCompleter!.isCompleted) {
-      _pendingDirectoryTreeCompleter!.completeError('New directory tree request started');
+    if (_pendingDirectoryTreeCompleter != null &&
+        !_pendingDirectoryTreeCompleter!.isCompleted) {
+      _pendingDirectoryTreeCompleter!
+          .completeError('New directory tree request started');
     }
-    
+
     // Reset streaming state
     _isStreamingDirectoryTree = false;
     _streamingDirectoryTreeBuffer.clear();
     _streamingTotalDirs = 0;
-    
+
     _pendingDirectoryTreeCompleter = Completer<Map<String, dynamic>>();
     print('Created directory tree completer for pathType: $pathType');
-    
+
     // Send directory tree request command
-    final command = FirmwareBinaryProtocol.createGetDirectoryTreeCommand(pathType: pathType);
-    print('Sending getDirectoryTree command (pathType: $pathType, command length: ${command.length})');
+    final command = FirmwareBinaryProtocol.createGetDirectoryTreeCommand(
+        pathType: pathType);
+    print(
+        'Sending getDirectoryTree command (pathType: $pathType, command length: ${command.length})');
     await sendBinaryCommand(command);
     print('Command sent, waiting for response...');
-    
+
     // Set timeout
     Timer timeout = Timer(const Duration(seconds: 30), () {
-      if (_pendingDirectoryTreeCompleter != null && !_pendingDirectoryTreeCompleter!.isCompleted) {
-        _pendingDirectoryTreeCompleter!.completeError('Timeout waiting for directory tree');
+      if (_pendingDirectoryTreeCompleter != null &&
+          !_pendingDirectoryTreeCompleter!.isCompleted) {
+        _pendingDirectoryTreeCompleter!
+            .completeError('Timeout waiting for directory tree');
         _pendingDirectoryTreeCompleter = null;
       }
     });
-    
+
     try {
       final response = await _pendingDirectoryTreeCompleter!.future;
       timeout.cancel();
-      
+
       print('Received directory tree response: $response');
-      
+
       // Parse response
-      if (response.containsKey('data') && response['data'] is Map<String, dynamic>) {
+      if (response.containsKey('data') &&
+          response['data'] is Map<String, dynamic>) {
         Map<String, dynamic> data = response['data'];
-        
+
         if (data.containsKey('error')) {
           throw Exception('Error getting directory tree: ${data['error']}');
         }
-        
+
         if (data.containsKey('paths') && data['paths'] is List) {
           List<dynamic> paths = data['paths'];
           print('Building tree from ${paths.length} paths');
-          
+
           // Rebuild tree from flat paths
-          List<DirectoryTreeNode> tree = _rebuildDirectoryTree(paths.cast<String>(), pathType);
-          
-          _log('info', 'Directory tree received', details: '${paths.length} directories');
+          List<DirectoryTreeNode> tree =
+              _rebuildDirectoryTree(paths.cast<String>(), pathType);
+
+          _log('info', 'Directory tree received',
+              details: '${paths.length} directories');
           return tree;
         } else {
-          print('Response data missing paths field. Keys: ${data.keys.toList()}');
+          print(
+              'Response data missing paths field. Keys: ${data.keys.toList()}');
         }
       } else {
-        print('Response missing data field or data is not Map. Response keys: ${response.keys.toList()}');
+        print(
+            'Response missing data field or data is not Map. Response keys: ${response.keys.toList()}');
       }
-      
+
       throw Exception('Invalid directory tree response format: $response');
     } catch (e) {
       timeout.cancel();
@@ -4562,35 +4879,36 @@ class BleProvider extends ChangeNotifier {
   }
 
   /// Rebuild directory tree from flat list of absolute paths
-  List<DirectoryTreeNode> _rebuildDirectoryTree(List<String> paths, int pathType) {
+  List<DirectoryTreeNode> _rebuildDirectoryTree(
+      List<String> paths, int pathType) {
     Map<String, DirectoryTreeNode> nodeMap = {};
     List<DirectoryTreeNode> roots = [];
-    
+
     // Sort paths by length to process parents before children
     paths.sort((a, b) => a.length.compareTo(b.length));
-    
+
     for (String fullPath in paths) {
       // Get base path based on pathType
       String basePath = _getBasePathForPathType(pathType) ?? '';
-      
+
       // Extract relative path from absolute path
       String relativePath = fullPath;
       if (fullPath.startsWith(basePath)) {
         relativePath = fullPath.substring(basePath.length);
       }
       if (!relativePath.startsWith('/')) relativePath = '/$relativePath';
-      
+
       String name = relativePath.split('/').last;
       if (name.isEmpty && relativePath == '/') name = '/';
-      
+
       DirectoryTreeNode node = DirectoryTreeNode(
         name: name,
         path: relativePath,
         directories: [],
       );
-      
+
       nodeMap[fullPath] = node;
-      
+
       // Find parent path
       int lastSlash = fullPath.lastIndexOf('/');
       if (lastSlash != -1) {
@@ -4606,7 +4924,7 @@ class BleProvider extends ChangeNotifier {
         roots.add(node);
       }
     }
-    
+
     return roots;
   }
 
@@ -4615,10 +4933,10 @@ class BleProvider extends ChangeNotifier {
     if (cc1101Modules == null || moduleIndex >= cc1101Modules!.length) {
       return false;
     }
-    
+
     final module = cc1101Modules![moduleIndex];
     final mode = module['mode']?.toString().toLowerCase() ?? 'unknown';
-    
+
     // Module is available only if it's in Idle mode
     return mode == 'idle';
   }
@@ -4626,14 +4944,14 @@ class BleProvider extends ChangeNotifier {
   /// Get list of available modules
   List<int> getAvailableModules() {
     if (cc1101Modules == null) return [];
-    
+
     final availableModules = <int>[];
     for (int i = 0; i < cc1101Modules!.length; i++) {
       if (isModuleAvailable(i)) {
         availableModules.add(i);
       }
     }
-    
+
     return availableModules;
   }
 
@@ -4642,21 +4960,21 @@ class BleProvider extends ChangeNotifier {
     if (cc1101Modules == null || moduleIndex >= cc1101Modules!.length) {
       return 'Unknown';
     }
-    
+
     return cc1101Modules![moduleIndex]['mode']?.toString() ?? 'Unknown';
   }
 
   /// Wait for device response — DEPRECATED, use Completer pattern instead\n  /// Kept only for backward compatibility; should not be used.\n  @Deprecated('Use Completer pattern like _pendingRenameCompleter instead')
   Future<Map<String, dynamic>?> _waitForResponse() async {
     final completer = Completer<Map<String, dynamic>?>();
-    
+
     // Set timeout
     Timer timeout = Timer(const Duration(seconds: 10), () {
       if (!completer.isCompleted) {
         completer.complete(null);
       }
     });
-    
+
     try {
       // In a real implementation, there should be a response waiting mechanism here
       // For now, return a stub
@@ -4668,7 +4986,8 @@ class BleProvider extends ChangeNotifier {
   }
 
   /// Save file to signals directory with chosen name
-  Future<void> saveFileToSignalsWithName(String sourcePath, String targetName, {int pathType = 1, DateTime? preserveDate}) async {
+  Future<void> saveFileToSignalsWithName(String sourcePath, String targetName,
+      {int pathType = 1, DateTime? preserveDate}) async {
     if (!isConnected) {
       throw Exception('Device not connected');
     }
@@ -4676,16 +4995,19 @@ class BleProvider extends ChangeNotifier {
     try {
       // Use FirmwareBinaryProtocol to create properly formatted command
       final command = FirmwareBinaryProtocol.createSaveToSignalsWithNameCommand(
-        sourcePath, 
-        targetName, 
+        sourcePath,
+        targetName,
         pathType: pathType,
         preserveDate: preserveDate,
       );
-      
+
       await sendBinaryCommand(command);
-      _log('info', 'File save with name command sent', details: 'Source: $sourcePath, Target: $targetName, PathType: $pathType${preserveDate != null ? ", Date: $preserveDate" : ""}');
+      _log('info', 'File save with name command sent',
+          details:
+              'Source: $sourcePath, Target: $targetName, PathType: $pathType${preserveDate != null ? ", Date: $preserveDate" : ""}');
     } catch (e) {
-      _log('error', 'Failed to send save with name command', details: e.toString());
+      _log('error', 'Failed to send save with name command',
+          details: e.toString());
       rethrow;
     }
   }
@@ -4700,10 +5022,12 @@ class BleProvider extends ChangeNotifier {
       // Set pending frequency searching flag (will be confirmed by ModeSwitch)
       isFrequencySearching[module] = true;
       notifyListeners();
-      
-      final command = FirmwareBinaryProtocol.createFrequencySearchCommand(module, minRssi);
+
+      final command =
+          FirmwareBinaryProtocol.createFrequencySearchCommand(module, minRssi);
       await sendBinaryCommand(command);
-      _log('info', 'Frequency search command sent', details: 'Module: $module, MinRSSI: $minRssi');
+      _log('info', 'Frequency search command sent',
+          details: 'Module: $module, MinRSSI: $minRssi');
     } catch (e) {
       // Reset flag on error
       isFrequencySearching[module] = false;
@@ -4721,8 +5045,8 @@ class BleProvider extends ChangeNotifier {
     _connectionStateSubscription?.cancel();
     _rxValueSubscription?.cancel();
     _otaReconnectTimer?.cancel();
+    _reconnectTimer?.cancel();
     disconnect();
     super.dispose();
   }
 }
-

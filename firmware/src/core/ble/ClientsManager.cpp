@@ -45,7 +45,9 @@ void ClientsManager::notifyAll(NotificationType type, const std::string& message
 {
     String typeName = NotificationTypeToString(type);
     for (const auto& pair : adapters) {
-        pair.second->notify(typeName, message);
+        if (pair.second->isConnected()) {
+            pair.second->notify(typeName, message);
+        }
     }
 }
 
@@ -55,7 +57,9 @@ void ClientsManager::notifyAllBinary(NotificationType type, const uint8_t* data,
     std::string message(reinterpret_cast<const char*>(data), length);
     String typeName = NotificationTypeToString(type);
     for (const auto& pair : adapters) {
-        pair.second->notify(typeName, message);
+        if (pair.second->isConnected()) {
+            pair.second->notify(typeName, message);
+        }
     }
 }
 
