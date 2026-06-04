@@ -3,7 +3,6 @@
 
 #include <map>
 #include <string>
-#include <queue>
 
 #include "ControllerAdapter.h"
 
@@ -89,7 +88,7 @@ struct Notification
         textBuffer[0] = '\0';
         memset(binaryData, 0, sizeof(binaryData));
     }
-    
+
     // Get message as std::string (only when needed for backward compatibility)
     std::string getMessage() const {
         if (isBinary) {
