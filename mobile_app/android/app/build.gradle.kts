@@ -5,6 +5,7 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+@Suppress("DEPRECATION_ERROR")
 android {
     namespace = "com.evilcrowrf.controller"
     compileSdk = flutter.compileSdkVersion
