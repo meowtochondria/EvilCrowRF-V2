@@ -113,9 +113,8 @@ void BleAdapter::begin() {
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->addServiceUUID(SERVICE_UUID);
     pAdvertising->enableScanResponse(true);
-    bool advStarted = pAdvertising->start();
-    ESP_LOGI(TAG, "NimBLE advertising start() returned: %s", advStarted ? "SUCCESS" : "FAILED");
-    ESP_LOGI(TAG, "NimBLE advertising active check: %s", ble_gap_adv_active() ? "YES" : "NO");
+
+    pAdvertising->start();
 
     ESP_LOGI(TAG, "NimBLE Server started, waiting for connections...");
     ESP_LOGI(TAG, "Free heap after BLE init: %d bytes", ESP.getFreeHeap());
