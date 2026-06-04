@@ -5,7 +5,6 @@
 #include "config.h"
 #include "ControllerAdapter.h"
 #include <string>
-#include <vector>
 // #include <sstream>  // Removed — unused in BleAdapter
 #include <map>
 #include <stdint.h>
