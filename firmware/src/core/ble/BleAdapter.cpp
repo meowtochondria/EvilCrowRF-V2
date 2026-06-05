@@ -11,16 +11,22 @@ static const char* TAG = "BleAdapter";
 
 void BleAdapter::heartbeatTimerCallback(TimerHandle_t xTimer) {
     BleAdapter* adapter = static_cast<BleAdapter*>(pvTimerGetTimerID(xTimer));
-    if (adapter == nullptr || !adapter->deviceConnected || adapter->pTxCharacteristic == nullptr) {
+    if (adapter == nullptr || !adapter->deviceConnected) {
         return;
     }
-    // Send a lightweight binary heartbeat packet (0x82) to refresh the
-    // BLE supervision timer on both sides. No ACK required; the act of
-    // notifying alone resets the link-layer supervision timer.
-    uint8_t heartbeat[] = { 0x82 };
-    NimBLEAttValue hbVal(heartbeat, 1);
-    adapter->pTxCharacteristic->notify(hbVal);
-    ESP_LOGV(TAG, "Heartbeat sent");
+    // Send heartbeat directly via ClientsManager's queue with 0 timeout.
+    // IMPORTANT: Timer callbacks MUST NOT block (portMAX_DELAY is unsafe here).
+    // If the queue is full, the heartbeat is dropped — next one is 2.5s away.
+    Notification notification;
+    notification.type = NotificationType::Unknown;
+    notification.isBinary = true;
+    notification.messageLength = 1;
+    notification.binaryData[0] = 0x82;
+    QueueHandle_t q = ClientsManager::getInstance().getQueueHandle();
+    if (q != nullptr) {
+        xQueueSend(q, &notification, 0);
+    }
+    ESP_LOGV(TAG, "Heartbeat enqueued");
 }
 
 extern ClientsManager& clients;
@@ -113,8 +119,8 @@ void BleAdapter::begin() {
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->addServiceUUID(SERVICE_UUID);
     pAdvertising->enableScanResponse(true);
-
     pAdvertising->start();
+    ESP_LOGD(TAG, "NimBLE advertising started");
 
     ESP_LOGI(TAG, "NimBLE Server started, waiting for connections...");
     ESP_LOGI(TAG, "Free heap after BLE init: %d bytes", ESP.getFreeHeap());

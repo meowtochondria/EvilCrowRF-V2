@@ -100,7 +100,8 @@ bool ClientsManager::enqueueMessage(NotificationType type, const std::string& me
         notification.textBuffer[notification.messageLength] = '\0';
     }
     
-    if (xQueueSend(clientsNotificationQueue, &notification, portMAX_DELAY) != pdPASS) {
+    if (xQueueSend(clientsNotificationQueue, &notification, pdMS_TO_TICKS(100)) != pdPASS) {
+        ESP_LOGW("ClientsManager", "Notification queue full, dropping message");
         return false;
     }
 

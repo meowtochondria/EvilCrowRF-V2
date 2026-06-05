@@ -114,6 +114,9 @@ class ClientsManager
     bool enqueueMessage(NotificationType, const std::string& message);
     static void processMessageQueue(void *taskParameters);
 
+    // Get queue handle (for non-blocking sends from timer callbacks)
+    QueueHandle_t getQueueHandle() const { return clientsNotificationQueue; }
+
     // Get count of connected clients across all adapters
     size_t getConnectedCount() const;
 

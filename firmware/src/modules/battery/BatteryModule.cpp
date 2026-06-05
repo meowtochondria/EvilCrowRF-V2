@@ -136,16 +136,14 @@ void BatteryModule::sendBatteryStatus() {
 }
 
 void BatteryModule::timerCallback(TimerHandle_t /*xTimer*/) {
-    uint16_t prevVoltage = lastVoltage_;
     lastVoltage_ = readVoltage();
     lastPercent_ = voltageToPercent(lastVoltage_);
     lastCharging_ = isCharging();
 
-    // Only send BLE notification if value changed significantly (±50mV or ±2%)
-    int16_t vDiff = (int16_t)lastVoltage_ - (int16_t)prevVoltage;
-    if (vDiff < -50 || vDiff > 50) {
-        sendBatteryStatus();
-    }
+    // Battery status is sent via GetState responses and CC1101Worker
+    // sendHeartbeat instead of directly from this timer callback.
+    // The Tmr Svc task has only 2KB stack — calling NimBLE notify
+    // from here triggers a stack overflow.
 }
 
 #endif // BATTERY_MODULE_ENABLED

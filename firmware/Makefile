@@ -1,4 +1,4 @@
-.PHONY: help setup setup-esptoolpy build clean flash test
+.PHONY: help setup setup-esptoolpy build clean flash test monitor flash-monitor
 
 PYTHON := python
 ENV_DIR := .venv
@@ -11,7 +11,9 @@ help:
 	@echo "  setup    - Create virtual environment and install dependencies"
 	@echo "  build    - Build ESP32 firmware (production mode)"
 	@echo "  clean    - Clean build artifacts"
-	@echo "  flash    - Flash firmware to ESP32"
+	@echo "  flash         - Flash firmware to ESP32"
+	@echo "  monitor       - Open serial monitor"
+	@echo "  flash-monitor - Flash then open serial monitor"
 	@echo "  test     - Run tests"
 	@echo "  update   - Update PlatformIO and dependencies"
 
@@ -61,6 +63,9 @@ clean:
 flash: build
 	@echo "Flashing firmware to ESP32..."
 	@uv run platformio run --verbose --target upload --environment esp32dev
+
+flash-monitor:
+	@uv run platformio run --target upload --target monitor --environment esp32dev
 
 update:
 	@uv sync

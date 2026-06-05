@@ -647,12 +647,9 @@ class BleProvider extends ChangeNotifier {
             }
           });
 
-          // Send initialization command to get device state
-          await Future.delayed(const Duration(milliseconds: 500));
+          // Send initialization commands immediately — no arbitrary delays.
+          // GetState and SetTime are independent; send them back-to-back.
           await sendGetStateCommand();
-
-          // Send current time to ESP32 for synchronization
-          await Future.delayed(const Duration(milliseconds: 200));
           await sendSetTimeCommand();
         } else {
           statusMessage = 'Required characteristics not found';
@@ -4246,6 +4243,8 @@ class BleProvider extends ChangeNotifier {
 
   void _handleModeSwitch(Map<String, dynamic> modeData) {
     print('_handleModeSwitch called with data: $modeData');
+    final now = DateTime.now();
+    print('MODE_SWITCH ARRIVED at ${now.millisecondsSinceEpoch}');
     int module = int.tryParse(modeData['module']?.toString() ?? '0') ?? 0;
     String mode = modeData['mode'] ?? 'Unknown';
     String previousMode = modeData['previousMode'] ?? 'Unknown';

@@ -323,23 +323,21 @@ void taskProcessor(void* pvParameters)
                     Device::TaskGetState& task = item->getStateTask;
                     ESP_LOGI(TAG, "Processing get state task");
                     
-                    const byte numRegs = 0x2E;
-
                     // Create BinaryStatus structure with CC1101 registers
                     BinaryStatus status;
                     status.messageType = MSG_STATUS;
                     status.module0Mode = static_cast<uint8_t>(CC1101Worker::getState(0));
                     status.module1Mode = static_cast<uint8_t>(CC1101Worker::getState(1));
-                    status.numRegisters = numRegs; // 0x00 to 0x2E (46 registers)
+                    status.numRegisters = 0; // 0 = register data not included (saves ~92ms of SPI reads)
                     status.freeHeap = ESP.getFreeHeap();
                     status.cpuTempDeciC = static_cast<int16_t>(temperatureRead() * 10.0f)
                         + ConfigManager::settings.cpuTempOffsetDeciC;
                     status.core0Mhz = static_cast<uint16_t>(ESP.getCpuFreqMHz());
                     status.core1Mhz = static_cast<uint16_t>(ESP.getCpuFreqMHz());
                     
-                    // Read all CC1101 registers for both modules
-                    moduleCC1101State[0].readAllConfigRegisters(status.module0Registers, numRegs);
-                    moduleCC1101State[1].readAllConfigRegisters(status.module1Registers, numRegs);
+                    // Clear registers (skip SPI reads for initial state)
+                    memset(status.module0Registers, 0, sizeof(status.module0Registers));
+                    memset(status.module1Registers, 0, sizeof(status.module1Registers));
                     
                     // Send binary status
                     clients.notifyAllBinary(NotificationType::State, reinterpret_cast<const uint8_t*>(&status), sizeof(BinaryStatus));
@@ -752,7 +750,7 @@ void setup()
 #endif
 
     // Notification sender on Core 0 (near BLE stack for lower latency)
-    xTaskCreatePinnedToCore(ClientsManager::processMessageQueue, "SendNotifications", 4096, NULL, 1, NULL, 0); // 4KB on Core 0
+    xTaskCreatePinnedToCore(ClientsManager::processMessageQueue, "SendNotifications", 6144, NULL, 1, NULL, 0); // 6KB on Core 0
     ESP_LOGD(TAG, "SendNotifications task created.");
     
     // Create time synchronization task (updates deviceTime every second)
