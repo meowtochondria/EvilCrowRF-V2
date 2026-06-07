@@ -1,4 +1,4 @@
-.PHONY: help setup setup-esptoolpy build clean flash test monitor flash-monitor
+.PHONY: help setup setup-esptoolpy build clean flash test monitor flash-monitor show-device-mac
 
 PYTHON := python
 ENV_DIR := .venv
@@ -14,6 +14,7 @@ help:
 	@echo "  flash         - Flash firmware to ESP32"
 	@echo "  monitor       - Open serial monitor"
 	@echo "  flash-monitor - Flash then open serial monitor"
+	@echo "  show-device-mac - Read ESP32 MAC address via esptool"
 	@echo "  test     - Run tests"
 	@echo "  update   - Update PlatformIO and dependencies"
 
@@ -73,3 +74,6 @@ update:
 
 test:
 	@uv run platformio test
+
+show-device-wifi-mac:
+	@uv run esptool --chip esp32 read_mac
