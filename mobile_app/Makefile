@@ -37,14 +37,21 @@ define banner
 	@printf "\n$(BLUE)== $1 ==$(RESET)\n\n"
 endef
 
+# ── WiFi deployment config ─────────────────────────────────────────────
+# Set this to your phone's IP for WiFi ADB deployment:
+#   make deploy-wifi DEVICE_IP=192.168.1.100
+DEVICE_IP ?=
+ADB_WIFI_PORT ?= 5555
+
 # ── Phony targets ──────────────────────────────────────────────────────
 .PHONY: all setup check-java check-flutter check-sdk install-sdk install-deps \
-        accept-licenses write-local-properties apk clean help
+        accept-licenses write-local-properties apk clean help install deploy-wifi
 
 # ── Default ────────────────────────────────────────────────────────────
 help: ## Show this help
 	@printf "Usage: make [target]\n\n"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
+		sort | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-24s$(RESET) %s\n", $$1, $$2}'
 
 # ── All-in-one ─────────────────────────────────────────────────────────
@@ -137,3 +144,30 @@ apk: accept-licenses write-local-properties install-deps ## Build release APK (f
 clean: ## Remove Flutter build artifacts
 	@flutter clean
 	@echo "$(GREEN)Cleaned.$(RESET)"
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Deploy targets
+# ═══════════════════════════════════════════════════════════════════════
+install: apk ## Build + install over USB
+	$(call banner,Install via USB)
+	@$(ADB) install -r "$(APK_OUTPUT)" || (echo "$(RED)Install failed. Is the device connected via USB with USB debugging enabled?$(RESET)"; exit 1)
+	@echo "$(GREEN)Installed successfully!$(RESET)"
+
+deploy-wifi: apk ## Build + install over WiFi (usage: make deploy-wifi DEVICE_IP=192.168.1.100)
+	$(call banner,Deploy over WiFi)
+	@if [ -z "$(DEVICE_IP)" ]; then \
+		echo "$(RED)Usage: make deploy-wifi DEVICE_IP=192.168.1.100$(RESET)"; \
+		echo "$(RED)Your phone and dev machine must be on the same WiFi network.$(RESET)"; \
+		exit 1; \
+	fi
+	@echo "Connecting to $(DEVICE_IP):$(ADB_WIFI_PORT)..."
+	@$(ADB) connect "$(DEVICE_IP):$(ADB_WIFI_PORT)"
+	@echo "Installing APK..."
+	@$(ADB) -s "$(DEVICE_IP):$(ADB_WIFI_PORT)" install -r "$(APK_OUTPUT)" || { \
+		echo "$(RED)Install failed. Disconnect and reconnect:$(RESET)"; \
+		echo "  adb disconnect $(DEVICE_IP):$(ADB_WIFI_PORT)"; \
+		echo "  adb connect $(DEVICE_IP):$(ADB_WIFI_PORT)"; \
+		exit 1; \
+	}
+	@$(ADB) disconnect "$(DEVICE_IP):$(ADB_WIFI_PORT)"
+	@echo "$(GREEN)Deployed successfully!$(RESET)"
