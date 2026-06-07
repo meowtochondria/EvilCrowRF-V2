@@ -13,6 +13,7 @@ import '../providers/firmware_protocol.dart';
 import '../widgets/transmit_file_dialog.dart';
 import '../services/update_service.dart';
 import '../services/flipper_subdb_service.dart';
+import '../services/logger_service.dart';
 import '../theme/app_colors.dart';
 import 'debug_screen.dart';
 import 'files_screen.dart';
@@ -123,8 +124,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             content: Row(
               children: [
                 const SizedBox(
-                  width: 16, height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white),
                 ),
                 const SizedBox(width: 12),
                 Text(AppLocalizations.of(context)!.checkingForAppUpdates),
@@ -143,7 +146,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (update == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(AppLocalizations.of(context)!.appUpToDate(currentVersion)),
+            content:
+                Text(AppLocalizations.of(context)!.appUpToDate(currentVersion)),
             backgroundColor: AppColors.success,
           ),
         );
@@ -156,28 +160,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
         builder: (ctx) => AlertDialog(
           title: Row(
             children: [
-              const Icon(Icons.system_update_alt, color: AppColors.primaryAccent),
+              const Icon(Icons.system_update_alt,
+                  color: AppColors.primaryAccent),
               const SizedBox(width: 8),
               Text(AppLocalizations.of(context)!.appUpdateAvailable,
-                  style: const TextStyle(color: AppColors.primaryText, fontSize: 16)),
+                  style: const TextStyle(
+                      color: AppColors.primaryText, fontSize: 16)),
             ],
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(AppLocalizations.of(context)!.currentVersionLabel(currentVersion),
-                  style: const TextStyle(color: AppColors.secondaryText, fontSize: 13)),
-              Text(AppLocalizations.of(context)!.latestVersionLabel(update.version),
-                  style: const TextStyle(color: AppColors.success, fontSize: 16, fontWeight: FontWeight.bold)),
+              Text(
+                  AppLocalizations.of(context)!
+                      .currentVersionLabel(currentVersion),
+                  style: const TextStyle(
+                      color: AppColors.secondaryText, fontSize: 13)),
+              Text(
+                  AppLocalizations.of(context)!
+                      .latestVersionLabel(update.version),
+                  style: const TextStyle(
+                      color: AppColors.success,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold)),
               const SizedBox(height: 12),
-              Text(AppLocalizations.of(context)!.changelogLabel, style: const TextStyle(color: AppColors.primaryText, fontWeight: FontWeight.w600, fontSize: 13)),
+              Text(AppLocalizations.of(context)!.changelogLabel,
+                  style: const TextStyle(
+                      color: AppColors.primaryText,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13)),
               const SizedBox(height: 4),
               Container(
                 constraints: const BoxConstraints(maxHeight: 150),
                 child: SingleChildScrollView(
                   child: Text(update.changelog,
-                      style: const TextStyle(color: AppColors.secondaryText, fontSize: 12)),
+                      style: const TextStyle(
+                          color: AppColors.secondaryText, fontSize: 12)),
                 ),
               ),
             ],
@@ -207,7 +226,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppLocalizations.of(context)!.updateCheckFailed(e.message ?? '')),
+          SnackBar(
+              content: Text(
+                  AppLocalizations.of(context)!.updateCheckFailed(e.message)),
               backgroundColor: AppColors.error),
         );
       }
@@ -215,29 +236,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+          SnackBar(
+              content: Text('Error: $e'), backgroundColor: AppColors.error),
         );
       }
     }
   }
 
   /// Download APK and trigger install
-  Future<void> _downloadAndInstallApk(BuildContext context, AppUpdate update) async {
+  Future<void> _downloadAndInstallApk(
+      BuildContext context, AppUpdate update) async {
     if (update.apkUrl == null) return;
     try {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Downloading APK...'), duration: Duration(seconds: 30)),
+        const SnackBar(
+            content: Text('Downloading APK...'),
+            duration: Duration(seconds: 30)),
       );
       final apkPath = await UpdateService.downloadApk(update.apkUrl!);
       if (context.mounted) {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         // Open the APK for install
-        final result = await Process.run('am', ['start', '-a', 'android.intent.action.VIEW',
-            '-d', 'file://$apkPath', '-t', 'application/vnd.android.package-archive']);
+        final result = await Process.run('am', [
+          'start',
+          '-a',
+          'android.intent.action.VIEW',
+          '-d',
+          'file://$apkPath',
+          '-t',
+          'application/vnd.android.package-archive'
+        ]);
         if (result.exitCode != 0) {
           // Fallback: try using content URI
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(AppLocalizations.of(context)!.apkSavedPleaseInstall(apkPath)),
+            SnackBar(
+                content: Text(AppLocalizations.of(context)!
+                    .apkSavedPleaseInstall(apkPath)),
                 duration: const Duration(seconds: 5)),
           );
         }
@@ -246,7 +280,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Download failed: $e'), backgroundColor: AppColors.error),
+          SnackBar(
+              content: Text('Download failed: $e'),
+              backgroundColor: AppColors.error),
         );
       }
     }
@@ -261,8 +297,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Container(
             height: 48,
             color: AppColors.secondaryBackground,
-            padding:
-                const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
             child: Row(
               children: [
                 const Icon(Icons.settings, size: 20),
@@ -386,7 +421,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         AppLocalizations.of(context)!.sdrMode,
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: isActive ? AppColors.warning : AppColors.primaryText,
+                          color: isActive
+                              ? AppColors.warning
+                              : AppColors.primaryText,
                           fontSize: 18,
                           letterSpacing: 1.2,
                         ),
@@ -394,10 +431,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       const SizedBox(height: 2),
                       Text(
                         isActive
-                            ? AppLocalizations.of(context)!.sdrModeActiveSubtitle
-                            : AppLocalizations.of(context)!.sdrModeInactiveSubtitle,
+                            ? AppLocalizations.of(context)!
+                                .sdrModeActiveSubtitle
+                            : AppLocalizations.of(context)!
+                                .sdrModeInactiveSubtitle,
                         style: TextStyle(
-                          color: isActive ? AppColors.warning : AppColors.secondaryText,
+                          color: isActive
+                              ? AppColors.warning
+                              : AppColors.secondaryText,
                           fontSize: 12,
                         ),
                       ),
@@ -410,7 +451,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ? (value) async {
                           final cmd = value
                               ? FirmwareBinaryProtocol.createSdrEnableCommand()
-                              : FirmwareBinaryProtocol.createSdrDisableCommand();
+                              : FirmwareBinaryProtocol
+                                  .createSdrDisableCommand();
                           await bleProvider.sendBinaryCommand(cmd);
                           // Status update will arrive via MSG_SDR_STATUS (0xC4)
                         }
@@ -427,11 +469,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 decoration: BoxDecoration(
                   color: AppColors.warning.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+                  border: Border.all(
+                      color: AppColors.warning.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.info_outline, color: AppColors.warning, size: 16),
+                    Icon(Icons.info_outline,
+                        color: AppColors.warning, size: 16),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -458,22 +502,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// Map CC1101 modulation ID to display label.
   String _modLabel(int mod) {
     switch (mod) {
-      case 0: return '2-FSK';
-      case 1: return 'GFSK';
-      case 2: return 'ASK/OOK';
-      case 3: return '4-FSK';
-      case 4: return 'MSK';
-      default: return 'Unknown';
+      case 0:
+        return '2-FSK';
+      case 1:
+        return 'GFSK';
+      case 2:
+        return 'ASK/OOK';
+      case 3:
+        return '4-FSK';
+      case 4:
+        return 'MSK';
+      default:
+        return 'Unknown';
     }
   }
 
   /// Build App Settings expandable section (language, cache, permissions, debug).
-  Widget _buildAppSettingsSection(BuildContext context, BleProvider bleProvider) {
+  Widget _buildAppSettingsSection(
+      BuildContext context, BleProvider bleProvider) {
     return Card(
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          leading: const Icon(Icons.phone_android, color: AppColors.primaryAccent),
+          leading:
+              const Icon(Icons.phone_android, color: AppColors.primaryAccent),
           title: Text(
             AppLocalizations.of(context)!.appSettings,
             style: const TextStyle(
@@ -484,7 +536,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           subtitle: Text(
             AppLocalizations.of(context)!.appSettingsSubtitle,
-            style: const TextStyle(color: AppColors.secondaryText, fontSize: 12),
+            style:
+                const TextStyle(color: AppColors.secondaryText, fontSize: 12),
           ),
           initiallyExpanded: false,
           children: [
@@ -505,10 +558,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         child: ListTile(
                           leading: const Icon(Icons.language),
                           title: Text(l10n.language),
-                          subtitle: Text(
-                              _getLanguageDisplayName(
-                                  localeProvider.locale.languageCode,
-                                  l10n)),
+                          subtitle: Text(_getLanguageDisplayName(
+                              localeProvider.locale.languageCode, l10n)),
                           trailing: const Icon(Icons.chevron_right),
                           onTap: () => _showLanguageDialog(
                               context, localeProvider, l10n),
@@ -525,7 +576,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ElevatedButton.icon(
                         onPressed: () => bleProvider.clearFileCache(),
                         icon: const Icon(Icons.folder_delete),
-                        label: Text(AppLocalizations.of(context)!.clearFileCache),
+                        label:
+                            Text(AppLocalizations.of(context)!.clearFileCache),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.recording,
                           foregroundColor: AppColors.primaryBackground,
@@ -535,7 +587,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         onPressed: () =>
                             _showClearDeviceCacheDialog(context, bleProvider),
                         icon: const Icon(Icons.bluetooth_disabled),
-                        label: Text(AppLocalizations.of(context)!.clearDeviceCache),
+                        label: Text(
+                            AppLocalizations.of(context)!.clearDeviceCache),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.info,
                           foregroundColor: AppColors.primaryBackground,
@@ -563,14 +616,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             runSpacing: 8,
                             children: [
                               ElevatedButton.icon(
-                                onPressed: () => bleProvider.requestPermissions(),
+                                onPressed: () =>
+                                    bleProvider.requestPermissions(),
                                 icon: const Icon(Icons.security),
-                                label: Text(AppLocalizations.of(context)!.requestPermissions),
+                                label: Text(AppLocalizations.of(context)!
+                                    .requestPermissions),
                               ),
                               ElevatedButton.icon(
-                                onPressed: () => _resetTransmitConfirmation(context),
+                                onPressed: () =>
+                                    _resetTransmitConfirmation(context),
                                 icon: const Icon(Icons.refresh),
-                                label: Text(AppLocalizations.of(context)!.resetTransmitConfirmation),
+                                label: Text(AppLocalizations.of(context)!
+                                    .resetTransmitConfirmation),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppColors.info,
                                   foregroundColor: AppColors.primaryBackground,
@@ -579,7 +636,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               ElevatedButton.icon(
                                 onPressed: () => _onDebugTap(context),
                                 icon: const Icon(Icons.bug_report),
-                                label: Text(AppLocalizations.of(context)!.debug),
+                                label:
+                                    Text(AppLocalizations.of(context)!.debug),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppColors.warning,
                                   foregroundColor: AppColors.primaryBackground,
@@ -588,7 +646,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               ElevatedButton.icon(
                                 onPressed: () => _onDisableDebug(context),
                                 icon: const Icon(Icons.bug_report_outlined),
-                                label: Text(AppLocalizations.of(context)!.disableDbg),
+                                label: Text(
+                                    AppLocalizations.of(context)!.disableDbg),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppColors.error,
                                   foregroundColor: AppColors.primaryBackground,
@@ -610,7 +669,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   /// Build the RF Settings expandable section with Bruteforce + Radio sub-sections.
-  Widget _buildRFSettingsSection(BuildContext context, BleProvider bleProvider) {
+  Widget _buildRFSettingsSection(
+      BuildContext context, BleProvider bleProvider) {
     return Card(
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -637,25 +697,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             // --- Bruteforce Settings ---
             _buildSubSectionHeader(
-                Icons.flash_on, AppLocalizations.of(context)!.bruteforceSettings, AppColors.warning),
+                Icons.flash_on,
+                AppLocalizations.of(context)!.bruteforceSettings,
+                AppColors.warning),
             _buildBruteforceSettings(context, bleProvider),
 
             const SizedBox(height: 8),
-            const Divider(
-                color: AppColors.divider, indent: 16, endIndent: 16),
+            const Divider(color: AppColors.divider, indent: 16, endIndent: 16),
 
             // --- Radio Settings ---
             _buildSubSectionHeader(
-                Icons.cell_tower, AppLocalizations.of(context)!.radioSettings, AppColors.primaryAccent),
+                Icons.cell_tower,
+                AppLocalizations.of(context)!.radioSettings,
+                AppColors.primaryAccent),
             _buildRadioSettings(context, bleProvider),
 
             const SizedBox(height: 8),
-            const Divider(
-                color: AppColors.divider, indent: 16, endIndent: 16),
+            const Divider(color: AppColors.divider, indent: 16, endIndent: 16),
 
             // --- Scanner Settings ---
             _buildSubSectionHeader(
-                Icons.search, AppLocalizations.of(context)!.scannerSettings, AppColors.searching),
+                Icons.search,
+                AppLocalizations.of(context)!.scannerSettings,
+                AppColors.searching),
             _buildScannerSettings(context, bleProvider),
 
             const SizedBox(height: 16),
@@ -705,7 +769,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          AppLocalizations.of(context)!.interFrameDelay(settingsProvider.bruterDelayMs),
+                          AppLocalizations.of(context)!
+                              .interFrameDelay(settingsProvider.bruterDelayMs),
                           style: const TextStyle(
                             color: AppColors.primaryText,
                             fontSize: 13,
@@ -713,7 +778,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                         ),
                         Text(
-                          AppLocalizations.of(context)!.delayBetweenTransmissions,
+                          AppLocalizations.of(context)!
+                              .delayBetweenTransmissions,
                           style: const TextStyle(
                               color: AppColors.secondaryText, fontSize: 11),
                         ),
@@ -745,8 +811,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       settingsProvider.setBruterDelayMs(ms);
                       bleProvider.setBruterDelay(ms);
                     },
-                    selectedColor:
-                        AppColors.warning.withValues(alpha: 0.2),
+                    selectedColor: AppColors.warning.withValues(alpha: 0.2),
                     labelStyle: TextStyle(
                       color: isSelected
                           ? AppColors.warning
@@ -770,7 +835,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          AppLocalizations.of(context)!.repeatsCount(bleProvider.bruterRepeats),
+                          AppLocalizations.of(context)!
+                              .repeatsCount(bleProvider.bruterRepeats),
                           style: const TextStyle(
                             color: AppColors.primaryText,
                             fontSize: 13,
@@ -813,7 +879,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          AppLocalizations.of(context)!.txPowerLevel(bleProvider.bruterPower),
+                          AppLocalizations.of(context)!
+                              .txPowerLevel(bleProvider.bruterPower),
                           style: const TextStyle(
                             color: AppColors.primaryText,
                             fontSize: 13,
@@ -838,8 +905,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 label: 'Level ${bleProvider.bruterPower}',
                 activeColor: AppColors.warning,
                 onChanged: (value) {
-                  bleProvider.sendSettingsToDevice(
-                      bruterPower: value.round());
+                  bleProvider.sendSettingsToDevice(bruterPower: value.round());
                 },
               ),
 
@@ -1053,7 +1119,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          AppLocalizations.of(context)!.rssiThreshold(bleProvider.scannerRssi),
+                          AppLocalizations.of(context)!
+                              .rssiThreshold(bleProvider.scannerRssi),
                           style: const TextStyle(
                             color: AppColors.primaryText,
                             fontSize: 13,
@@ -1091,8 +1158,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onSelected: (_) {
                       bleProvider.sendSettingsToDevice(scannerRssi: rssi);
                     },
-                    selectedColor:
-                        AppColors.searching.withValues(alpha: 0.2),
+                    selectedColor: AppColors.searching.withValues(alpha: 0.2),
                     labelStyle: TextStyle(
                       color: isSelected
                           ? AppColors.searching
@@ -1103,7 +1169,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   );
                 }).toList(),
               ),
-
             ],
           ),
         );
@@ -1112,7 +1177,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   /// Build nRF24 Settings expandable section.
-  Widget _buildNrfSettingsSection(BuildContext context, BleProvider bleProvider) {
+  Widget _buildNrfSettingsSection(
+      BuildContext context, BleProvider bleProvider) {
     return Card(
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -1128,7 +1194,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           subtitle: Text(
             AppLocalizations.of(context)!.nrf24SettingsSubtitle,
-            style: const TextStyle(color: AppColors.secondaryText, fontSize: 12),
+            style:
+                const TextStyle(color: AppColors.secondaryText, fontSize: 12),
           ),
           initiallyExpanded: false,
           children: [
@@ -1156,7 +1223,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               child: Text(
                                 AppLocalizations.of(context)!.nrf24ConfigDesc,
                                 style: const TextStyle(
-                                    color: AppColors.secondaryText, fontSize: 11),
+                                    color: AppColors.secondaryText,
+                                    fontSize: 11),
                               ),
                             ),
                           ],
@@ -1171,7 +1239,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               size: 18, color: AppColors.secondaryText),
                           const SizedBox(width: 8),
                           Text(
-                            AppLocalizations.of(context)!.paLevel(_nrfPaLabel(settingsProvider.nrfPaLevel)),
+                            AppLocalizations.of(context)!.paLevel(
+                                _nrfPaLabel(settingsProvider.nrfPaLevel)),
                             style: const TextStyle(
                               color: AppColors.primaryText,
                               fontSize: 13,
@@ -1182,7 +1251,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       Text(
                         AppLocalizations.of(context)!.transmissionPowerDesc,
-                        style: const TextStyle(color: AppColors.secondaryText, fontSize: 11),
+                        style: const TextStyle(
+                            color: AppColors.secondaryText, fontSize: 11),
                       ),
                       Wrap(
                         spacing: 6,
@@ -1194,13 +1264,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             selected: isSelected,
                             onSelected: (_) {
                               settingsProvider.setNrfPaLevel(lvl);
-                              _sendNrfSettings(context, bleProvider, settingsProvider);
+                              _sendNrfSettings(
+                                  context, bleProvider, settingsProvider);
                             },
-                            selectedColor: const Color(0xFF00BCD4).withValues(alpha: 0.2),
+                            selectedColor:
+                                const Color(0xFF00BCD4).withValues(alpha: 0.2),
                             labelStyle: TextStyle(
-                              color: isSelected ? const Color(0xFF00BCD4) : AppColors.secondaryText,
+                              color: isSelected
+                                  ? const Color(0xFF00BCD4)
+                                  : AppColors.secondaryText,
                               fontSize: 11,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              fontWeight: isSelected
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
                             ),
                             visualDensity: VisualDensity.compact,
                           );
@@ -1216,7 +1292,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               size: 18, color: AppColors.secondaryText),
                           const SizedBox(width: 8),
                           Text(
-                            AppLocalizations.of(context)!.nrfDataRate(_nrfDataRateLabel(settingsProvider.nrfDataRate)),
+                            AppLocalizations.of(context)!.nrfDataRate(
+                                _nrfDataRateLabel(
+                                    settingsProvider.nrfDataRate)),
                             style: const TextStyle(
                               color: AppColors.primaryText,
                               fontSize: 13,
@@ -1227,7 +1305,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       Text(
                         AppLocalizations.of(context)!.radioDataRateDesc,
-                        style: const TextStyle(color: AppColors.secondaryText, fontSize: 11),
+                        style: const TextStyle(
+                            color: AppColors.secondaryText, fontSize: 11),
                       ),
                       Wrap(
                         spacing: 6,
@@ -1239,13 +1318,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             selected: isSelected,
                             onSelected: (_) {
                               settingsProvider.setNrfDataRate(dr);
-                              _sendNrfSettings(context, bleProvider, settingsProvider);
+                              _sendNrfSettings(
+                                  context, bleProvider, settingsProvider);
                             },
-                            selectedColor: const Color(0xFF00BCD4).withValues(alpha: 0.2),
+                            selectedColor:
+                                const Color(0xFF00BCD4).withValues(alpha: 0.2),
                             labelStyle: TextStyle(
-                              color: isSelected ? const Color(0xFF00BCD4) : AppColors.secondaryText,
+                              color: isSelected
+                                  ? const Color(0xFF00BCD4)
+                                  : AppColors.secondaryText,
                               fontSize: 11,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              fontWeight: isSelected
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
                             ),
                             visualDensity: VisualDensity.compact,
                           );
@@ -1265,7 +1350,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  AppLocalizations.of(context)!.defaultChannel(settingsProvider.nrfChannel),
+                                  AppLocalizations.of(context)!.defaultChannel(
+                                      settingsProvider.nrfChannel),
                                   style: const TextStyle(
                                     color: AppColors.primaryText,
                                     fontSize: 13,
@@ -1275,7 +1361,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 Text(
                                   '${2400 + settingsProvider.nrfChannel} MHz (0-125)',
                                   style: const TextStyle(
-                                      color: AppColors.secondaryText, fontSize: 11),
+                                      color: AppColors.secondaryText,
+                                      fontSize: 11),
                                 ),
                               ],
                             ),
@@ -1287,11 +1374,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         min: 0,
                         max: 125,
                         divisions: 125,
-                        label: 'Ch ${settingsProvider.nrfChannel} (${2400 + settingsProvider.nrfChannel} MHz)',
+                        label:
+                            'Ch ${settingsProvider.nrfChannel} (${2400 + settingsProvider.nrfChannel} MHz)',
                         activeColor: const Color(0xFF00BCD4),
                         onChanged: (value) {
                           settingsProvider.setNrfChannel(value.round());
-                          _debouncedSendNrfSettings(context, bleProvider, settingsProvider);
+                          _debouncedSendNrfSettings(
+                              context, bleProvider, settingsProvider);
                         },
                       ),
 
@@ -1308,7 +1397,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  AppLocalizations.of(context)!.autoRetransmit(settingsProvider.nrfAutoRetransmit),
+                                  AppLocalizations.of(context)!.autoRetransmit(
+                                      settingsProvider.nrfAutoRetransmit),
                                   style: const TextStyle(
                                     color: AppColors.primaryText,
                                     fontSize: 13,
@@ -1316,9 +1406,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   ),
                                 ),
                                 Text(
-                                  AppLocalizations.of(context)!.retransmitCountDesc,
+                                  AppLocalizations.of(context)!
+                                      .retransmitCountDesc,
                                   style: const TextStyle(
-                                      color: AppColors.secondaryText, fontSize: 11),
+                                      color: AppColors.secondaryText,
+                                      fontSize: 11),
                                 ),
                               ],
                             ),
@@ -1334,7 +1426,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         activeColor: const Color(0xFF00BCD4),
                         onChanged: (value) {
                           settingsProvider.setNrfAutoRetransmit(value.round());
-                          _debouncedSendNrfSettings(context, bleProvider, settingsProvider);
+                          _debouncedSendNrfSettings(
+                              context, bleProvider, settingsProvider);
                         },
                       ),
                     ],
@@ -1350,20 +1443,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   String _nrfPaLabel(int level) {
     switch (level) {
-      case 0: return 'MIN (-18dBm)';
-      case 1: return 'LOW (-12dBm)';
-      case 2: return 'HIGH (-6dBm)';
-      case 3: return 'MAX (0dBm)';
-      default: return 'Unknown';
+      case 0:
+        return 'MIN (-18dBm)';
+      case 1:
+        return 'LOW (-12dBm)';
+      case 2:
+        return 'HIGH (-6dBm)';
+      case 3:
+        return 'MAX (0dBm)';
+      default:
+        return 'Unknown';
     }
   }
 
   String _nrfDataRateLabel(int rate) {
     switch (rate) {
-      case 0: return '1 Mbps';
-      case 1: return '2 Mbps';
-      case 2: return '250 Kbps';
-      default: return 'Unknown';
+      case 0:
+        return '1 Mbps';
+      case 1:
+        return '2 Mbps';
+      case 2:
+        return '250 Kbps';
+      default:
+        return 'Unknown';
     }
   }
 
@@ -1402,7 +1504,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(AppLocalizations.of(context)!.failedToSendNrf24Settings(e.toString())),
+            content: Text(AppLocalizations.of(context)!
+                .failedToSendNrf24Settings(e.toString())),
             backgroundColor: AppColors.error,
           ),
         );
@@ -1412,7 +1515,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   /// Build Firmware Update expandable section.
   /// Currently only shows a "Check FW Version" button that queries the device.
-  Widget _buildFirmwareUpdateSection(BuildContext context, BleProvider bleProvider) {
+  Widget _buildFirmwareUpdateSection(
+      BuildContext context, BleProvider bleProvider) {
     return Card(
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -1428,7 +1532,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           subtitle: Text(
             bleProvider.firmwareVersion.isNotEmpty
-                ? AppLocalizations.of(context)!.deviceFwVersion(bleProvider.firmwareVersion)
+                ? AppLocalizations.of(context)!
+                    .deviceFwVersion(bleProvider.firmwareVersion)
                 : AppLocalizations.of(context)!.notConnected,
             style: TextStyle(
               color: bleProvider.firmwareVersion.isNotEmpty
@@ -1572,7 +1677,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          leading: const Icon(Icons.miscellaneous_services, color: AppColors.primaryAccent),
+          leading: const Icon(Icons.miscellaneous_services,
+              color: AppColors.primaryAccent),
           title: const Text(
             'Others',
             style: TextStyle(
@@ -1606,7 +1712,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildSubGhzDbCloneButton(BuildContext context, BleProvider bleProvider) {
+  Widget _buildSubGhzDbCloneButton(
+      BuildContext context, BleProvider bleProvider) {
     return Card(
       color: AppColors.secondaryBackground,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -1678,7 +1785,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Future<void> _startSubGhzDbCloning(BuildContext context, BleProvider bleProvider) async {
+  Future<void> _startSubGhzDbCloning(
+      BuildContext context, BleProvider bleProvider) async {
     // Show confirmation dialog first
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1779,7 +1887,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   /// Build Device Management section (Device Name, Factory Reset).
-  Widget _buildDeviceManagementSection(BuildContext context, BleProvider bleProvider) {
+  Widget _buildDeviceManagementSection(
+      BuildContext context, BleProvider bleProvider) {
     return Card(
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -1824,14 +1933,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(height: 4),
                   const Text(
                     'Change the Bluetooth name of your device. Takes effect after reboot.',
-                    style: TextStyle(color: AppColors.secondaryText, fontSize: 12),
+                    style:
+                        TextStyle(color: AppColors.secondaryText, fontSize: 12),
                   ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
                       Expanded(
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
                           decoration: BoxDecoration(
                             color: AppColors.surfaceElevated,
                             borderRadius: BorderRadius.circular(8),
@@ -1855,7 +1966,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primaryAccent,
                           foregroundColor: AppColors.primaryBackground,
-                          disabledBackgroundColor: AppColors.primaryAccent.withValues(alpha: 0.3),
+                          disabledBackgroundColor:
+                              AppColors.primaryAccent.withValues(alpha: 0.3),
                         ),
                         child: const Text('Change'),
                       ),
@@ -1871,14 +1983,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     decoration: BoxDecoration(
                       color: AppColors.warning.withValues(alpha: 0.06),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+                      border: Border.all(
+                          color: AppColors.warning.withValues(alpha: 0.3)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Row(
                           children: [
-                            Icon(Icons.sd_card_alert, size: 18, color: AppColors.warning),
+                            Icon(Icons.sd_card_alert,
+                                size: 18, color: AppColors.warning),
                             SizedBox(width: 8),
                             Text(
                               'Format SD Card',
@@ -1893,21 +2007,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         const SizedBox(height: 8),
                         const Text(
                           'Delete all files and folders from the SD card and re-create the default directory structure. This cannot be undone.',
-                          style: TextStyle(color: AppColors.secondaryText, fontSize: 12),
+                          style: TextStyle(
+                              color: AppColors.secondaryText, fontSize: 12),
                         ),
                         const SizedBox(height: 12),
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton.icon(
                             onPressed: bleProvider.isConnected
-                                ? () => _showFormatSDDialog(context, bleProvider)
+                                ? () =>
+                                    _showFormatSDDialog(context, bleProvider)
                                 : null,
                             icon: const Icon(Icons.sd_card),
                             label: const Text('Format SD Card'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.warning,
                               foregroundColor: Colors.white,
-                              disabledBackgroundColor: AppColors.warning.withValues(alpha: 0.3),
+                              disabledBackgroundColor:
+                                  AppColors.warning.withValues(alpha: 0.3),
                             ),
                           ),
                         ),
@@ -1924,14 +2041,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     decoration: BoxDecoration(
                       color: AppColors.error.withValues(alpha: 0.06),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+                      border: Border.all(
+                          color: AppColors.error.withValues(alpha: 0.3)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Row(
                           children: [
-                            Icon(Icons.warning_amber, size: 18, color: AppColors.error),
+                            Icon(Icons.warning_amber,
+                                size: 18, color: AppColors.error),
                             SizedBox(width: 8),
                             Text(
                               'Factory Reset',
@@ -1946,21 +2065,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         const SizedBox(height: 8),
                         const Text(
                           'Erase all settings and data from the device flash memory and reboot with factory defaults. This cannot be undone.',
-                          style: TextStyle(color: AppColors.secondaryText, fontSize: 12),
+                          style: TextStyle(
+                              color: AppColors.secondaryText, fontSize: 12),
                         ),
                         const SizedBox(height: 12),
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton.icon(
                             onPressed: bleProvider.isConnected
-                                ? () => _showFactoryResetDialog(context, bleProvider)
+                                ? () => _showFactoryResetDialog(
+                                    context, bleProvider)
                                 : null,
                             icon: const Icon(Icons.delete_forever),
                             label: const Text('Factory Reset'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.error,
                               foregroundColor: Colors.white,
-                              disabledBackgroundColor: AppColors.error.withValues(alpha: 0.3),
+                              disabledBackgroundColor:
+                                  AppColors.error.withValues(alpha: 0.3),
                             ),
                           ),
                         ),
@@ -1973,7 +2095,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       padding: EdgeInsets.only(top: 8),
                       child: Text(
                         'Connect to a device first',
-                        style: TextStyle(color: AppColors.secondaryText, fontSize: 11),
+                        style: TextStyle(
+                            color: AppColors.secondaryText, fontSize: 11),
                       ),
                     ),
                 ],
@@ -1992,7 +2115,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.secondaryBackground,
-        title: const Text('Change BLE Name', style: TextStyle(color: AppColors.primaryText)),
+        title: const Text('Change BLE Name',
+            style: TextStyle(color: AppColors.primaryText)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -2008,7 +2132,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               decoration: InputDecoration(
                 hintText: 'EvilCrow_RF2',
                 hintStyle: const TextStyle(color: AppColors.disabledText),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                   borderSide: const BorderSide(color: AppColors.borderDefault),
@@ -2020,7 +2145,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel', style: TextStyle(color: AppColors.secondaryText)),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppColors.secondaryText)),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -2034,7 +2160,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     content: Text(success
                         ? 'Device name set to "$name". Reboot to apply.'
                         : 'Failed to set device name.'),
-                    backgroundColor: success ? AppColors.success : AppColors.error,
+                    backgroundColor:
+                        success ? AppColors.success : AppColors.error,
                   ),
                 );
               }
@@ -2076,7 +2203,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('No', style: TextStyle(color: AppColors.secondaryText, fontSize: 16)),
+            child: const Text('No',
+                style: TextStyle(color: AppColors.secondaryText, fontSize: 16)),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -2088,7 +2216,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     content: Text(success
                         ? 'Factory reset initiated. Device will reboot.'
                         : 'Failed to send factory reset command.'),
-                    backgroundColor: success ? AppColors.warning : AppColors.error,
+                    backgroundColor:
+                        success ? AppColors.warning : AppColors.error,
                   ),
                 );
               }
@@ -2130,7 +2259,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('No', style: TextStyle(color: AppColors.secondaryText, fontSize: 16)),
+            child: const Text('No',
+                style: TextStyle(color: AppColors.secondaryText, fontSize: 16)),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -2165,7 +2295,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _showSDFormatProgressDialog(BuildContext context) {
     bool closed = false;
     bool timeoutStarted = false;
-    
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -2194,7 +2324,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 }
               });
             }
-            
+
             // Safety timeout — only start ONCE
             if (ble.isFormattingSD && !timeoutStarted) {
               timeoutStarted = true;
@@ -2205,7 +2335,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
-                        content: Text('Format timeout: No response from device.'),
+                        content:
+                            Text('Format timeout: No response from device.'),
                         backgroundColor: AppColors.error,
                         duration: Duration(seconds: 4),
                       ),
@@ -2214,14 +2345,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 }
               });
             }
-            
+
             return AlertDialog(
               backgroundColor: AppColors.secondaryBackground,
               title: const Row(
                 children: [
                   Icon(Icons.sd_card, color: AppColors.warning, size: 24),
                   SizedBox(width: 10),
-                  Text('Formatting...', style: TextStyle(color: AppColors.warning)),
+                  Text('Formatting...',
+                      style: TextStyle(color: AppColors.warning)),
                 ],
               ),
               content: Column(
@@ -2241,7 +2373,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(height: 8),
                   const Text(
                     'Do not disconnect the device.',
-                    style: TextStyle(color: AppColors.secondaryText, fontSize: 12),
+                    style:
+                        TextStyle(color: AppColors.secondaryText, fontSize: 12),
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -2270,7 +2403,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           subtitle: Text(
             AppLocalizations.of(context)!.configureHwButtonActions,
-            style: const TextStyle(color: AppColors.secondaryText, fontSize: 12),
+            style:
+                const TextStyle(color: AppColors.secondaryText, fontSize: 12),
           ),
           initiallyExpanded: false,
           children: [
@@ -2314,7 +2448,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               child: Text(
                                 AppLocalizations.of(context)!.hwButtonsDesc,
                                 style: const TextStyle(
-                                    color: AppColors.secondaryText, fontSize: 11),
+                                    color: AppColors.secondaryText,
+                                    fontSize: 11),
                               ),
                             ),
                           ],
@@ -2329,12 +2464,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         color: AppColors.primaryAccent,
                         replayPath: settingsProvider.button1ReplayPath,
                         onPickReplayFile: () async {
-                          await _pickReplaySubFile(context, settingsProvider, 1);
-                          _sendButtonConfig(context, bleProvider, settingsProvider);
+                          await _pickReplaySubFile(
+                              context, settingsProvider, 1);
+                          _sendButtonConfig(
+                              context, bleProvider, settingsProvider);
                         },
                         onChanged: (action) {
                           settingsProvider.setButton1Action(action);
-                          _sendButtonConfig(context, bleProvider, settingsProvider);
+                          _sendButtonConfig(
+                              context, bleProvider, settingsProvider);
                         },
                       ),
 
@@ -2347,12 +2485,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         color: AppColors.warning,
                         replayPath: settingsProvider.button2ReplayPath,
                         onPickReplayFile: () async {
-                          await _pickReplaySubFile(context, settingsProvider, 2);
-                          _sendButtonConfig(context, bleProvider, settingsProvider);
+                          await _pickReplaySubFile(
+                              context, settingsProvider, 2);
+                          _sendButtonConfig(
+                              context, bleProvider, settingsProvider);
                         },
                         onChanged: (action) {
                           settingsProvider.setButton2Action(action);
-                          _sendButtonConfig(context, bleProvider, settingsProvider);
+                          _sendButtonConfig(
+                              context, bleProvider, settingsProvider);
                         },
                       ),
                     ],
@@ -2404,9 +2545,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             return GestureDetector(
               onTap: () => onChanged(a),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
-                  color: isSelected ? color.withValues(alpha: 0.2) : Colors.transparent,
+                  color: isSelected
+                      ? color.withValues(alpha: 0.2)
+                      : Colors.transparent,
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
                     color: isSelected ? color : AppColors.borderDefault,
@@ -2425,7 +2569,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       style: TextStyle(
                         color: isSelected ? color : AppColors.secondaryText,
                         fontSize: 11,
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        fontWeight:
+                            isSelected ? FontWeight.bold : FontWeight.normal,
                       ),
                     ),
                   ],
@@ -2445,7 +2590,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       : replayPath.split('/').last,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: AppColors.secondaryText, fontSize: 11),
+                  style: const TextStyle(
+                      color: AppColors.secondaryText, fontSize: 11),
                 ),
               ),
               const SizedBox(width: 8),
@@ -2492,26 +2638,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
       SettingsProvider settingsProvider) async {
     try {
       final cmd1 = FirmwareBinaryProtocol.createHwButtonConfigCommand(
-      1,
-      settingsProvider.button1Action.index,
-      replayPathType: settingsProvider.button1Action == HwButtonAction.replayLast
-        ? settingsProvider.button1ReplayPathType
-        : null,
-      replayPath: settingsProvider.button1Action == HwButtonAction.replayLast
-        ? settingsProvider.button1ReplayPath
-        : null,
+        1,
+        settingsProvider.button1Action.index,
+        replayPathType:
+            settingsProvider.button1Action == HwButtonAction.replayLast
+                ? settingsProvider.button1ReplayPathType
+                : null,
+        replayPath: settingsProvider.button1Action == HwButtonAction.replayLast
+            ? settingsProvider.button1ReplayPath
+            : null,
       );
       await bleProvider.sendBinaryCommand(cmd1);
 
       final cmd2 = FirmwareBinaryProtocol.createHwButtonConfigCommand(
-      2,
-      settingsProvider.button2Action.index,
-      replayPathType: settingsProvider.button2Action == HwButtonAction.replayLast
-        ? settingsProvider.button2ReplayPathType
-        : null,
-      replayPath: settingsProvider.button2Action == HwButtonAction.replayLast
-        ? settingsProvider.button2ReplayPath
-        : null,
+        2,
+        settingsProvider.button2Action.index,
+        replayPathType:
+            settingsProvider.button2Action == HwButtonAction.replayLast
+                ? settingsProvider.button2ReplayPathType
+                : null,
+        replayPath: settingsProvider.button2Action == HwButtonAction.replayLast
+            ? settingsProvider.button2ReplayPath
+            : null,
       );
       await bleProvider.sendBinaryCommand(cmd2);
 
@@ -2527,7 +2675,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(AppLocalizations.of(context)!.failedToSendConfig(e.toString())),
+            content: Text(
+                AppLocalizations.of(context)!.failedToSendConfig(e.toString())),
             backgroundColor: AppColors.error,
           ),
         );
@@ -2569,7 +2718,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  AppLocalizations.of(context)!.fwVersionDetails(bleProvider.fwMajor, bleProvider.fwMinor, bleProvider.fwPatch),
+                  AppLocalizations.of(context)!.fwVersionDetails(
+                      bleProvider.fwMajor,
+                      bleProvider.fwMinor,
+                      bleProvider.fwPatch),
                   style: const TextStyle(
                       color: AppColors.secondaryText, fontSize: 12),
                 ),
@@ -2613,8 +2765,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  String _getLanguageDisplayName(
-      String languageCode, AppLocalizations l10n) {
+  String _getLanguageDisplayName(String languageCode, AppLocalizations l10n) {
     switch (languageCode) {
       case 'en':
         return l10n.english;
@@ -2625,8 +2776,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  void _showLanguageDialog(BuildContext context,
-      LocaleProvider localeProvider, AppLocalizations l10n) {
+  void _showLanguageDialog(BuildContext context, LocaleProvider localeProvider,
+      AppLocalizations l10n) {
     showDialog(
       context: context,
       builder: (dialogContext) {
@@ -2796,7 +2947,8 @@ class _AboutPopupState extends State<_AboutPopup>
   static const List<_ContributorCredit> _contributors = [
     _ContributorCredit(
       name: 'joelsernamoreno',
-      description: 'Hardware design, original firmware, project idea & community',
+      description:
+          'Hardware design, original firmware, project idea & community',
       githubUrl: 'https://github.com/joelsernamoreno/EvilCrowRF-V2',
       nameColor: Color(0xFFFF6B6B),
     ),
@@ -2814,7 +2966,8 @@ class _AboutPopupState extends State<_AboutPopup>
     ),
     _ContributorCredit(
       name: 'ProtoPirate',
-      description: 'Automotive key fob protocol research & reference implementation',
+      description:
+          'Automotive key fob protocol research & reference implementation',
       githubUrl: 'https://protopirate.net/ProtoPirate/ProtoPirate',
       nameColor: Color(0xFF64B5F6),
     ),
@@ -2866,8 +3019,8 @@ class _AboutPopupState extends State<_AboutPopup>
         decoration: BoxDecoration(
           color: AppColors.secondaryBackground,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-              color: AppColors.primaryAccent.withValues(alpha: 0.3)),
+          border:
+              Border.all(color: AppColors.primaryAccent.withValues(alpha: 0.3)),
           boxShadow: [
             BoxShadow(
               color: AppColors.primaryAccent.withValues(alpha: 0.15),
@@ -2934,12 +3087,11 @@ class _AboutPopupState extends State<_AboutPopup>
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 3),
                       decoration: BoxDecoration(
-                        color:
-                            AppColors.primaryAccent.withValues(alpha: 0.1),
+                        color: AppColors.primaryAccent.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                            color: AppColors.primaryAccent
-                                .withValues(alpha: 0.3)),
+                            color:
+                                AppColors.primaryAccent.withValues(alpha: 0.3)),
                       ),
                       child: Text(
                         _appVersion,
@@ -3070,14 +3222,19 @@ class _AboutPopupState extends State<_AboutPopup>
               ),
             ),
             const SizedBox(height: 8),
-            const Divider(color: AppColors.divider, indent: 20, endIndent: 20, height: 1),
+            const Divider(
+                color: AppColors.divider, indent: 20, endIndent: 20, height: 1),
             // Scrollable contributor list
             Expanded(
               child: ListView.separated(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 itemCount: _contributors.length,
                 separatorBuilder: (_, __) => const Divider(
-                  color: AppColors.divider, height: 12, indent: 8, endIndent: 8,
+                  color: AppColors.divider,
+                  height: 12,
+                  indent: 8,
+                  endIndent: 8,
                 ),
                 itemBuilder: (context, index) {
                   final c = _contributors[index];
@@ -3144,7 +3301,9 @@ class _AboutPopupState extends State<_AboutPopup>
                     fontWeight: FontWeight.bold,
                     color: c.nameColor,
                     shadows: [
-                      Shadow(color: c.nameColor.withValues(alpha: 0.6), blurRadius: 6),
+                      Shadow(
+                          color: c.nameColor.withValues(alpha: 0.6),
+                          blurRadius: 6),
                     ],
                   ),
                 ),
@@ -3163,7 +3322,8 @@ class _AboutPopupState extends State<_AboutPopup>
           ),
           // GitHub button
           IconButton(
-            icon: Icon(Icons.code, size: 18, color: c.nameColor.withValues(alpha: 0.8)),
+            icon: Icon(Icons.code,
+                size: 18, color: c.nameColor.withValues(alpha: 0.8)),
             tooltip: 'GitHub',
             onPressed: () => _launchUrl(c.githubUrl),
             visualDensity: VisualDensity.compact,
@@ -3215,8 +3375,8 @@ class _AboutPopupState extends State<_AboutPopup>
                     accent.withValues(alpha: 0.1),
                   ],
                 ),
-                border: Border.all(
-                    color: accent.withValues(alpha: 0.5), width: 2),
+                border:
+                    Border.all(color: accent.withValues(alpha: 0.5), width: 2),
               ),
               child: dev.avatarAsset != null
                   ? ClipOval(
@@ -3247,8 +3407,7 @@ class _AboutPopupState extends State<_AboutPopup>
 
             // Role badge
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               decoration: BoxDecoration(
                 color: accent.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
@@ -3285,11 +3444,13 @@ class _AboutPopupState extends State<_AboutPopup>
               // Donate link button
               OutlinedButton.icon(
                 onPressed: () => _launchUrl(dev.donateUrl!),
-                icon: const Icon(Icons.favorite, size: 16, color: Color(0xFFFF6B6B)),
+                icon: const Icon(Icons.favorite,
+                    size: 16, color: Color(0xFFFF6B6B)),
                 label: Text(AppLocalizations.of(context)!.donate),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: const Color(0xFFFF6B6B),
-                  side: BorderSide(color: const Color(0xFFFF6B6B).withValues(alpha: 0.4)),
+                  side: BorderSide(
+                      color: const Color(0xFFFF6B6B).withValues(alpha: 0.4)),
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   shape: RoundedRectangleBorder(
@@ -3478,8 +3639,8 @@ class _SubGhzCloneDialogState extends State<_SubGhzCloneDialog> {
         _progress = _completedPaths.length / _totalFiles;
       });
 
-      await widget.bleProvider.createDirectory(
-          FlipperSubDbService.sdTargetFolder, pathType: 5);
+      await widget.bleProvider
+          .createDirectory(FlipperSubDbService.sdTargetFolder, pathType: 5);
       await Future.delayed(const Duration(milliseconds: 200));
 
       // Collect all unique subdirectories and create them
@@ -3565,7 +3726,7 @@ class _SubGhzCloneDialogState extends State<_SubGhzCloneDialog> {
         } catch (e) {
           _failedFiles++;
           // Log but continue with other files
-          print('Failed to upload ${file.relativePath}: $e');
+          AppLogger.severe('Failed to upload ${file.relativePath}', e);
         }
       }
 

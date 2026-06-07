@@ -7,13 +7,13 @@ import '../providers/log_provider.dart';
 import '../providers/notification_provider.dart';
 import '../providers/settings_provider.dart';
 import '../widgets/quick_connect_widget.dart';
-import '../widgets/module_status_widget.dart';
+
 import '../widgets/status_bar_widget.dart';
 import '../theme/app_colors.dart';
-import 'brute_screen.dart';
+
 import 'files_screen.dart';
 import 'settings_screen.dart';
-import 'record_screen.dart';
+
 import 'signal_scanner_screen.dart';
 import 'subghz_screen.dart';
 import 'nrf_screen.dart';
@@ -46,11 +46,12 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _bleProvider = Provider.of<BleProvider>(context, listen: false);
       final logProvider = Provider.of<LogProvider>(context, listen: false);
-      final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
-      
+      final notificationProvider =
+          Provider.of<NotificationProvider>(context, listen: false);
+
       // Listen for connection state changes
       _bleProvider!.addListener(_onConnectionStateChanged);
-      
+
       // Forward BLE events to notification provider (status bar feedback)
       _bleProvider!.setNotificationCallback((level, message) {
         switch (level) {
@@ -68,7 +69,7 @@ class _HomeScreenState extends State<HomeScreen> {
             break;
         }
       });
-      
+
       _bleProvider!.setLogCallback((level, message, {details}) {
         switch (level) {
           case 'command':
@@ -147,7 +148,7 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.only(top: 36),
               child: _screens[_currentIndex],
             ),
-            
+
             // Status bar overlay (above content)
             const StatusBarWidget(),
           ],
@@ -158,7 +159,7 @@ class _HomeScreenState extends State<HomeScreen> {
         currentIndex: _currentIndex,
         onTap: (index) {
           final bleProvider = Provider.of<BleProvider>(context, listen: false);
-          
+
           // Allow Home (index 0) and Settings (index 4) without connection
           // Block Sub-GHz (1), NRF (2) and Files (3) if not connected
           if (!bleProvider.isConnected && index != 0 && index != 4) {
@@ -210,7 +211,7 @@ class _HomeScreenState extends State<HomeScreen> {
             );
             return;
           }
-          
+
           // Handle debug mode activation on Settings tap
           if (index == 4) {
             _settingsTapCount++;
@@ -218,18 +219,21 @@ class _HomeScreenState extends State<HomeScreen> {
               _startTapTimer();
             }
             if (_settingsTapCount >= 5) {
-              final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+              final settingsProvider =
+                  Provider.of<SettingsProvider>(context, listen: false);
               settingsProvider.setDebugMode(true);
               _resetTapCount();
               // Optional: show a snackbar to confirm
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(AppLocalizations.of(context)!.debugModeEnabled)),
+                SnackBar(
+                    content:
+                        Text(AppLocalizations.of(context)!.debugModeEnabled)),
               );
             }
           } else {
             _resetTapCount();
           }
-          
+
           setState(() {
             _currentIndex = index;
           });
@@ -281,22 +285,27 @@ class HomeTab extends StatelessWidget {
             children: [
               // Compact connection status bar
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
                 child: Row(
                   children: [
-                    const Icon(Icons.bluetooth_connected, size: 16, color: Colors.green),
+                    const Icon(Icons.bluetooth_connected,
+                        size: 16, color: Colors.green),
                     const SizedBox(width: 6),
                     Text(
                       'Connected',
-                      style: TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.w500),
+                      style: TextStyle(
+                          color: Colors.green,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500),
                     ),
                     const Spacer(),
                     Text(
                       'RF Scanner',
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primaryText,
-                      ),
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primaryText,
+                          ),
                     ),
                   ],
                 ),
@@ -315,7 +324,7 @@ class HomeTab extends StatelessWidget {
             children: [
               // Quick Connect Widget
               const QuickConnectWidget(),
-              
+
               // Permissions Status (only show if there are errors)
               if (_isPermissionError(bleProvider.statusMessage)) ...[
                 Card(
@@ -335,19 +344,24 @@ class HomeTab extends StatelessWidget {
                             const SizedBox(width: 8),
                             Text(
                               AppLocalizations.of(context)!.permissionError,
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                color: AppColors.primaryText,
-                                fontWeight: FontWeight.bold,
-                              ),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(
+                                    color: AppColors.primaryText,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                             ),
                           ],
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          _getLocalizedStatusMessage(context, bleProvider.statusMessage),
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppColors.primaryText,
-                          ),
+                          _getLocalizedStatusMessage(
+                              context, bleProvider.statusMessage),
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: AppColors.primaryText,
+                                  ),
                         ),
                       ],
                     ),
@@ -363,21 +377,21 @@ class HomeTab extends StatelessWidget {
   }
 
   bool _isPermissionError(String status) {
-    return status.contains('permission') || 
-           status.contains('Permission') ||
-           status.contains('denied') ||
-           status.contains('error');
+    return status.contains('permission') ||
+        status.contains('Permission') ||
+        status.contains('denied') ||
+        status.contains('error');
   }
 
   String _getLocalizedStatusMessage(BuildContext context, String statusKey) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     // Handle keys with parameters (format: "key:value")
     if (statusKey.contains(':')) {
       final parts = statusKey.split(':');
       final key = parts[0];
       final value = parts.length > 1 ? parts[1] : '';
-      
+
       switch (key) {
         case 'foundSupportedDevices':
           final count = int.tryParse(value) ?? 0;
@@ -386,7 +400,7 @@ class HomeTab extends StatelessWidget {
           return statusKey; // Return as-is if not a known key
       }
     }
-    
+
     // Handle simple keys without parameters
     switch (statusKey) {
       case 'connecting':

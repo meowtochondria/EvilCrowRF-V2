@@ -20,6 +20,7 @@ import '../services/cc1101/cc1101_calculator.dart';
 import '../services/cc1101/cc1101_values.dart';
 import '../services/binary_message_parser.dart';
 // import 'log_provider.dart'; // Unused import removed
+import '../services/logger_service.dart';
 
 class BleProvider extends ChangeNotifier {
   BluetoothDevice? connectedDevice;
@@ -44,7 +45,6 @@ class BleProvider extends ChangeNotifier {
   Function(String level, String message)? _notificationCallback;
 
   // File reading state
-  String? _currentFileContent;
   Completer<String>? _pendingFileReadCompleter;
   bool isLoadingFileContent = false;
   double fileContentProgress = 0.0;
@@ -207,7 +207,6 @@ class BleProvider extends ChangeNotifier {
   int _streamingTotalDirs = 0; // Total directories expected (for progress)
 
   // Protection against multiple commands
-  bool _isCommandInProgress = false;
   bool _isWriting = false; // Flag to prevent concurrent BLE writes
   DateTime? _lastCommandTime;
   static const Duration _commandCooldown = Duration(milliseconds: 200);
@@ -245,13 +244,14 @@ class BleProvider extends ChangeNotifier {
     try {
       // First try: Connect to known device if we have one
       if (_knownDeviceId != null) {
-        print('Attempting direct connection to known device: $_knownDeviceId');
+        AppLogger.debug(
+            'Attempting direct connection to known device: $_knownDeviceId');
         statusMessage = 'connectingToKnownDevice'; // Key for localization
         notifyListeners();
 
         try {
           BluetoothDevice knownDevice = BluetoothDevice.fromId(_knownDeviceId!);
-          print(
+          AppLogger.debug(
               'Created device object for known device: ${knownDevice.name} (${knownDevice.id})');
           // Use shorter timeout for cached device — if address is stale,
           // don't wait the full 10s.
@@ -259,7 +259,7 @@ class BleProvider extends ChangeNotifier {
               connectTimeout: const Duration(seconds: 3));
           return; // Success, exit early
         } catch (e) {
-          print('Direct connection failed: $e');
+          AppLogger.debug('Direct connection failed', e);
           // Clear the known device if it's no longer available
           await _clearKnownDevice();
         }
@@ -270,7 +270,7 @@ class BleProvider extends ChangeNotifier {
       // This handles the case where the first advertisement for a device has
       // incomplete data (empty service UUIDs / name) but subsequent ones
       // have the full data.
-      print('Scanning for target device: $targetDeviceName');
+      AppLogger.debug('Scanning for target device: $targetDeviceName');
       statusMessage = 'Scanning for device...';
       notifyListeners();
 
@@ -283,7 +283,7 @@ class BleProvider extends ChangeNotifier {
       sub = FlutterBluePlus.scanResults.listen((results) {
         for (var result in results) {
           if (isDeviceMatching(result)) {
-            print(
+            AppLogger.debug(
                 'Found target device: ${result.device.id} (${result.device.name})');
             sub?.cancel();
             timeout?.cancel();
@@ -311,7 +311,7 @@ class BleProvider extends ChangeNotifier {
 
       await completer.future;
     } catch (e) {
-      print('quickConnect failed: $e');
+      AppLogger.debug('quickConnect failed', e);
       if (!isConnected) {
         statusMessage =
             'Device not found. Make sure it\'s powered on and nearby.';
@@ -350,10 +350,10 @@ class BleProvider extends ChangeNotifier {
       SharedPreferences prefs = await SharedPreferences.getInstance();
       _knownDeviceId = prefs.getString(_deviceIdKey);
       if (_knownDeviceId != null) {
-        print('Loaded known device ID: $_knownDeviceId');
+        AppLogger.debug('Loaded known device ID: $_knownDeviceId');
       }
     } catch (e) {
-      print('Error loading known device: $e');
+      AppLogger.debug('Error loading known device', e);
     }
   }
 
@@ -363,7 +363,7 @@ class BleProvider extends ChangeNotifier {
       _cpuTempOffsetDeciC =
           (prefs.getInt('cpuTempOffsetDeciC') ?? -200).clamp(-500, 500);
     } catch (e) {
-      print('Error loading cpu temp offset: $e');
+      AppLogger.debug('Error loading cpu temp offset', e);
     }
   }
 
@@ -372,9 +372,9 @@ class BleProvider extends ChangeNotifier {
       SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setString(_deviceIdKey, deviceId);
       _knownDeviceId = deviceId;
-      print('Saved known device ID: $deviceId');
+      AppLogger.debug('Saved known device ID: $deviceId');
     } catch (e) {
-      print('Error saving known device: $e');
+      AppLogger.debug('Error saving known device', e);
     }
   }
 
@@ -383,9 +383,9 @@ class BleProvider extends ChangeNotifier {
       SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.remove(_deviceIdKey);
       _knownDeviceId = null;
-      print('Cleared known device ID');
+      AppLogger.debug('Cleared known device ID');
     } catch (e) {
-      print('Error clearing known device: $e');
+      AppLogger.debug('Error clearing known device', e);
     }
   }
 
@@ -458,17 +458,19 @@ class BleProvider extends ChangeNotifier {
       _scanResultsSubscription?.cancel();
       _scanResultsSubscription = FlutterBluePlus.scanResults.listen((results) {
         scanResults = results;
-        print('Scan results updated: ${results.length} devices found');
+        AppLogger.debug('Scan results updated: ${results.length} devices found');
 
         // Log all devices
         for (var result in results) {
-          print('Found device: ${result.device.name} (${result.device.id})');
+          AppLogger.debug(
+              'Found device: ${result.device.name} (${result.device.id})');
         }
 
         // Log supported devices count only
         List<ScanResult> supportedDevices = supportedScanResults;
         if (supportedDevices.isNotEmpty) {
-          print('Found ${supportedDevices.length} supported device(s)');
+          AppLogger.debug(
+              'Found ${supportedDevices.length} supported device(s)');
         }
 
         notifyListeners();
@@ -567,7 +569,7 @@ class BleProvider extends ChangeNotifier {
       statusMessage = 'connecting'; // Key for localization
       _log('info', 'Attempting to connect to device',
           details: 'Device: ${device.name} (${device.id})');
-      print('Connecting to device: ${device.name} (${device.id})');
+      AppLogger.debug('Connecting to device: ${device.name} (${device.id})');
       notifyListeners();
 
       await device.connect(timeout: connectTimeout);
@@ -577,11 +579,11 @@ class BleProvider extends ChangeNotifier {
       _connectionStateSubscription?.cancel();
       _connectionStateSubscription = device.connectionState.listen((state) {
         bool isCurrentlyConnected = state == BluetoothConnectionState.connected;
-        print('Connection state changed: $isCurrentlyConnected');
+        AppLogger.debug('Connection state changed: $isCurrentlyConnected');
         if (!isCurrentlyConnected && connectedDevice != null) {
           // Only react to disconnection if we fully finished setup
           // (connectedDevice is set after characteristic discovery).
-          print('Device disconnected, resetting state');
+          AppLogger.debug('Device disconnected, resetting state');
           _resetConnectionState();
         }
       });
@@ -591,31 +593,32 @@ class BleProvider extends ChangeNotifier {
 
       // Find our service
       BluetoothService? targetService;
-      print('Discovered services:');
+      AppLogger.debug('Discovered services:');
       for (BluetoothService service in services) {
-        print('  Service UUID: ${service.uuid.toString()}');
+        AppLogger.debug('  Service UUID: ${service.uuid.toString()}');
         if (service.uuid.toString().toUpperCase() ==
             serviceUuid.toUpperCase()) {
           targetService = service;
-          print('  Found target service!');
+          AppLogger.debug('  Found target service!');
           break;
         }
       }
 
       if (targetService != null) {
         // Find characteristics
-        print('Target service characteristics:');
+        AppLogger.debug('Target service characteristics:');
         for (BluetoothCharacteristic characteristic
             in targetService.characteristics) {
-          print('  Characteristic UUID: ${characteristic.uuid.toString()}');
+          AppLogger.debug(
+              '  Characteristic UUID: ${characteristic.uuid.toString()}');
           if (characteristic.uuid.toString().toUpperCase() ==
               txUuid.toUpperCase()) {
             txCharacteristic = characteristic;
-            print('  Found TX characteristic!');
+            AppLogger.debug('  Found TX characteristic!');
           } else if (characteristic.uuid.toString().toUpperCase() ==
               rxUuid.toUpperCase()) {
             rxCharacteristic = characteristic;
-            print('  Found RX characteristic!');
+            AppLogger.debug('  Found RX characteristic!');
           }
         }
 
@@ -634,10 +637,10 @@ class BleProvider extends ChangeNotifier {
           // the default 23-byte ATT_MTU causing fragmentation.
           try {
             int mtu = await device.requestMtu(512);
-            print('MTU negotiated: $mtu');
+            AppLogger.debug('MTU negotiated: $mtu');
             _log('info', 'MTU negotiated', details: 'MTU: $mtu');
           } catch (e) {
-            print('MTU negotiation failed: $e');
+            AppLogger.debug('MTU negotiation failed', e);
             _log('warning', 'MTU negotiation failed', details: 'Error: $e');
           }
 
@@ -668,13 +671,14 @@ class BleProvider extends ChangeNotifier {
             } catch (e) {
               // Fallback: log parse error (legacy chunk path removed)
               if (value.isNotEmpty && value[0] == 0xAA) {
-                print(
-                    'BLE protocol parse error for 0xAA packet (${value.length} bytes): $e');
+                AppLogger.debug(
+                    'BLE protocol parse error for 0xAA packet (${value.length} bytes)',
+                    e);
               } else {
                 // Fallback to text processing — decode as UTF-8 to handle
                 // non-ASCII bytes in file paths, version strings, etc.
                 String message = utf8.decode(value, allowMalformed: true);
-                print('Received text: $message');
+                AppLogger.debug('Received text: $message');
                 _log('debug', 'Received text', details: message);
                 // Old message handling removed - using firmware protocol now
               }
@@ -691,11 +695,11 @@ class BleProvider extends ChangeNotifier {
         }
       } else {
         statusMessage = 'Required service not found';
-        print('ERROR: Our custom service not found!');
-        print('Expected service: $serviceUuid');
-        print('Available services:');
+        AppLogger.debug('ERROR: Our custom service not found!');
+        AppLogger.debug('Expected service: $serviceUuid');
+        AppLogger.debug('Available services:');
         for (BluetoothService service in services) {
-          print('  - ${service.uuid.toString()}');
+          AppLogger.debug('  - ${service.uuid.toString()}');
         }
         await disconnect();
       }
@@ -726,7 +730,6 @@ class BleProvider extends ChangeNotifier {
     fileList.clear();
     currentPath = '/';
     _isWriting = false;
-    _isCommandInProgress = false;
     _commandTimeout?.cancel();
     _commandTimeout = null;
     recordedRuntimeFiles.clear();
@@ -771,7 +774,7 @@ class BleProvider extends ChangeNotifier {
             details: 'Device: ${connectedDevice!.name}');
         await connectedDevice!.disconnect();
       } catch (e) {
-        print('Disconnect error: $e');
+        AppLogger.debug('Disconnect error', e);
         _log('error', 'Error during disconnect', details: 'Error: $e');
       }
     }
@@ -794,7 +797,6 @@ class BleProvider extends ChangeNotifier {
     // Old chunk buffer clearing removed - using firmware protocol now
 
     // Reset command state
-    _isCommandInProgress = false;
     _lastCommandTime = null;
 
     // Cancel command timeout
@@ -945,7 +947,7 @@ class BleProvider extends ChangeNotifier {
   Future<void> _sendCommandDirect(String command) async {
     // Wait for any ongoing write operation to complete
     while (_isWriting) {
-      print('Waiting for previous BLE write to complete...');
+      AppLogger.debug('Waiting for previous BLE write to complete...');
       await Future.delayed(const Duration(milliseconds: 50));
     }
 
@@ -954,7 +956,7 @@ class BleProvider extends ChangeNotifier {
       final timeSinceLastCommand = DateTime.now().difference(_lastCommandTime!);
       if (timeSinceLastCommand < _commandCooldown) {
         final remainingTime = _commandCooldown - timeSinceLastCommand;
-        print(
+        AppLogger.debug(
             'Command cooldown active, waiting: $command (${remainingTime.inMilliseconds}ms remaining)');
         await Future.delayed(remainingTime);
       }
@@ -962,7 +964,7 @@ class BleProvider extends ChangeNotifier {
 
     _lastCommandTime = DateTime.now();
 
-    print('Sending command: "$command" (length: ${command.length})');
+    AppLogger.debug('Sending command: "$command" (length: ${command.length})');
     _log('command', 'Sent command: $command');
 
     try {
@@ -970,8 +972,8 @@ class BleProvider extends ChangeNotifier {
 
       // Convert command to firmware protocol
       Uint8List commandBytes = _convertCommandToFirmwareProtocol(command);
-      print('Command bytes length: ${commandBytes.length}');
-      print(
+      AppLogger.debug('Command bytes length: ${commandBytes.length}');
+      AppLogger.debug(
           'Command bytes: ${commandBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}');
 
       // Add timeout to BLE write (3s max — longer commands have their own
@@ -983,7 +985,7 @@ class BleProvider extends ChangeNotifier {
               'BLE write timeout', const Duration(seconds: 3));
         },
       );
-      print('BLE write completed successfully');
+      AppLogger.debug('BLE write completed successfully');
 
       lastCommandMessage = 'Command sent: $command';
       // Don't update statusMessage for commands to avoid interfering with connection messages
@@ -994,7 +996,7 @@ class BleProvider extends ChangeNotifier {
         _startCommandTimeout(command);
       }
     } catch (e) {
-      print('BLE write failed: $e');
+      AppLogger.debug('BLE write failed', e);
       statusMessage = 'Send error: $e';
       _log('error', 'Failed to send command',
           details: 'Command: $command, Error: $e');
@@ -1023,7 +1025,7 @@ class BleProvider extends ChangeNotifier {
         : _commandTimeoutDuration;
 
     _commandTimeout = Timer(timeoutDuration, () {
-      print('Command timeout: $command');
+      AppLogger.debug('Command timeout: $command');
       _log('warning', 'Command timeout - no response received',
           details: 'Command: $command');
 
@@ -1090,7 +1092,7 @@ class BleProvider extends ChangeNotifier {
     // Set timeout for file list loading
     _fileListTimeout = Timer(_fileListTimeoutDuration, () {
       if (isLoadingFiles) {
-        print('File list loading timeout');
+        AppLogger.debug('File list loading timeout');
         _log('warning', 'File list loading timeout',
             details: 'Path: $currentPath, PathType: $effectivePathType');
         isLoadingFiles = false;
@@ -1101,7 +1103,7 @@ class BleProvider extends ChangeNotifier {
     });
 
     // Use binary command with pathType (no need to escape quotes for binary protocol)
-    print(
+    AppLogger.debug(
         'refreshFileList: currentPath="$currentPath", pathType=$effectivePathType');
     final command = FirmwareBinaryProtocol.createGetFilesListCommand(
         currentPath,
@@ -1115,8 +1117,8 @@ class BleProvider extends ChangeNotifier {
     // Immediately block repeated presses
     if (isLoadingFiles) return;
 
-    print('Navigating to directory: "$directoryName"');
-    print('Current path before navigation: "$currentPath"');
+    AppLogger.debug('Navigating to directory: "$directoryName"');
+    AppLogger.debug('Current path before navigation: "$currentPath"');
 
     // Update current path
     if (currentPath.endsWith('/')) {
@@ -1130,7 +1132,7 @@ class BleProvider extends ChangeNotifier {
       currentPath = '/$currentPath';
     }
 
-    print('New current path: "$currentPath"');
+    AppLogger.debug('New current path: "$currentPath"');
 
     // Check cache before loading
     if (_fileCache.containsKey(currentPath)) {
@@ -1151,7 +1153,7 @@ class BleProvider extends ChangeNotifier {
     // Set timeout for file list loading
     _fileListTimeout = Timer(_fileListTimeoutDuration, () {
       if (isLoadingFiles) {
-        print('File list loading timeout in navigateToDirectory');
+        AppLogger.debug('File list loading timeout in navigateToDirectory');
         _log('warning', 'File list loading timeout',
             details: 'Path: $currentPath');
         isLoadingFiles = false;
@@ -1205,7 +1207,7 @@ class BleProvider extends ChangeNotifier {
     // Set timeout for file list loading
     _fileListTimeout = Timer(_fileListTimeoutDuration, () {
       if (isLoadingFiles) {
-        print('File list loading timeout in navigateUp');
+        AppLogger.debug('File list loading timeout in navigateUp');
         _log('warning', 'File list loading timeout',
             details: 'Path: $currentPath');
         isLoadingFiles = false;
@@ -1378,7 +1380,6 @@ class BleProvider extends ChangeNotifier {
     notifyListeners();
 
     // Clear previous state
-    _currentFileContent = null;
     _pendingFileReadCompleter?.completeError('New file read started');
     final completer = Completer<String>();
     _pendingFileReadCompleter = completer;
@@ -1410,7 +1411,6 @@ class BleProvider extends ChangeNotifier {
     } finally {
       timeout.cancel();
       _pendingFileReadCompleter = null;
-      _currentFileContent = null;
       isLoadingFileContent = false;
       fileContentProgress = 0.0;
       notifyListeners();
@@ -1515,7 +1515,7 @@ class BleProvider extends ChangeNotifier {
     }
 
     if (staleChunkIds.isNotEmpty) {
-      print(
+      AppLogger.debug(
           'Cleaning up ${staleChunkIds.length} stale chunk buffers: $staleChunkIds');
       for (var chunkId in staleChunkIds) {
         final received = _receivedChunks[chunkId] ?? <int>{};
@@ -1545,10 +1545,6 @@ class BleProvider extends ChangeNotifier {
     }
   }
 
-  // Callback functions for chunks (will be set temporarily)
-  Function(int sessionId, String data)? _onChunkComplete;
-  Function(int sessionId, double progress)? _onChunkProgress;
-
   // Chunked response handling for firmware protocol
   final Map<int, Map<int, Uint8List>> _chunkData =
       {}; // chunkId -> chunkNumber -> data (allows overwriting duplicates)
@@ -1565,12 +1561,9 @@ class BleProvider extends ChangeNotifier {
       seconds:
           4); // Timeout if chunks stop arriving (increased from 2s for Android isolate scheduling jitter)
 
-  // Callback for JSON responses
-  Function(dynamic jsonData)? _onJsonReceived;
-
   /// Convert text command to firmware binary protocol
   Uint8List _convertCommandToFirmwareProtocol(String command) {
-    print('Converting command to enhanced protocol: "$command"');
+    AppLogger.debug('Converting command to enhanced protocol: "$command"');
 
     // Parse command and convert to appropriate firmware protocol
     if (command == 'getState') {
@@ -1602,7 +1595,7 @@ class BleProvider extends ChangeNotifier {
       }
 
       if (path.isEmpty || path == '/') path = ''; // Don't send '/' prefix
-      print(
+      AppLogger.debug(
           'Creating getFilesList command for path: "$path" with pathType: $currentPathType');
       // Use currentPathType instead of hardcoded 0 - ensures all storage types work correctly
       return FirmwareBinaryProtocol.createGetFilesListCommand(path,
@@ -1654,7 +1647,7 @@ class BleProvider extends ChangeNotifier {
     }
 
     // Default: send as getState command
-    print('Unknown command, defaulting to getState');
+    AppLogger.debug('Unknown command, defaulting to getState');
     return FirmwareBinaryProtocol.createGetStateCommand();
   }
 
@@ -1677,7 +1670,7 @@ class BleProvider extends ChangeNotifier {
     // CRITICAL: Always check totalChunks > 1, not just isChunked flag
     // This ensures chunked messages are never processed as single messages
     if (totalChunks > 1) {
-      print(
+      AppLogger.debug(
           'Processing as chunked: chunkId=$chunkId, chunkNumber=$chunkNumber, totalChunks=$totalChunks, isLastChunk=$isLastChunk');
       _handleChunkedResponse(chunkId, chunkNumber, totalChunks, isLastChunk,
           isBinary, payloadBytes, payloadString);
@@ -1727,7 +1720,7 @@ class BleProvider extends ChangeNotifier {
         // If a non-system single packet arrives while a chunked transfer is active,
         // ignore it to avoid mixing protocols and corrupting the chunked assembly.
         if (_chunkData.isNotEmpty && !isFileListMessage) {
-          print(
+          AppLogger.debug(
               'INFO: Ignoring single packet while chunk buffers are active (${_chunkData.keys.toList()})');
           return;
         }
@@ -1750,9 +1743,6 @@ class BleProvider extends ChangeNotifier {
       bool isBinary,
       Uint8List? payloadBytes,
       String payloadString) {
-    int payloadLength =
-        isBinary ? (payloadBytes?.length ?? 0) : payloadString.length;
-
     // Clean up stale chunk buffers periodically
     _cleanupStaleChunkBuffers();
 
@@ -1764,7 +1754,7 @@ class BleProvider extends ChangeNotifier {
       _receivedChunks[chunkId] = <int>{};
       _chunkStartTimes[chunkId] = now;
       _chunkLastReceived[chunkId] = now;
-      print(
+      AppLogger.debug(
           'Initialized chunk buffer for chunkId $chunkId, expecting $totalChunks chunks');
     } else {
       // Update last received time
@@ -1775,7 +1765,7 @@ class BleProvider extends ChangeNotifier {
     // Some BLE stacks can deliver notifications out-of-order under load.
     if (chunkNumber > 1 && !_receivedChunks[chunkId]!.contains(1)) {
       final bufferAge = now.difference(_chunkStartTimes[chunkId]!);
-      print(
+      AppLogger.debug(
           'INFO: Chunk $chunkNumber/$totalChunks arrived for chunkId $chunkId before chunk 1 (age: ${bufferAge.inMilliseconds}ms)');
     }
 
@@ -1784,7 +1774,7 @@ class BleProvider extends ChangeNotifier {
     bool isDuplicate = _receivedChunks[chunkId]!.contains(chunkNumber);
 
     if (isDuplicate) {
-      print(
+      AppLogger.debug(
           'INFO: Duplicate chunk $chunkNumber/$totalChunks for chunkId $chunkId, overwriting (BLE retransmission)');
     } else {
       // Mark chunk as received only if it's new
@@ -1822,7 +1812,8 @@ class BleProvider extends ChangeNotifier {
         if (_chunkData[chunkId]!.containsKey(i)) {
           completeBuilder.add(_chunkData[chunkId]![i]!);
         } else {
-          print('ERROR: Missing chunk $i/$totalChunks for chunkId $chunkId');
+          AppLogger.debug(
+              'ERROR: Missing chunk $i/$totalChunks for chunkId $chunkId');
           return; // Don't process incomplete data
         }
       }
@@ -1857,7 +1848,7 @@ class BleProvider extends ChangeNotifier {
 
   /// Handle single (non-chunked) responses
   void _handleSingleResponse(String payload) {
-    print(
+    AppLogger.debug(
         'Handling single response: ${payload.substring(0, payload.length > 100 ? 100 : payload.length)}${payload.length > 100 ? '...' : ''}');
 
     // CRITICAL: Check if this might be part of a chunked message first
@@ -1880,11 +1871,11 @@ class BleProvider extends ChangeNotifier {
       }
 
       if (!isSystemNotification) {
-        print(
+        AppLogger.debug(
             'WARNING: Received single response while chunk buffers are active, ignoring to avoid processing incomplete data');
         return;
       } else {
-        print(
+        AppLogger.debug(
             'INFO: Processing system notification even with active chunk buffers');
       }
     }
@@ -1893,7 +1884,8 @@ class BleProvider extends ChangeNotifier {
     if (payload.isNotEmpty) {
       final firstByte = payload.codeUnitAt(0);
       if (firstByte >= 0x80) {
-        print('Detected binary message: 0x${firstByte.toRadixString(16)}');
+        AppLogger.debug(
+            'Detected binary message: 0x${firstByte.toRadixString(16)}');
         _handleBinaryMessage(Uint8List.fromList(payload.codeUnits));
         return;
       }
@@ -1937,22 +1929,23 @@ class BleProvider extends ChangeNotifier {
               }
             }
           } catch (e2) {
-            print('Manual parsing failed: $e2');
+            AppLogger.debug('Manual parsing failed', e2);
           }
         }
       }
       // Fallback to plain text handling
-      print('Plain text response: $payload');
+      AppLogger.debug('Plain text response: $payload');
       _log('info', 'Plain text response received', details: payload);
     }
   }
 
   /// Handle complete responses (both chunked and single)
   void _handleCompleteResponse(dynamic data) {
-    print('_handleCompleteResponse called with data type: ${data.runtimeType}');
+    AppLogger.debug(
+        '_handleCompleteResponse called with data type: ${data.runtimeType}');
     if (data is Map) {
       String type = data['type'] ?? 'unknown';
-      print('Processing response type: $type');
+      AppLogger.debug('Processing response type: $type');
 
       switch (type) {
         case 'state':
@@ -2166,20 +2159,20 @@ class BleProvider extends ChangeNotifier {
           // Generic command result - no special handling needed
           break;
         default:
-          print('Unknown response type: $type');
+          AppLogger.warning('Unknown response type: $type');
           _log('warning', 'Unknown response type',
               details: 'Type: $type, Data: $data');
       }
     } else {
       // Handle plain text responses
-      print('Plain text response: $data');
+      AppLogger.debug('Plain text response: $data');
       _log('info', 'Plain text response received', details: data.toString());
     }
   }
 
   /// Handle scan result
   void _handleScanResult(dynamic data) {
-    print('Scan result: $data');
+    AppLogger.debug('Scan result: $data');
     _log('info', 'Scan result received', details: data.toString());
     // Update scan results in UI
     notifyListeners();
@@ -2187,7 +2180,7 @@ class BleProvider extends ChangeNotifier {
 
   /// Handle files list response
   void _handleFilesListResponse(dynamic data) {
-    print('Files list response: $data');
+    AppLogger.debug('Files list response: $data');
     _log('info', 'Files list received', details: data.toString());
 
     if (data is List) {
@@ -2203,18 +2196,15 @@ class BleProvider extends ChangeNotifier {
 
   /// Handle file data response
   void _handleFileDataResponse(dynamic data) {
-    print('File data response: $data');
+    AppLogger.debug('File data response: $data');
     _log('info', 'File data received', details: data.toString());
 
     // Handle file content response
     if (data is Map<String, dynamic>) {
       if (data.containsKey('content')) {
         String fileContent = data['content'];
-        print(
+        AppLogger.debug(
             'File content received via file_data, length: ${fileContent.length}');
-
-        // Store the file content for the current file reading operation
-        _currentFileContent = fileContent;
 
         // If we have a pending file reading operation, complete it
         if (_pendingFileReadCompleter != null &&
@@ -2230,7 +2220,7 @@ class BleProvider extends ChangeNotifier {
 
   /// Handle error response
   void _handleErrorResponse(dynamic data) {
-    print('Error response: $data');
+    AppLogger.debug('Error response: $data');
     _log('error', 'Error response received', details: data.toString());
 
     // Extract error message
@@ -2251,7 +2241,7 @@ class BleProvider extends ChangeNotifier {
 
   /// Handle notification response
   void _handleNotification(dynamic data) {
-    print('Notification response: $data');
+    AppLogger.debug('Notification response: $data');
     _log('info', 'Notification received', details: data.toString());
     // Update UI or state on the basis of notification
     notifyListeners();
@@ -2259,13 +2249,13 @@ class BleProvider extends ChangeNotifier {
 
   /// Handle signal detected response
   void _handleSignalDetectedResponse(dynamic data) {
-    print('Signal detected: $data');
+    AppLogger.debug('Signal detected: $data');
     _log('info', 'Signal detected', details: data.toString());
 
     // Parse the signal data and add to detected signals list
     if (data is Map<String, dynamic> && data.containsKey('data')) {
       Map<String, dynamic> signalData = data['data'];
-      print('SignalDetected: Parsing signal data: $signalData');
+      AppLogger.debug('SignalDetected: Parsing signal data: $signalData');
 
       // Get module number
       int module = int.tryParse(signalData['module']?.toString() ?? '0') ?? 0;
@@ -2296,7 +2286,7 @@ class BleProvider extends ChangeNotifier {
       // Note: Frequency search state will be updated by ModeSwitch message
       // when the module transitions back to Idle after detecting signal
       // But add a fallback in case ModeSwitch doesn't arrive
-      print(
+      AppLogger.debug(
           'Signal detected for module $module - waiting for ModeSwitch to update state');
 
       // Fallback: if ModeSwitch doesn't arrive within 2 seconds, stop search manually
@@ -2305,7 +2295,7 @@ class BleProvider extends ChangeNotifier {
           // Only stop if ModeSwitch hasn't already stopped the search
           if (isFrequencySearching[module] == true) {
             isFrequencySearching[module] = false;
-            print(
+            AppLogger.debug(
                 'Module $module frequency search stopped (fallback after signal detection)');
             _log('info', 'Frequency search stopped (fallback)',
                 details: 'Module: $module');
@@ -2313,7 +2303,7 @@ class BleProvider extends ChangeNotifier {
             // Also update module state in cc1101Modules if it exists
             if (cc1101Modules != null && module < cc1101Modules!.length) {
               cc1101Modules![module]['mode'] = 'Idle';
-              print(
+              AppLogger.debug(
                   'Updated module $module mode in cc1101Modules to Idle (fallback)');
             } else if (cc1101Modules == null) {
               // Initialize if needed
@@ -2326,7 +2316,7 @@ class BleProvider extends ChangeNotifier {
               }
               cc1101Modules![module]['mode'] = 'Idle';
               cc1101Modules![module]['id'] = module;
-              print(
+              AppLogger.debug(
                   'Created module $module in cc1101Modules with mode Idle (fallback)');
             }
 
@@ -2335,7 +2325,7 @@ class BleProvider extends ChangeNotifier {
         });
       }
 
-      print('SignalDetected: Created signal: $signal');
+      AppLogger.debug('SignalDetected: Created signal: $signal');
 
       // Only add to detected signals list if it's NOT a background scanner
       // Background scanner signals should only appear on scanner screen
@@ -2350,9 +2340,10 @@ class BleProvider extends ChangeNotifier {
         // Sort by timestamp (newest first)
         detectedSignals.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
-        print('Added signal to list. Total signals: ${detectedSignals.length}');
+        AppLogger.debug(
+            'Added signal to list. Total signals: ${detectedSignals.length}');
       } else {
-        print('Background scanner signal - not adding to main list');
+        AppLogger.debug('Background scanner signal - not adding to main list');
       }
     }
 
@@ -2361,7 +2352,7 @@ class BleProvider extends ChangeNotifier {
 
   /// Handle signal recorded response
   void _handleSignalRecordedResponse(dynamic data) {
-    print('Signal recorded: $data');
+    AppLogger.debug('Signal recorded: $data');
     _log('info', 'Signal recorded', details: data.toString());
 
     // Add the new file to recorded files list
@@ -2392,9 +2383,10 @@ class BleProvider extends ChangeNotifier {
       }
 
       _notify('success', 'Signal recorded: $filename');
-      print('Added new recorded file: $filename');
+      AppLogger.debug('Added new recorded file: $filename');
     } else {
-      print('Could not extract filename from SignalRecorded data: $data');
+      AppLogger.debug(
+          'Could not extract filename from SignalRecorded data: $data');
     }
 
     notifyListeners();
@@ -2408,7 +2400,7 @@ class BleProvider extends ChangeNotifier {
 
   /// Handle signal record error response
   void _handleSignalRecordErrorResponse(dynamic data) {
-    print('Signal record error: $data');
+    AppLogger.debug('Signal record error: $data');
     _log('error', 'Signal record error', details: data.toString());
     _notify('error', 'Record error');
     notifyListeners();
@@ -2416,7 +2408,7 @@ class BleProvider extends ChangeNotifier {
 
   /// Handle signal sent response
   void _handleSignalSentResponse(dynamic data) {
-    print('Signal sent: $data');
+    AppLogger.debug('Signal sent: $data');
     _log('info', 'Signal sent', details: data.toString());
     _notify('success', 'Signal transmitted');
     notifyListeners();
@@ -2424,7 +2416,7 @@ class BleProvider extends ChangeNotifier {
 
   /// Handle signal sending error response
   void _handleSignalSendingErrorResponse(dynamic data) {
-    print('Signal sending error: $data');
+    AppLogger.debug('Signal sending error: $data');
     String errorMessage = 'Transmission failed';
     if (data is Map<String, dynamic> && data.containsKey('data')) {
       final errorData = data['data'];
@@ -2441,16 +2433,9 @@ class BleProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Handle mode switch response
-  void _handleModeSwitchResponse(dynamic data) {
-    print('Mode switch: $data');
-    _log('info', 'Mode switch', details: data.toString());
-    notifyListeners();
-  }
-
   /// Handle file system response
   void _handleFileSystemResponse(dynamic data) {
-    print('File system response: $data');
+    AppLogger.debug('File system response: $data');
     _log('info', 'File system response', details: data.toString());
 
     // Handle file system operations
@@ -2458,14 +2443,15 @@ class BleProvider extends ChangeNotifier {
       // Handle DirectoryTree response FIRST (top-level type check)
       // Structure from BinaryMessageParser: {type: 'DirectoryTree', data: {pathType: 0, paths: [...], streaming: bool, totalDirs: int}}
       if (data.containsKey('type') && data['type'] == 'DirectoryTree') {
-        print('DirectoryTree response detected (top-level): $data');
+        AppLogger.debug('DirectoryTree response detected (top-level): $data');
 
         if (data.containsKey('data') && data['data'] is Map<String, dynamic>) {
           Map<String, dynamic> directoryTreeData = data['data'];
 
           // Check for errors first
           if (directoryTreeData.containsKey('error')) {
-            print('Directory tree error: ${directoryTreeData['error']}');
+            AppLogger.debug(
+                'Directory tree error: ${directoryTreeData['error']}');
             _isStreamingDirectoryTree = false;
             _streamingDirectoryTreeBuffer.clear();
             _streamingTotalDirs = 0;
@@ -2491,7 +2477,7 @@ class BleProvider extends ChangeNotifier {
               // 0xFFFF (65535) means total is unknown
               _streamingTotalDirs = (totalDirs == 65535) ? 0 : totalDirs;
               _isStreamingDirectoryTree = true;
-              print(
+              AppLogger.debug(
                   'Directory tree streaming started, totalDirs: $_streamingTotalDirs');
             }
 
@@ -2502,7 +2488,7 @@ class BleProvider extends ChangeNotifier {
               }
             }
 
-            print(
+            AppLogger.debug(
                 'Directory tree streaming: ${_streamingDirectoryTreeBuffer.length} paths received${_streamingTotalDirs > 0 ? ' / $_streamingTotalDirs' : ''}');
           } else {
             // Final or single message
@@ -2527,32 +2513,34 @@ class BleProvider extends ChangeNotifier {
               _streamingTotalDirs = 0;
               _isStreamingDirectoryTree = false;
 
-              print(
+              AppLogger.debug(
                   'Directory tree stream complete: ${directoryTreeResponse['data']['paths'].length} paths total');
 
               if (_pendingDirectoryTreeCompleter != null &&
                   !_pendingDirectoryTreeCompleter!.isCompleted) {
                 _pendingDirectoryTreeCompleter!.complete(directoryTreeResponse);
-                print(
+                AppLogger.debug(
                     'Directory tree completer completed successfully (streaming)');
               }
             } else {
               // Single message (non-streaming)
-              print('Directory tree single message: ${paths.length} paths');
+              AppLogger.debug(
+                  'Directory tree single message: ${paths.length} paths');
 
               if (_pendingDirectoryTreeCompleter != null &&
                   !_pendingDirectoryTreeCompleter!.isCompleted) {
                 _pendingDirectoryTreeCompleter!.complete(data);
-                print(
+                AppLogger.debug(
                     'Directory tree completer completed successfully (single message)');
               } else {
-                print(
+                AppLogger.debug(
                     'Warning: Directory tree completer is null or already completed');
               }
             }
           }
         } else {
-          print('Warning: DirectoryTree response missing data field: $data');
+          AppLogger.debug(
+              'Warning: DirectoryTree response missing data field: $data');
         }
         return; // Don't process further
       }
@@ -2565,7 +2553,7 @@ class BleProvider extends ChangeNotifier {
             responseData['action'] == 'list') {
           // Check for errors first
           if (responseData.containsKey('error')) {
-            print('File list error: ${responseData['error']}');
+            AppLogger.debug('File list error: ${responseData['error']}');
             _log('error', 'File list error',
                 details: responseData['error'].toString());
             isLoadingFiles = false;
@@ -2593,7 +2581,7 @@ class BleProvider extends ChangeNotifier {
                 try {
                   parsedFiles.add(FileItem.fromJson(file));
                 } catch (e) {
-                  print('Error parsing file item: $e');
+                  AppLogger.debug('Error parsing file item', e);
                 }
               }
             }
@@ -2671,7 +2659,7 @@ class BleProvider extends ChangeNotifier {
             }
           } else {
             // Invalid response format
-            print('Invalid file list response format');
+            AppLogger.debug('Invalid file list response format');
             _log('warning', 'Invalid file list response',
                 details: 'Missing or invalid files array');
             isLoadingFiles = false;
@@ -2688,7 +2676,7 @@ class BleProvider extends ChangeNotifier {
 
       // Handle file load response (direct response, not nested in 'data')
       if (data.containsKey('action') && data['action'] == 'load') {
-        print('File load response received (direct)');
+        AppLogger.debug('File load response received (direct)');
         _handleFileLoadResponse(data);
       }
 
@@ -2697,14 +2685,14 @@ class BleProvider extends ChangeNotifier {
         Map<String, dynamic> responseData = data['data'];
         if (responseData.containsKey('action') &&
             responseData['action'] == 'load') {
-          print('File load response received (nested in data)');
+          AppLogger.debug('File load response received (nested in data)');
           _handleFileLoadResponse(responseData);
         }
 
         // Handle rename response
         if (responseData.containsKey('action') &&
             responseData['action'] == 'rename') {
-          print('Rename response received: $responseData');
+          AppLogger.debug('Rename response received: $responseData');
           if (_pendingRenameCompleter != null &&
               !_pendingRenameCompleter!.isCompleted) {
             _pendingRenameCompleter!.complete(responseData);
@@ -2714,7 +2702,7 @@ class BleProvider extends ChangeNotifier {
         // Handle delete response
         if (responseData.containsKey('action') &&
             responseData['action'] == 'delete') {
-          print('Delete response received: $responseData');
+          AppLogger.debug('Delete response received: $responseData');
           if (_pendingDeleteCompleter != null &&
               !_pendingDeleteCompleter!.isCompleted) {
             _pendingDeleteCompleter!.complete(responseData);
@@ -2724,7 +2712,7 @@ class BleProvider extends ChangeNotifier {
         // Handle create-directory response
         if (responseData.containsKey('action') &&
             responseData['action'] == 'create-directory') {
-          print('Create directory response received: $responseData');
+          AppLogger.debug('Create directory response received: $responseData');
           if (_pendingMkdirCompleter != null &&
               !_pendingMkdirCompleter!.isCompleted) {
             _pendingMkdirCompleter!.complete(responseData);
@@ -2734,14 +2722,14 @@ class BleProvider extends ChangeNotifier {
         // Handle upload response
         if (responseData.containsKey('action') &&
             responseData['action'] == 'upload') {
-          print('Upload response received: $responseData');
+          AppLogger.debug('Upload response received: $responseData');
           _handleFileUploadResponse(responseData);
         }
 
         // Handle format-sd response
         if (responseData.containsKey('action') &&
             responseData['action'] == 'format-sd') {
-          print('Format SD response received: $responseData');
+          AppLogger.debug('Format SD response received: $responseData');
 
           // Check if this is a progress update (errorCode 0xFF) or final result
           if (responseData['isProgress'] == true) {
@@ -2764,7 +2752,7 @@ class BleProvider extends ChangeNotifier {
         // Handle copy response
         if (responseData.containsKey('action') &&
             responseData['action'] == 'copy') {
-          print('Copy response received: $responseData');
+          AppLogger.debug('Copy response received: $responseData');
           if (_pendingCopyCompleter != null &&
               !_pendingCopyCompleter!.isCompleted) {
             _pendingCopyCompleter!.complete(responseData);
@@ -2774,7 +2762,7 @@ class BleProvider extends ChangeNotifier {
         // Handle move response
         if (responseData.containsKey('action') &&
             responseData['action'] == 'move') {
-          print('Move response received: $responseData');
+          AppLogger.debug('Move response received: $responseData');
           if (_pendingMoveCompleter != null &&
               !_pendingMoveCompleter!.isCompleted) {
             _pendingMoveCompleter!.complete(responseData);
@@ -2784,7 +2772,7 @@ class BleProvider extends ChangeNotifier {
 
       // Handle copy response (direct, not nested)
       if (data.containsKey('action') && data['action'] == 'copy') {
-        print('Copy response received (direct): $data');
+        AppLogger.debug('Copy response received (direct): $data');
         if (_pendingCopyCompleter != null &&
             !_pendingCopyCompleter!.isCompleted) {
           _pendingCopyCompleter!.complete(data);
@@ -2793,7 +2781,7 @@ class BleProvider extends ChangeNotifier {
 
       // Handle move response (direct, not nested)
       if (data.containsKey('action') && data['action'] == 'move') {
-        print('Move response received (direct): $data');
+        AppLogger.debug('Move response received (direct): $data');
         if (_pendingMoveCompleter != null &&
             !_pendingMoveCompleter!.isCompleted) {
           _pendingMoveCompleter!.complete(data);
@@ -2802,7 +2790,7 @@ class BleProvider extends ChangeNotifier {
 
       // Handle upload response (direct, not nested)
       if (data.containsKey('action') && data['action'] == 'upload') {
-        print('Upload response received (direct): $data');
+        AppLogger.debug('Upload response received (direct): $data');
         _handleFileUploadResponse(data);
       }
     }
@@ -2812,30 +2800,27 @@ class BleProvider extends ChangeNotifier {
 
   /// Handle file load response
   void _handleFileLoadResponse(Map<String, dynamic> data) {
-    print('Handling file load response: $data');
+    AppLogger.debug('Handling file load response: $data');
 
     if (data.containsKey('success') && data['success'] == true) {
       if (data.containsKey('content')) {
         String fileContent = data['content'];
-        print('File content received, length: ${fileContent.length}');
-        print(
+        AppLogger.debug('File content received, length: ${fileContent.length}');
+        AppLogger.debug(
             'File content preview: ${fileContent.substring(0, fileContent.length > 100 ? 100 : fileContent.length)}...');
-
-        // Store the file content for the current file reading operation
-        _currentFileContent = fileContent;
 
         // If we have a pending file reading operation, complete it
         if (_pendingFileReadCompleter != null &&
             !_pendingFileReadCompleter!.isCompleted) {
-          print(
+          AppLogger.debug(
               'Completing pending file read completer with content length: ${fileContent.length}');
           _pendingFileReadCompleter!.complete(fileContent);
           _pendingFileReadCompleter = null;
         } else {
-          print('No pending file read completer found');
+          AppLogger.debug('No pending file read completer found');
         }
       } else {
-        print('File load response missing content field');
+        AppLogger.debug('File load response missing content field');
         if (_pendingFileReadCompleter != null &&
             !_pendingFileReadCompleter!.isCompleted) {
           _pendingFileReadCompleter!
@@ -2845,7 +2830,7 @@ class BleProvider extends ChangeNotifier {
       }
     } else {
       String error = data['error'] ?? 'Unknown error loading file';
-      print('File load failed: $error');
+      AppLogger.debug('File load failed: $error');
       if (_pendingFileReadCompleter != null &&
           !_pendingFileReadCompleter!.isCompleted) {
         _pendingFileReadCompleter!.completeError(error);
@@ -2856,7 +2841,7 @@ class BleProvider extends ChangeNotifier {
 
   /// Handle file upload response
   void _handleFileUploadResponse(dynamic data) {
-    print('File upload response: $data');
+    AppLogger.debug('File upload response: $data');
     _log('info', 'File upload response', details: data.toString());
 
     // Check if we have a pending upload completer
@@ -2880,7 +2865,6 @@ class BleProvider extends ChangeNotifier {
 
   Completer<Map<String, dynamic>>? _pendingUploadCompleter;
   double _uploadProgress = 0.0;
-  bool _isUploading = false;
 
   /// Upload file to ESP32 with chunking
   /// Reads file from device storage and uploads it in chunks
@@ -2899,7 +2883,6 @@ class BleProvider extends ChangeNotifier {
     }
 
     _log('INFO', 'Uploading file: ${file.path} to $targetPath');
-    _isUploading = true;
     _uploadProgress = 0.0;
     notifyListeners();
 
@@ -2997,12 +2980,10 @@ class BleProvider extends ChangeNotifier {
         timeout.cancel();
         _uploadProgress = 1.0;
         onProgress?.call(1.0);
-        _isUploading = false;
         notifyListeners();
         return response;
       } catch (e) {
         timeout.cancel();
-        _isUploading = false;
         _uploadProgress = 0.0;
         notifyListeners();
         rethrow;
@@ -3010,7 +2991,6 @@ class BleProvider extends ChangeNotifier {
         _pendingUploadCompleter = null;
       }
     } catch (e) {
-      _isUploading = false;
       _uploadProgress = 0.0;
       notifyListeners();
       _log('ERROR', 'File upload failed: $e');
@@ -3313,7 +3293,7 @@ class BleProvider extends ChangeNotifier {
           withoutResponse && txCharacteristic!.properties.writeWithoutResponse;
       await txCharacteristic!.write(command, withoutResponse: useNoResp);
     } catch (e) {
-      print('Error sending binary command: $e');
+      AppLogger.debug('Error sending binary command', e);
       throw Exception('Failed to send command: $e');
     }
   }
@@ -4276,34 +4256,35 @@ class BleProvider extends ChangeNotifier {
   }
 
   void _handleModeSwitch(Map<String, dynamic> modeData) {
-    print('_handleModeSwitch called with data: $modeData');
+    AppLogger.debug('_handleModeSwitch called with data: $modeData');
     final now = DateTime.now();
-    print('MODE_SWITCH ARRIVED at ${now.millisecondsSinceEpoch}');
+    AppLogger.debug('MODE_SWITCH ARRIVED at ${now.millisecondsSinceEpoch}');
     int module = int.tryParse(modeData['module']?.toString() ?? '0') ?? 0;
     String mode = modeData['mode'] ?? 'Unknown';
     String previousMode = modeData['previousMode'] ?? 'Unknown';
 
-    print('Mode switch: module=$module, mode=$mode, previous=$previousMode');
-    print(
+    AppLogger.debug(
+        'Mode switch: module=$module, mode=$mode, previous=$previousMode');
+    AppLogger.debug(
         'Current cc1101Modules state before update: ${cc1101Modules?.map((m) => 'Module ${m['id']}: ${m['mode']}').join(', ')}');
 
     // Update recording state
     if (mode == 'RecordSignal') {
       isRecording[module] = true;
-      print('Module $module started recording');
+      AppLogger.debug('Module $module started recording');
     } else if (mode == 'Idle') {
       isRecording[module] = false;
-      print('Module $module stopped recording');
+      AppLogger.debug('Module $module stopped recording');
     }
 
     // Update jamming state
     if (mode == 'Jamming') {
       isJamming[module] = true;
-      print('Module $module started jamming');
+      AppLogger.debug('Module $module started jamming');
     } else if (mode == 'Idle') {
       isJamming[module] = false;
       if (previousMode == 'Jamming') {
-        print('Module $module stopped jamming');
+        AppLogger.debug('Module $module stopped jamming');
       }
     }
 
@@ -4311,7 +4292,7 @@ class BleProvider extends ChangeNotifier {
     if (mode == 'DetectSignal') {
       // Always set frequency search flag on transition to DetectSignal
       isFrequencySearching[module] = true;
-      print(
+      AppLogger.debug(
           'Module $module frequency search started (ModeSwitch to DetectSignal)');
       _log('info', 'Frequency search started', details: 'Module: $module');
     } else if (mode == 'Idle' && previousMode == 'DetectSignal') {
@@ -4319,7 +4300,7 @@ class BleProvider extends ChangeNotifier {
       // Controller automatically transitions to Idle after signal detection
       if (isFrequencySearching[module] == true) {
         isFrequencySearching[module] = false;
-        print(
+        AppLogger.debug(
             'Module $module frequency search stopped (ModeSwitch from DetectSignal to Idle)');
         _log('info', 'Frequency search stopped', details: 'Module: $module');
       }
@@ -4327,14 +4308,15 @@ class BleProvider extends ChangeNotifier {
       // On transition to Idle from another mode, also reset if flag was set
       if (isFrequencySearching[module] == true) {
         isFrequencySearching[module] = false;
-        print('Module $module frequency search stopped (ModeSwitch to Idle)');
+        AppLogger.debug(
+            'Module $module frequency search stopped (ModeSwitch to Idle)');
       }
     }
 
     // Update module state in cc1101Modules for UI display
     if (cc1101Modules != null && module < cc1101Modules!.length) {
       cc1101Modules![module]['mode'] = mode;
-      print('Updated module $module mode in cc1101Modules to: $mode');
+      AppLogger.debug('Updated module $module mode in cc1101Modules to: $mode');
     } else {
       // If cc1101Modules is not initialized, create basic structure
       cc1101Modules ??= [];
@@ -4347,7 +4329,8 @@ class BleProvider extends ChangeNotifier {
       }
       cc1101Modules![module]['mode'] = mode;
       cc1101Modules![module]['id'] = module;
-      print('Created/updated module $module in cc1101Modules with mode: $mode');
+      AppLogger.debug(
+          'Created/updated module $module in cc1101Modules with mode: $mode');
     }
 
     // Notify UI of changes
@@ -4383,31 +4366,31 @@ class BleProvider extends ChangeNotifier {
         int moduleId = module['id'] ?? 0;
         String mode = module['mode'] ?? 'Unknown';
 
-        print('Module $moduleId: mode=$mode');
+        AppLogger.debug('Module $moduleId: mode=$mode');
 
         // Update recording state
         if (mode == 'RecordSignal') {
           isRecording[moduleId] = true;
-          print('Module $moduleId is recording');
+          AppLogger.debug('Module $moduleId is recording');
         } else {
           isRecording[moduleId] = false;
-          print('Module $moduleId is not recording');
+          AppLogger.debug('Module $moduleId is not recording');
         }
 
         // Update jamming state
         if (mode == 'Jamming') {
           isJamming[moduleId] = true;
-          print('Module $moduleId is jamming');
+          AppLogger.debug('Module $moduleId is jamming');
         } else {
           isJamming[moduleId] = false;
-          print('Module $moduleId is not jamming');
+          AppLogger.debug('Module $moduleId is not jamming');
         }
       }
 
-      print('Final recording state: $isRecording');
+      AppLogger.debug('Final recording state: $isRecording');
     }
 
-    print('Calling notifyListeners()');
+    AppLogger.debug('Calling notifyListeners()');
     notifyListeners();
   }
 
@@ -4846,15 +4829,15 @@ class BleProvider extends ChangeNotifier {
     _streamingTotalDirs = 0;
 
     _pendingDirectoryTreeCompleter = Completer<Map<String, dynamic>>();
-    print('Created directory tree completer for pathType: $pathType');
+    AppLogger.debug('Created directory tree completer for pathType: $pathType');
 
     // Send directory tree request command
     final command = FirmwareBinaryProtocol.createGetDirectoryTreeCommand(
         pathType: pathType);
-    print(
+    AppLogger.debug(
         'Sending getDirectoryTree command (pathType: $pathType, command length: ${command.length})');
     await sendBinaryCommand(command);
-    print('Command sent, waiting for response...');
+    AppLogger.debug('Command sent, waiting for response...');
 
     // Set timeout
     Timer timeout = Timer(const Duration(seconds: 30), () {
@@ -4870,7 +4853,7 @@ class BleProvider extends ChangeNotifier {
       final response = await _pendingDirectoryTreeCompleter!.future;
       timeout.cancel();
 
-      print('Received directory tree response: $response');
+      AppLogger.debug('Received directory tree response: $response');
 
       // Parse response
       if (response.containsKey('data') &&
@@ -4883,7 +4866,7 @@ class BleProvider extends ChangeNotifier {
 
         if (data.containsKey('paths') && data['paths'] is List) {
           List<dynamic> paths = data['paths'];
-          print('Building tree from ${paths.length} paths');
+          AppLogger.debug('Building tree from ${paths.length} paths');
 
           // Rebuild tree from flat paths
           List<DirectoryTreeNode> tree =
@@ -4893,11 +4876,11 @@ class BleProvider extends ChangeNotifier {
               details: '${paths.length} directories');
           return tree;
         } else {
-          print(
+          AppLogger.debug(
               'Response data missing paths field. Keys: ${data.keys.toList()}');
         }
       } else {
-        print(
+        AppLogger.debug(
             'Response missing data field or data is not Map. Response keys: ${response.keys.toList()}');
       }
 
@@ -4995,27 +4978,6 @@ class BleProvider extends ChangeNotifier {
     }
 
     return cc1101Modules![moduleIndex]['mode']?.toString() ?? 'Unknown';
-  }
-
-  /// Wait for device response — DEPRECATED, use Completer pattern instead\n  /// Kept only for backward compatibility; should not be used.\n  @Deprecated('Use Completer pattern like _pendingRenameCompleter instead')
-  Future<Map<String, dynamic>?> _waitForResponse() async {
-    final completer = Completer<Map<String, dynamic>?>();
-
-    // Set timeout
-    Timer timeout = Timer(const Duration(seconds: 10), () {
-      if (!completer.isCompleted) {
-        completer.complete(null);
-      }
-    });
-
-    try {
-      // In a real implementation, there should be a response waiting mechanism here
-      // For now, return a stub
-      await Future.delayed(const Duration(milliseconds: 100));
-      return {'type': 'success', 'success': true};
-    } finally {
-      timeout.cancel();
-    }
   }
 
   /// Save file to signals directory with chosen name

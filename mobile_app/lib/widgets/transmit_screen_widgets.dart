@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../l10n/app_localizations.dart';
-import '../services/cc1101/cc1101_values.dart';
 
 /// Widget for signal preview
 class SignalPreviewWidget extends StatelessWidget {
@@ -45,16 +44,16 @@ class SignalPreviewWidget extends StatelessWidget {
             Text(
               AppLocalizations.of(context)!.signalPreview,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+                    fontWeight: FontWeight.bold,
+                  ),
             ),
             const SizedBox(height: 16),
-            
+
             // Signal info
             _buildSignalInfo(context),
-            
+
             const SizedBox(height: 16),
-            
+
             // Data visualization
             _buildDataVisualization(context),
           ],
@@ -68,14 +67,18 @@ class SignalPreviewWidget extends StatelessWidget {
     return Column(
       children: [
         if (frequency != null)
-          _buildInfoRow(l10n.frequencyLabel, '${frequency!.toStringAsFixed(2)} MHz'),
+          _buildInfoRow(
+              l10n.frequencyLabel, '${frequency!.toStringAsFixed(2)} MHz'),
         if (modulation != null)
           _buildInfoRow(l10n.modulationLabel, modulation!),
         if (dataRate != null)
-          _buildInfoRow(l10n.dataRateLabel, '${dataRate!.toStringAsFixed(2)} kBaud'),
+          _buildInfoRow(
+              l10n.dataRateLabel, '${dataRate!.toStringAsFixed(2)} kBaud'),
         if (deviation != null)
-          _buildInfoRow(l10n.deviationLabel, '${deviation!.toStringAsFixed(2)} kHz'),
-        _buildInfoRow(l10n.dataLength, l10n.sampleCount(rawData.split(' ').length)),
+          _buildInfoRow(
+              l10n.deviationLabel, '${deviation!.toStringAsFixed(2)} kHz'),
+        _buildInfoRow(
+            l10n.dataLength, l10n.sampleCount(rawData.split(' ').length)),
       ],
     );
   }
@@ -120,17 +123,18 @@ class SignalPreviewWidget extends StatelessWidget {
           runSpacing: 4,
           children: [
             ...displaySamples.map((sample) => Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: Colors.blue.withOpacity(0.3)),
-              ),
-              child: Text(
-                sample,
-                style: const TextStyle(fontFamily: 'monospace'),
-              ),
-            )),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                  ),
+                  child: Text(
+                    sample,
+                    style: const TextStyle(fontFamily: 'monospace'),
+                  ),
+                )),
             if (hasMore)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -173,11 +177,10 @@ class FileLoadWidget extends StatelessWidget {
             Text(
               AppLocalizations.of(context)!.loadSignalFile,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+                    fontWeight: FontWeight.bold,
+                  ),
             ),
             const SizedBox(height: 16),
-            
             Row(
               children: [
                 Expanded(
@@ -194,16 +197,15 @@ class FileLoadWidget extends StatelessWidget {
                 const SizedBox(width: 16),
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: enabled ? () => _showSupportedFormats(context) : null,
+                    onPressed:
+                        enabled ? () => _showSupportedFormats(context) : null,
                     icon: const Icon(Icons.help_outline),
                     label: Text(AppLocalizations.of(context)!.formats),
                   ),
                 ),
               ],
             ),
-            
             const SizedBox(height: 12),
-            
             Text(
               AppLocalizations.of(context)!.supportedFormatsShort,
               style: const TextStyle(
@@ -231,9 +233,7 @@ class FileLoadWidget extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             Text(AppLocalizations.of(context)!.flipperSubGhzDetails),
-            
             const SizedBox(height: 16),
-            
             Text(
               AppLocalizations.of(context)!.tutJsonFormat,
               style: const TextStyle(fontWeight: FontWeight.bold),
@@ -268,7 +268,7 @@ class TransmitStatusWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      color: isTransmitting 
+      color: isTransmitting
           ? Theme.of(context).colorScheme.primaryContainer
           : Theme.of(context).colorScheme.surface,
       child: Padding(
@@ -288,10 +288,13 @@ class TransmitStatusWidget extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        isTransmitting ? AppLocalizations.of(context)!.transmittingEllipsis : AppLocalizations.of(context)!.readyToTransmit,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                        isTransmitting
+                            ? AppLocalizations.of(context)!.transmittingEllipsis
+                            : AppLocalizations.of(context)!.readyToTransmit,
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
                       ),
                       if (statusMessage != null) ...[
                         const SizedBox(height: 4),
@@ -305,7 +308,6 @@ class TransmitStatusWidget extends StatelessWidget {
                 ),
               ],
             ),
-            
             if (isTransmitting && progress != null) ...[
               const SizedBox(height: 16),
               LinearProgressIndicator(
@@ -340,7 +342,7 @@ class TransmitValidationWidget extends StatelessWidget {
     }
 
     return Card(
-      color: errors.isNotEmpty 
+      color: errors.isNotEmpty
           ? Theme.of(context).colorScheme.errorContainer
           : Theme.of(context).colorScheme.primaryContainer,
       child: Padding(
@@ -352,49 +354,51 @@ class TransmitValidationWidget extends StatelessWidget {
               children: [
                 Icon(
                   errors.isNotEmpty ? Icons.error : Icons.warning,
-                  color: errors.isNotEmpty 
+                  color: errors.isNotEmpty
                       ? Theme.of(context).colorScheme.onErrorContainer
                       : Theme.of(context).colorScheme.onPrimaryContainer,
                   size: 24,
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  errors.isNotEmpty ? AppLocalizations.of(context)!.validationErrors : AppLocalizations.of(context)!.warnings,
+                  errors.isNotEmpty
+                      ? AppLocalizations.of(context)!.validationErrors
+                      : AppLocalizations.of(context)!.warnings,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: errors.isNotEmpty 
-                        ? Theme.of(context).colorScheme.onErrorContainer
-                        : Theme.of(context).colorScheme.onPrimaryContainer,
-                  ),
+                        fontWeight: FontWeight.bold,
+                        color: errors.isNotEmpty
+                            ? Theme.of(context).colorScheme.onErrorContainer
+                            : Theme.of(context).colorScheme.onPrimaryContainer,
+                      ),
                 ),
               ],
             ),
             const SizedBox(height: 12),
-            
             if (errors.isNotEmpty) ...[
               ...errors.map((error) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('• ', style: TextStyle(fontWeight: FontWeight.bold)),
-                    Expanded(child: Text(error)),
-                  ],
-                ),
-              )),
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('• ',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                        Expanded(child: Text(error)),
+                      ],
+                    ),
+                  )),
             ],
-            
             if (warnings.isNotEmpty) ...[
               ...warnings.map((warning) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('⚠ ', style: TextStyle(fontWeight: FontWeight.bold)),
-                    Expanded(child: Text(warning)),
-                  ],
-                ),
-              )),
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('⚠ ',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                        Expanded(child: Text(warning)),
+                      ],
+                    ),
+                  )),
             ],
           ],
         ),
@@ -437,11 +441,10 @@ class TransmitHistoryWidget extends StatelessWidget {
             Text(
               AppLocalizations.of(context)!.transmissionHistory,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+                    fontWeight: FontWeight.bold,
+                  ),
             ),
             const SizedBox(height: 16),
-            
             ListView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
@@ -462,7 +465,9 @@ class TransmitHistoryWidget extends StatelessWidget {
                     ),
                   ),
                   trailing: Text(
-                    item.success ? AppLocalizations.of(context)!.success : AppLocalizations.of(context)!.failed,
+                    item.success
+                        ? AppLocalizations.of(context)!.success
+                        : AppLocalizations.of(context)!.failed,
                     style: TextStyle(
                       color: item.success ? Colors.green : Colors.red,
                       fontWeight: FontWeight.bold,
@@ -496,25 +501,3 @@ class TransmitHistoryItem {
     this.errorMessage,
   });
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

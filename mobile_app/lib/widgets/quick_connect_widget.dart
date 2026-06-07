@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/ble_provider.dart';
+import '../services/logger_service.dart';
 import '../theme/app_colors.dart';
 
 class QuickConnectWidget extends StatelessWidget {
@@ -163,7 +164,7 @@ class QuickConnectWidget extends StatelessWidget {
                     onPressed: () {
                       bleProvider.clearDeviceCache();
                       bleProvider.statusMessage = '';
-                      bleProvider.notifyListeners();
+                      bleProvider.nrfNotify();
                     },
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.error,
@@ -316,7 +317,7 @@ class QuickConnectWidget extends StatelessWidget {
       // Save this device for future quick connections
       await bleProvider.saveKnownDevice(device.id.toString());
     } catch (e) {
-      print('Connection failed: $e');
+      AppLogger.severe('Connection failed', e);
     }
   }
 

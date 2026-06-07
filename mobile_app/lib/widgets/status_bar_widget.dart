@@ -4,6 +4,7 @@ import '../l10n/app_localizations.dart';
 import '../providers/ble_provider.dart';
 import '../providers/notification_provider.dart';
 import '../providers/settings_provider.dart';
+import '../services/logger_service.dart';
 import '../theme/app_colors.dart';
 import 'quick_connect_widget.dart';
 import 'module_status_widget.dart';
@@ -55,7 +56,7 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
                 children: [
                   // Left part: status icons (5-6 icons)
                   _buildStatusIcons(context),
-                  
+
                   // Separator
                   Container(
                     width: 1,
@@ -63,7 +64,7 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
                     margin: const EdgeInsets.symmetric(horizontal: 8),
                     color: Theme.of(context).dividerColor.withOpacity(0.3),
                   ),
-                  
+
                   // Right part: notification area
                   Expanded(
                     child: _buildNotificationArea(context),
@@ -73,7 +74,7 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
             ),
           ),
         ),
-        
+
         // Expanded content with background shading
         if (_isExpanded) ...[
           // Background dimming
@@ -121,13 +122,14 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
                   children: [
                     // Quick Connect Widget (device widget with disconnect button)
                     const QuickConnectWidget(),
-                    
+
                     const SizedBox(height: 12),
-                    
+
                     // Module Status Widget
                     Consumer<BleProvider>(
                       builder: (context, bleProvider, child) {
-                        if (bleProvider.isConnected && bleProvider.cc1101Modules != null) {
+                        if (bleProvider.isConnected &&
+                            bleProvider.cc1101Modules != null) {
                           return ModuleStatusWidget(
                             cc1101Modules: bleProvider.cc1101Modules!,
                             deviceInfo: {'freeHeap': bleProvider.freeHeap ?? 0},
@@ -165,41 +167,52 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
             children: [
               // 1. BLE Connection Status
               _StatusIcon(
-                icon: bleProvider.isConnected 
-                    ? Icons.bluetooth_connected 
+                icon: bleProvider.isConnected
+                    ? Icons.bluetooth_connected
                     : Icons.bluetooth_disabled,
-                color: bleProvider.isConnected 
+                color: bleProvider.isConnected
                     ? const Color(0xFF42A5F5) // Blue for connected
-                    : const Color(0xFFEF5350).withOpacity(0.5), // Dim red for disconnected
-                tooltip: bleProvider.isConnected 
-                    ? AppLocalizations.of(context)!.connectedToDevice(bleProvider.connectedDevice?.platformName ?? AppLocalizations.of(context)!.unknown)
+                    : const Color(0xFFEF5350)
+                        .withOpacity(0.5), // Dim red for disconnected
+                tooltip: bleProvider.isConnected
+                    ? AppLocalizations.of(context)!.connectedToDevice(
+                        bleProvider.connectedDevice?.platformName ??
+                            AppLocalizations.of(context)!.unknown)
                     : AppLocalizations.of(context)!.notConnected,
               ),
-              
+
               const SizedBox(width: 6),
-              
+
               // 2. Module 0 Status
-              if (bleProvider.isConnected && bleProvider.cc1101Modules != null && bleProvider.cc1101Modules!.isNotEmpty)
+              if (bleProvider.isConnected &&
+                  bleProvider.cc1101Modules != null &&
+                  bleProvider.cc1101Modules!.isNotEmpty)
                 _StatusIcon(
                   icon: Icons.settings_input_antenna,
-                  color: _getModuleColorFromMode(bleProvider.cc1101Modules![0]['mode'] ?? 'Idle'),
-                  tooltip: '${AppLocalizations.of(context)!.subGhzModule(1)}: ${bleProvider.cc1101Modules![0]['mode'] ?? AppLocalizations.of(context)!.unknown}',
+                  color: _getModuleColorFromMode(
+                      bleProvider.cc1101Modules![0]['mode'] ?? 'Idle'),
+                  tooltip:
+                      '${AppLocalizations.of(context)!.subGhzModule(1)}: ${bleProvider.cc1101Modules![0]['mode'] ?? AppLocalizations.of(context)!.unknown}',
                   label: '1',
                 ),
-              
+
               const SizedBox(width: 6),
-              
+
               // 3. Module 1 Status
-              if (bleProvider.isConnected && bleProvider.cc1101Modules != null && bleProvider.cc1101Modules!.length > 1)
+              if (bleProvider.isConnected &&
+                  bleProvider.cc1101Modules != null &&
+                  bleProvider.cc1101Modules!.length > 1)
                 _StatusIcon(
                   icon: Icons.settings_input_antenna,
-                  color: _getModuleColorFromMode(bleProvider.cc1101Modules![1]['mode'] ?? 'Idle'),
-                  tooltip: '${AppLocalizations.of(context)!.subGhzModule(2)}: ${bleProvider.cc1101Modules![1]['mode'] ?? AppLocalizations.of(context)!.unknown}',
+                  color: _getModuleColorFromMode(
+                      bleProvider.cc1101Modules![1]['mode'] ?? 'Idle'),
+                  tooltip:
+                      '${AppLocalizations.of(context)!.subGhzModule(2)}: ${bleProvider.cc1101Modules![1]['mode'] ?? AppLocalizations.of(context)!.unknown}',
                   label: '2',
                 ),
-              
+
               const SizedBox(width: 6),
-              
+
               // 4. NRF24 Module Status
               if (bleProvider.isConnected && bleProvider.nrfInitialized)
                 _StatusIcon(
@@ -208,9 +221,9 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
                   tooltip: _getNrfStatusTooltip(bleProvider),
                   label: 'N',
                 ),
-              
+
               const SizedBox(width: 6),
-              
+
               // 5. Battery Status (SD card moved to Device Status panel)
               if (bleProvider.isConnected && bleProvider.hasBatteryInfo)
                 _BatteryStatusIcon(
@@ -218,9 +231,9 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
                   charging: bleProvider.batteryCharging,
                   voltage: bleProvider.batteryVoltage,
                 ),
-              
+
               const SizedBox(width: 6),
-              
+
               // 7. Memory Status
               if (bleProvider.isConnected && bleProvider.freeHeap != null)
                 _MemoryStatusIcon(freeHeap: bleProvider.freeHeap!),
@@ -249,7 +262,7 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
       builder: (context, notificationProvider, _) {
         final notification = notificationProvider.currentNotification;
         final hasHistory = notificationProvider.notificationHistory.isNotEmpty;
-        
+
         // Show either current notification or button to view history
         if (notification == null) {
           if (!hasHistory) {
@@ -267,14 +280,22 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
                   Icon(
                     Icons.notifications_none,
                     size: 16,
-                    color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6),
+                    color: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.color
+                        ?.withOpacity(0.6),
                   ),
                   const SizedBox(width: 8),
                   Text(
                     '${notificationProvider.notificationHistory.length}',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6),
+                      color: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.color
+                          ?.withOpacity(0.6),
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -283,7 +304,7 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
             ),
           );
         }
-        
+
         return InkWell(
           onTap: () => _showNotificationList(context, notificationProvider),
           child: Container(
@@ -306,13 +327,15 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
     );
   }
 
-  void _showNotificationList(BuildContext context, NotificationProvider notificationProvider) {
+  void _showNotificationList(
+      BuildContext context, NotificationProvider notificationProvider) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => Consumer<NotificationProvider>(
           builder: (context, provider, _) {
             final hasHistory = provider.notificationHistory.isNotEmpty;
-            print('Notification history length: ${provider.notificationHistory.length}, hasHistory: $hasHistory');
+            AppLogger.debug(
+                'Notification history length: ${provider.notificationHistory.length}, hasHistory: $hasHistory');
             return Scaffold(
               backgroundColor: Theme.of(context).colorScheme.surface,
               appBar: AppBar(
@@ -340,7 +363,11 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
                       child: Text(
                         AppLocalizations.of(context)!.noNotifications,
                         style: TextStyle(
-                          color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5),
+                          color: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.color
+                              ?.withOpacity(0.5),
                         ),
                       ),
                     )
@@ -348,7 +375,8 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
                       children: [
                         if (hasHistory)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 8),
                             decoration: BoxDecoration(
                               border: Border(
                                 bottom: BorderSide(
@@ -365,8 +393,10 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
                                     provider.clearHistory();
                                     Navigator.pop(context);
                                   },
-                                  icon: const Icon(Icons.delete_outline, size: 18),
-                                  label: Text(AppLocalizations.of(context)!.clearAll),
+                                  icon: const Icon(Icons.delete_outline,
+                                      size: 18),
+                                  label: Text(
+                                      AppLocalizations.of(context)!.clearAll),
                                 ),
                               ],
                             ),
@@ -388,37 +418,6 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
         fullscreenDialog: false,
       ),
     );
-  }
-
-  IconData _getModuleIcon(int state) {
-    switch (state) {
-      case 0: return Icons.circle_outlined; // Idle
-      case 1: return Icons.sensors; // Detecting
-      case 2: return Icons.radio_button_checked; // Recording
-      case 3: return Icons.send; // Transmitting
-      default: return Icons.help_outline; // Unknown
-    }
-  }
-
-  Color _getModuleColor(int state) {
-    switch (state) {
-      case 0: return AppColors.idle; // Idle
-      case 1: return AppColors.searching; // Detecting
-      case 2: return AppColors.recording; // Recording
-      case 3: return AppColors.transmitting; // Transmitting
-      default: return AppColors.disabledText; // Unknown
-    }
-  }
-
-  String _getModuleStateName(int state) {
-    final l10n = AppLocalizations.of(context)!;
-    switch (state) {
-      case 0: return l10n.stateIdle;
-      case 1: return l10n.stateDetecting;
-      case 2: return l10n.stateRecording;
-      case 3: return l10n.stateTransmitting;
-      default: return l10n.stateUnknown;
-    }
   }
 
   Color _getModuleColorFromMode(String mode) {
@@ -450,8 +449,8 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
   String _getNrfStatusTooltip(BleProvider bleProvider) {
     final l10n = AppLocalizations.of(context)!;
     if (bleProvider.nrfJammerRunning) return l10n.nrf24Jamming;
-    if (bleProvider.nrfScanning)      return l10n.nrf24Scanning;
-    if (bleProvider.nrfAttacking)     return l10n.nrf24Attacking;
+    if (bleProvider.nrfScanning) return l10n.nrf24Scanning;
+    if (bleProvider.nrfAttacking) return l10n.nrf24Attacking;
     if (bleProvider.nrfSpectrumRunning) return l10n.nrf24SpectrumActive;
     return l10n.nrf24Idle;
   }
@@ -518,9 +517,13 @@ class _MemoryStatusIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final freeKB = freeHeap / 1024;
-    final color = freeKB > 50 ? AppColors.success : freeKB > 30 ? AppColors.primaryText : AppColors.error;
+    final color = freeKB > 50
+        ? AppColors.success
+        : freeKB > 30
+            ? AppColors.primaryText
+            : AppColors.error;
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Tooltip(
       message: l10n.freeHeap(freeKB.toStringAsFixed(1)),
       child: Row(
@@ -582,7 +585,8 @@ class _BatteryStatusIcon extends StatelessWidget {
     final color = _getBatteryColor();
     final volts = (voltage / 1000.0).toStringAsFixed(2);
     return Tooltip(
-      message: AppLocalizations.of(context)!.batteryTooltip(percentage, volts, charging ? AppLocalizations.of(context)!.chargingIndicator : ''),
+      message: AppLocalizations.of(context)!.batteryTooltip(percentage, volts,
+          charging ? AppLocalizations.of(context)!.chargingIndicator : ''),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -614,7 +618,7 @@ class _NotificationListItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final timeAgo = _formatTimeAgo(context, notification.timestamp);
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -656,7 +660,11 @@ class _NotificationListItem extends StatelessWidget {
                   timeAgo,
                   style: TextStyle(
                     fontSize: 12,
-                    color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.6),
+                    color: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.color
+                        ?.withOpacity(0.6),
                   ),
                 ),
               ],
@@ -671,7 +679,7 @@ class _NotificationListItem extends StatelessWidget {
     final now = DateTime.now();
     final difference = now.difference(timestamp);
     final l10n = AppLocalizations.of(context)!;
-    
+
     if (difference.inSeconds < 60) {
       return l10n.justNow;
     } else if (difference.inMinutes < 60) {
@@ -708,7 +716,8 @@ class _CpuStatusIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _tempColor();
-    final tempText = temperatureC == null ? '--°C' : '${temperatureC!.toStringAsFixed(0)}°C';
+    final tempText =
+        temperatureC == null ? '--°C' : '${temperatureC!.toStringAsFixed(0)}°C';
     final c0 = core0Mhz ?? 0;
     final c1 = core1Mhz ?? c0;
 
@@ -737,4 +746,3 @@ class _CpuStatusIcon extends StatelessWidget {
     );
   }
 }
-

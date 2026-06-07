@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:convert';
+
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -15,7 +15,6 @@ import '../services/update_service.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/app_colors.dart';
 import 'dart:math';
-import 'dart:io';
 
 /// OTA firmware update screen — BLE OTA transfer with GitHub release integration.
 class OtaScreen extends StatefulWidget {
@@ -113,8 +112,7 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
     });
 
     try {
-      final update =
-          await UpdateService.checkFirmwareUpdate(_currentVersion);
+      final update = await UpdateService.checkFirmwareUpdate(_currentVersion);
 
       if (update == null) {
         setState(() {
@@ -182,7 +180,8 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
             setState(() {
               _downloading = false;
               _transferError = true;
-              _errorMessage = 'MD5 mismatch!\nExpected: $_firmwareMd5\nGot: $digest';
+              _errorMessage =
+                  'MD5 mismatch!\nExpected: $_firmwareMd5\nGot: $digest';
               _firmwareBin = null;
             });
             return;
@@ -244,7 +243,8 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
       // Step 1: Send OTA_BEGIN with firmware size and MD5 (with response for reliability)
       final md5Str = _firmwareMd5 ?? '';
       final beginCmd = FirmwareBinaryProtocol.createOtaBeginCommand(
-        _firmwareBin!.length, md5Str,
+        _firmwareBin!.length,
+        md5Str,
       );
       await bleProvider.sendBinaryCommand(beginCmd);
       await Future.delayed(const Duration(milliseconds: 300));
@@ -273,7 +273,8 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
               ? (bytesSent / 1024) / (elapsed.inMilliseconds / 1000)
               : 0.0;
           final remaining = speedKBs > 0
-              ? Duration(seconds: ((totalBytes - bytesSent) / 1024 / speedKBs).round())
+              ? Duration(
+                  seconds: ((totalBytes - bytesSent) / 1024 / speedKBs).round())
               : Duration.zero;
 
           setState(() {
@@ -336,7 +337,8 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
         setState(() {
           _localBinPath = result.files.single.name;
           _localBin = result.files.single.bytes;
-          _localStatusMessage = 'Selected: $_localBinPath (${_localBin!.length} bytes)';
+          _localStatusMessage =
+              'Selected: $_localBinPath (${_localBin!.length} bytes)';
           _localTransferComplete = false;
           _localTransferError = false;
         });
@@ -373,7 +375,8 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
 
       // Step 1: Send OTA_BEGIN with firmware size and MD5
       final beginCmd = FirmwareBinaryProtocol.createOtaBeginCommand(
-        _localBin!.length, localMd5,
+        _localBin!.length,
+        localMd5,
       );
       await bleProvider.sendBinaryCommand(beginCmd);
       await Future.delayed(const Duration(milliseconds: 300));
@@ -401,7 +404,8 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
               ? (bytesSent / 1024) / (elapsed.inMilliseconds / 1000)
               : 0.0;
           final remaining = speedKBs > 0
-              ? Duration(seconds: ((totalBytes - bytesSent) / 1024 / speedKBs).round())
+              ? Duration(
+                  seconds: ((totalBytes - bytesSent) / 1024 / speedKBs).round())
               : Duration.zero;
 
           setState(() {
@@ -450,7 +454,7 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
 
     // Notify BLE provider to auto-reconnect after reboot
     bleProvider.notifyOtaReboot();
-    
+
     final cmd = FirmwareBinaryProtocol.createOtaRebootCommand();
     await bleProvider.sendBinaryCommand(cmd);
 
@@ -478,7 +482,8 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
     return Consumer<BleProvider>(
       builder: (context, bleProvider, _) {
         // Keep current version in sync with BLE provider
-        if (bleProvider.firmwareVersion.isNotEmpty && _currentVersion == 'Unknown') {
+        if (bleProvider.firmwareVersion.isNotEmpty &&
+            _currentVersion == 'Unknown') {
           _currentVersion = bleProvider.firmwareVersion;
         }
         return Scaffold(
@@ -501,7 +506,9 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
                   const SizedBox(height: 16),
                   _buildChangelogCard(),
                 ],
-                if (_firmwareBin != null || _transferring || _transferComplete) ...[
+                if (_firmwareBin != null ||
+                    _transferring ||
+                    _transferComplete) ...[
                   const SizedBox(height: 16),
                   _buildTransferCard(),
                 ],
@@ -529,10 +536,15 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildInfoRow(AppLocalizations.of(context)!.currentFirmware, _currentVersion),
+          _buildInfoRow(
+              AppLocalizations.of(context)!.currentFirmware, _currentVersion),
           if (bleProvider.freeHeap != null)
             _buildInfoRow('Free Heap', '${bleProvider.freeHeap} bytes'),
-          _buildInfoRow(AppLocalizations.of(context)!.connection, bleProvider.isConnected ? AppLocalizations.of(context)!.connectedStatus : AppLocalizations.of(context)!.disconnectedStatus),
+          _buildInfoRow(
+              AppLocalizations.of(context)!.connection,
+              bleProvider.isConnected
+                  ? AppLocalizations.of(context)!.connectedStatus
+                  : AppLocalizations.of(context)!.disconnectedStatus),
         ],
       ),
     );
@@ -545,14 +557,17 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
       child: Column(
         children: [
           if (_latestVersion != null) ...[
-            _buildInfoRow(AppLocalizations.of(context)!.latestVersion, _latestVersion!),
+            _buildInfoRow(
+                AppLocalizations.of(context)!.latestVersion, _latestVersion!),
             _updateAvailable
                 ? _buildUpdateAvailableRow()
-                : _buildInfoRow(AppLocalizations.of(context)!.updateAvailable, AppLocalizations.of(context)!.upToDate),
+                : _buildInfoRow(AppLocalizations.of(context)!.updateAvailable,
+                    AppLocalizations.of(context)!.upToDate),
             if (_firmwareMd5 != null)
               GestureDetector(
                 onTap: () => _showMd5Dialog(),
-                child: _buildInfoRow('MD5', '${_firmwareMd5!.substring(0, min(16, _firmwareMd5!.length))}…'),
+                child: _buildInfoRow('MD5',
+                    '${_firmwareMd5!.substring(0, min(16, _firmwareMd5!.length))}…'),
               ),
             const SizedBox(height: 12),
           ],
@@ -563,18 +578,23 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
                   onPressed: _checkingUpdate ? null : _checkForUpdates,
                   icon: _checkingUpdate
                       ? const SizedBox(
-                          width: 16, height: 16,
+                          width: 16,
+                          height: 16,
                           child: CircularProgressIndicator(
                               strokeWidth: 2, color: AppColors.primaryAccent))
                       : const Icon(Icons.refresh),
-                  label: Text(_checkingUpdate ? AppLocalizations.of(context)!.checking : AppLocalizations.of(context)!.checkForUpdates),
+                  label: Text(_checkingUpdate
+                      ? AppLocalizations.of(context)!.checking
+                      : AppLocalizations.of(context)!.checkForUpdates),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primaryAccent,
                     foregroundColor: AppColors.primaryBackground,
                   ),
                 ),
               ),
-              if (_updateAvailable && _firmwareBin == null && !_downloading) ...[
+              if (_updateAvailable &&
+                  _firmwareBin == null &&
+                  !_downloading) ...[
                 const SizedBox(width: 8),
                 Expanded(
                   child: AnimatedBuilder(
@@ -585,7 +605,8 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
                           borderRadius: BorderRadius.circular(20),
                           boxShadow: [
                             BoxShadow(
-                              color: AppColors.warning.withValues(alpha: 0.3 + 0.35 * _pulseAnimation.value),
+                              color: AppColors.warning.withValues(
+                                  alpha: 0.3 + 0.35 * _pulseAnimation.value),
                               blurRadius: 6 + 8 * _pulseAnimation.value,
                               spreadRadius: 1 + 2 * _pulseAnimation.value,
                             ),
@@ -620,7 +641,8 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(_statusMessage,
-                  style: TextStyle(color: AppColors.secondaryText, fontSize: 12)),
+                  style:
+                      TextStyle(color: AppColors.secondaryText, fontSize: 12)),
             ),
         ],
       ),
@@ -629,7 +651,8 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
 
   Widget _buildChangelogCard() {
     return _buildCard(
-      title: AppLocalizations.of(context)!.changelogVersion(_latestVersion ?? ''),
+      title:
+          AppLocalizations.of(context)!.changelogVersion(_latestVersion ?? ''),
       icon: Icons.description,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxHeight: 200),
@@ -647,9 +670,11 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: _getChangeTypeColor(type).withValues(alpha: 0.15),
+                            color: _getChangeTypeColor(type)
+                                .withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
@@ -665,7 +690,8 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
                         Expanded(
                           child: Text(
                             text,
-                            style: TextStyle(color: AppColors.primaryText, fontSize: 13),
+                            style: TextStyle(
+                                color: AppColors.primaryText, fontSize: 13),
                           ),
                         ),
                       ],
@@ -675,7 +701,8 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
               else
                 Text(
                   _latestChangelog ?? '',
-                  style: TextStyle(color: AppColors.primaryText, fontSize: 13, height: 1.5),
+                  style: TextStyle(
+                      color: AppColors.primaryText, fontSize: 13, height: 1.5),
                 ),
             ],
           ),
@@ -712,7 +739,8 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
           ],
           if (_transferComplete) ...[
             const Center(
-              child: Icon(Icons.check_circle, color: AppColors.success, size: 48),
+              child:
+                  Icon(Icons.check_circle, color: AppColors.success, size: 48),
             ),
             const SizedBox(height: 12),
             Center(
@@ -727,7 +755,8 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
             Center(
               child: Text(AppLocalizations.of(context)!.deviceWillVerify,
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: AppColors.secondaryText, fontSize: 13)),
+                  style:
+                      TextStyle(color: AppColors.secondaryText, fontSize: 13)),
             ),
             const SizedBox(height: 16),
             ElevatedButton.icon(
@@ -741,7 +770,9 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
             ),
           ],
           if (!_transferring && !_transferComplete && _firmwareBin != null) ...[
-            Text(AppLocalizations.of(context)!.firmwareReady(_firmwareBin!.length),
+            Text(
+                AppLocalizations.of(context)!
+                    .firmwareReady(_firmwareBin!.length),
                 style: TextStyle(color: AppColors.primaryText, fontSize: 13)),
             const SizedBox(height: 12),
             SizedBox(
@@ -820,7 +851,8 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
                         fontSize: 14)),
                 const Spacer(),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
                     color: AppColors.warning.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(4),
@@ -842,14 +874,16 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
               children: [
                 Text(
                   AppLocalizations.of(context)!.selectBinFileDesc,
-                  style: TextStyle(color: AppColors.secondaryText, fontSize: 12),
+                  style:
+                      TextStyle(color: AppColors.secondaryText, fontSize: 12),
                 ),
                 const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(
                       child: ElevatedButton.icon(
-                        onPressed: (_localTransferring) ? null : _pickLocalBinary,
+                        onPressed:
+                            (_localTransferring) ? null : _pickLocalBinary,
                         icon: const Icon(Icons.folder_open),
                         label: Text(AppLocalizations.of(context)!.selectBin),
                         style: ElevatedButton.styleFrom(
@@ -858,11 +892,15 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
                         ),
                       ),
                     ),
-                    if (_localBin != null && !_localTransferring && !_localTransferComplete) ...[
+                    if (_localBin != null &&
+                        !_localTransferring &&
+                        !_localTransferComplete) ...[
                       const SizedBox(width: 8),
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: bleProvider.isConnected ? _flashLocalBinary : null,
+                          onPressed: bleProvider.isConnected
+                              ? _flashLocalBinary
+                              : null,
                           icon: const Icon(Icons.flash_on),
                           label: Text(AppLocalizations.of(context)!.flash),
                           style: ElevatedButton.styleFrom(
@@ -874,16 +912,20 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
                     ],
                   ],
                 ),
-                if (_localBinPath != null && !_localTransferring && !_localTransferComplete)
+                if (_localBinPath != null &&
+                    !_localTransferring &&
+                    !_localTransferComplete)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Text('File: $_localBinPath',
-                        style: TextStyle(color: AppColors.primaryText, fontSize: 12)),
+                        style: TextStyle(
+                            color: AppColors.primaryText, fontSize: 12)),
                   ),
                 if (_localTransferring) ...[
                   const SizedBox(height: 12),
                   Text(_localStatusMessage,
-                      style: TextStyle(color: AppColors.primaryText, fontSize: 13)),
+                      style: TextStyle(
+                          color: AppColors.primaryText, fontSize: 13)),
                   const SizedBox(height: 8),
                   ClipRRect(
                     borderRadius: BorderRadius.circular(6),
@@ -926,11 +968,14 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
                   Text(_localErrorMessage,
                       style: TextStyle(color: AppColors.error, fontSize: 12)),
                 ],
-                if (_localStatusMessage.isNotEmpty && !_localTransferring && !_localTransferComplete)
+                if (_localStatusMessage.isNotEmpty &&
+                    !_localTransferring &&
+                    !_localTransferComplete)
                   Padding(
                     padding: const EdgeInsets.only(top: 6),
                     child: Text(_localStatusMessage,
-                        style: TextStyle(color: AppColors.secondaryText, fontSize: 12)),
+                        style: TextStyle(
+                            color: AppColors.secondaryText, fontSize: 12)),
                   ),
               ],
             ),
@@ -1008,7 +1053,8 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
             animation: _pulseAnimation,
             builder: (context, child) {
               return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                 decoration: BoxDecoration(
                   color: AppColors.primaryAccent
                       .withValues(alpha: 0.1 + 0.12 * _pulseAnimation.value),
@@ -1052,7 +1098,8 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
         ),
         title: Row(
           children: [
-            const Icon(Icons.fingerprint, color: AppColors.primaryAccent, size: 20),
+            const Icon(Icons.fingerprint,
+                color: AppColors.primaryAccent, size: 20),
             const SizedBox(width: 8),
             const Text('MD5 Checksum',
                 style: TextStyle(color: AppColors.primaryAccent, fontSize: 16)),
@@ -1099,11 +1146,13 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
                 ),
               );
             },
-            child: const Text('Copy', style: TextStyle(color: AppColors.primaryAccent)),
+            child: const Text('Copy',
+                style: TextStyle(color: AppColors.primaryAccent)),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Close', style: TextStyle(color: AppColors.secondaryText)),
+            child: const Text('Close',
+                style: TextStyle(color: AppColors.secondaryText)),
           ),
         ],
       ),
@@ -1181,7 +1230,8 @@ class _RebootDialogState extends State<_RebootDialog>
           ),
           title: Text(
             isReconnected ? 'Update Complete!' : 'Rebooting Device...',
-            style: const TextStyle(color: AppColors.primaryAccent, fontSize: 18),
+            style:
+                const TextStyle(color: AppColors.primaryAccent, fontSize: 18),
             textAlign: TextAlign.center,
           ),
           content: Column(

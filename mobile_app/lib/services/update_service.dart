@@ -123,8 +123,10 @@ class UpdateService {
       String changelogText;
       List<Map<String, String>>? structuredChanges;
       if (changelogData != null) {
-        changelogText = buildChangelogText(changelogData, 'firmware', bestVersion);
-        structuredChanges = getChangesForVersion(changelogData, 'firmware', bestVersion);
+        changelogText =
+            buildChangelogText(changelogData, 'firmware', bestVersion);
+        structuredChanges =
+            getChangesForVersion(changelogData, 'firmware', bestVersion);
         if (changelogText.isEmpty) {
           changelogText = bestRelease?['body'] ?? 'No changelog available.';
         }
@@ -262,8 +264,7 @@ class UpdateService {
   /// Returns the hash string (first word of the file), or `null` on failure.
   static Future<String?> downloadMd5(String md5Url) async {
     try {
-      final response =
-          await http.get(Uri.parse(md5Url)).timeout(_timeout);
+      final response = await http.get(Uri.parse(md5Url)).timeout(_timeout);
       if (response.statusCode == 200) {
         // MD5 file format: "hash  filename" or just "hash"
         return response.body.trim().split(RegExp(r'\s+')).first.toLowerCase();
@@ -333,23 +334,26 @@ class UpdateService {
   /// Searches through releases to find changelog.json as an asset.
   /// Returns a map with "firmware" and "app" lists parsed from the JSON.
   /// Returns null on failure (non-fatal — falls back to release body).
-  static Future<Map<String, dynamic>?> fetchChangelog(List<dynamic> releases) async {
+  static Future<Map<String, dynamic>?> fetchChangelog(
+      List<dynamic> releases) async {
     // Try to find changelog.json in release assets (newest first)
     for (final release in releases) {
       if (release['draft'] == true) continue;
       final assets = release['assets'] as List? ?? [];
-      
+
       // Look for changelog.json asset
       for (final asset in assets) {
         final name = asset['name'] as String? ?? '';
         if (name.toLowerCase() == 'changelog.json') {
           final downloadUrl = asset['browser_download_url'] as String?;
           if (downloadUrl == null) continue;
-          
+
           try {
-            final response = await http.get(
-              Uri.parse(downloadUrl),
-            ).timeout(_timeout);
+            final response = await http
+                .get(
+                  Uri.parse(downloadUrl),
+                )
+                .timeout(_timeout);
             if (response.statusCode == 200) {
               return jsonDecode(response.body) as Map<String, dynamic>;
             }
@@ -360,20 +364,23 @@ class UpdateService {
         }
       }
     }
-    
+
     // Fallback: try legacy URL from main branch (for backward compatibility)
     try {
-      const legacyUrl = 'https://raw.githubusercontent.com/$githubOwner/$githubRepo/main/releases/changelog.json';
-      final response = await http.get(
-        Uri.parse(legacyUrl),
-      ).timeout(_timeout);
+      const legacyUrl =
+          'https://raw.githubusercontent.com/$githubOwner/$githubRepo/main/releases/changelog.json';
+      final response = await http
+          .get(
+            Uri.parse(legacyUrl),
+          )
+          .timeout(_timeout);
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
       }
     } catch (_) {
       // Ignore fallback errors
     }
-    
+
     return null;
   }
 
@@ -457,8 +464,7 @@ class UpdateService {
         throw UpdateServiceException(
             'API rate limit exceeded. Try again later.');
       } else {
-        throw UpdateServiceException(
-            'API Error: HTTP ${response.statusCode}');
+        throw UpdateServiceException('API Error: HTTP ${response.statusCode}');
       }
     } on UpdateServiceException {
       rethrow;
@@ -470,19 +476,6 @@ class UpdateService {
       }
       throw UpdateServiceException('API Error: $e');
     }
-  }
-
-  /// Find the download URL for an asset with a given extension.
-  static String? _findAssetUrl(
-      Map<String, dynamic> release, String extension) {
-    final assets = release['assets'] as List? ?? [];
-    for (final asset in assets) {
-      final name = asset['name'] as String? ?? '';
-      if (name.endsWith(extension)) {
-        return asset['browser_download_url'] as String?;
-      }
-    }
-    return null;
   }
 
   /// Find the corresponding .md5 asset for a given binary asset name.

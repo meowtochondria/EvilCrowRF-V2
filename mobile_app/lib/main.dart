@@ -9,10 +9,29 @@ import 'providers/log_provider.dart';
 import 'providers/notification_provider.dart';
 import 'providers/locale_provider.dart';
 import 'providers/settings_provider.dart';
+import 'services/logger_service.dart';
 import 'theme/app_colors.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(
+    ChangeNotifierProvider(
+      create: (context) => LogProvider(),
+      child: const _LoggerInit(child: MyApp()),
+    ),
+  );
+}
+
+/// Initializes [AppLogger] once [LogProvider] is available.
+class _LoggerInit extends StatelessWidget {
+  final Widget child;
+  const _LoggerInit({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final logProvider = context.read<LogProvider>();
+    AppLogger.init(logProvider: logProvider);
+    return child;
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -56,7 +75,7 @@ class MyApp extends StatelessWidget {
   ThemeData _buildDarkTheme() {
     final colorScheme = AppColors.darkColorScheme;
     final interFont = GoogleFonts.interTextTheme();
-    
+
     return ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
@@ -100,7 +119,7 @@ class MyApp extends StatelessWidget {
           color: AppColors.primaryText,
         ),
       ),
-      
+
       // Disable Material 3 animations
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
@@ -110,7 +129,7 @@ class MyApp extends StatelessWidget {
       ),
       splashFactory: NoSplash.splashFactory,
       highlightColor: Colors.transparent,
-      
+
       appBarTheme: AppBarTheme(
         backgroundColor: AppColors.secondaryBackground,
         foregroundColor: AppColors.primaryText,
@@ -123,7 +142,7 @@ class MyApp extends StatelessWidget {
           fontFamily: GoogleFonts.inter().fontFamily,
         ),
       ),
-      
+
       cardTheme: CardThemeData(
         elevation: 0,
         color: AppColors.secondaryBackground,
@@ -132,7 +151,7 @@ class MyApp extends StatelessWidget {
           side: const BorderSide(color: AppColors.borderDefault, width: 1),
         ),
       ),
-      
+
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primaryAccent,
@@ -150,7 +169,7 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
-      
+
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.primaryText,
@@ -167,7 +186,7 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
-      
+
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: AppColors.primaryAccent,
@@ -178,17 +197,19 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
-      
+
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: AppColors.secondaryBackground,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(6),
-          borderSide: const BorderSide(color: AppColors.borderDefault, width: 1),
+          borderSide:
+              const BorderSide(color: AppColors.borderDefault, width: 1),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(6),
-          borderSide: const BorderSide(color: AppColors.borderDefault, width: 1),
+          borderSide:
+              const BorderSide(color: AppColors.borderDefault, width: 1),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(6),
@@ -202,7 +223,8 @@ class MyApp extends StatelessWidget {
           borderRadius: BorderRadius.circular(6),
           borderSide: const BorderSide(color: AppColors.error, width: 1),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         hintStyle: TextStyle(
           color: AppColors.disabledText,
           fontSize: 14,
@@ -219,14 +241,14 @@ class MyApp extends StatelessWidget {
         prefixIconColor: AppColors.secondaryText,
         suffixIconColor: AppColors.secondaryText,
       ),
-      
+
       // Style for text in TextField and TextFormField
       textSelectionTheme: TextSelectionThemeData(
         cursorColor: AppColors.primaryAccent,
         selectionColor: AppColors.primaryAccent.withValues(alpha: 0.3),
         selectionHandleColor: AppColors.primaryAccent,
       ),
-      
+
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
@@ -241,7 +263,7 @@ class MyApp extends StatelessWidget {
           return AppColors.borderDefault.withValues(alpha: 0.3);
         }),
       ),
-      
+
       checkboxTheme: CheckboxThemeData(
         fillColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
@@ -255,7 +277,7 @@ class MyApp extends StatelessWidget {
           borderRadius: BorderRadius.circular(4),
         ),
       ),
-      
+
       radioTheme: RadioThemeData(
         fillColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
@@ -264,17 +286,17 @@ class MyApp extends StatelessWidget {
           return AppColors.disabledText;
         }),
       ),
-      
+
       sliderTheme: SliderThemeData(
         activeTrackColor: AppColors.primaryAccent,
         thumbColor: AppColors.primaryAccent,
         inactiveTrackColor: AppColors.borderDefault.withValues(alpha: 0.3),
       ),
-      
+
       progressIndicatorTheme: const ProgressIndicatorThemeData(
         color: AppColors.primaryAccent,
       ),
-      
+
       tabBarTheme: TabBarThemeData(
         indicator: const UnderlineTabIndicator(
           borderSide: BorderSide(color: AppColors.primaryAccent, width: 2),
@@ -292,13 +314,13 @@ class MyApp extends StatelessWidget {
           fontFamily: GoogleFonts.inter().fontFamily,
         ),
       ),
-      
+
       dividerTheme: const DividerThemeData(
         color: AppColors.divider,
         thickness: 1,
         space: 1,
       ),
-      
+
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: AppColors.secondaryBackground,
         selectedItemColor: AppColors.primaryAccent,
@@ -316,14 +338,14 @@ class MyApp extends StatelessWidget {
           fontFamily: GoogleFonts.inter().fontFamily,
         ),
       ),
-      
+
       // Style for dropdown menu
       menuTheme: MenuThemeData(
         style: MenuStyle(
-          backgroundColor: WidgetStateProperty.all(AppColors.secondaryBackground),
+          backgroundColor:
+              WidgetStateProperty.all(AppColors.secondaryBackground),
         ),
       ),
     );
   }
 }
-

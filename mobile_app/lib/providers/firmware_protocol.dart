@@ -2,10 +2,10 @@ import 'dart:typed_data';
 import 'dart:convert';
 
 /// Enhanced binary protocol for ESP32 CC1101 BLE communication with chunking support
-/// 
+///
 /// Protocol format (matching firmware):
 /// [Magic:1][Type:1][ChunkID:1][ChunkNum:1][TotalChunks:1][DataLen:2][Data:variable][Checksum:1]
-/// 
+///
 /// Where:
 /// - Magic: 0xAA (packet identification)
 /// - Type: 0x01=data, 0x02=ack, 0x03=nak
@@ -15,7 +15,7 @@ import 'dart:convert';
 /// - DataLen: Length of data in this packet (2 bytes, little-endian, max 500)
 /// - Data: Actual data (max 500 bytes per packet for Bluetooth 5.0)
 /// - Checksum: XOR checksum for error detection
-/// 
+///
 /// Message Types:
 /// 0x01 - getState
 /// 0x02 - requestScan (minRssi:4, module:1)
@@ -31,21 +31,23 @@ import 'dart:convert';
 /// 0x0D - upload (file upload with chunking)
 /// 0x12 - startJam (jamming command)
 /// 0x14 - getDirectoryTree (pathType:1)
-/// 
+///
 /// Special Message Types:
 /// 0xFE - Chunk Data (for large responses)
 /// 0xFF - Chunk Complete (indicates all chunks received)
 class FirmwareBinaryProtocol {
   // Protocol constants (matching firmware)
   static const int MAGIC_BYTE = 0xAA;
-  static const int PACKET_HEADER_SIZE = 7; // magic + type + chunk_id + chunk_num + total_chunks + data_len(2 bytes)
-  static const int MAX_CHUNK_SIZE = 500; // Safe maximum: BLE notify limit is 509 bytes, so 509 - 7 (header) - 1 (checksum) - 1 (safety) = 500
-  
+  static const int PACKET_HEADER_SIZE =
+      7; // magic + type + chunk_id + chunk_num + total_chunks + data_len(2 bytes)
+  static const int MAX_CHUNK_SIZE =
+      500; // Safe maximum: BLE notify limit is 509 bytes, so 509 - 7 (header) - 1 (checksum) - 1 (safety) = 500
+
   // Packet types (matching firmware)
   static const int PACKET_TYPE_DATA = 0x01;
   static const int PACKET_TYPE_ACK = 0x02;
   static const int PACKET_TYPE_NAK = 0x03;
-  
+
   // Message types (for commands)
   static const int MSG_GET_STATE = 0x01;
   static const int MSG_REQUEST_SCAN = 0x02;
@@ -64,7 +66,8 @@ class FirmwareBinaryProtocol {
   static const int MSG_SAVE_TO_SIGNALS_WITH_NAME = 0x10;
   static const int MSG_FREQUENCY_SEARCH = 0x11;
   static const int MSG_START_JAM = 0x12;
-  static const int MSG_GET_DIRECTORY_TREE = 0x14; // Moved to 0x14 to avoid conflict
+  static const int MSG_GET_DIRECTORY_TREE =
+      0x14; // Moved to 0x14 to avoid conflict
   static const int MSG_SET_TIME = 0x13;
   static const int MSG_REBOOT = 0x15;
   static const int MSG_FACTORY_RESET = 0x16;
@@ -80,48 +83,48 @@ class FirmwareBinaryProtocol {
   static const int MSG_VERSION_INFO = 0xC2;
 
   // ── NRF24 Commands (0x20-0x2E) ──────────────────────────────
-  static const int MSG_NRF_INIT         = 0x20;
-  static const int MSG_NRF_SCAN_START   = 0x21;
-  static const int MSG_NRF_SCAN_STOP    = 0x22;
-  static const int MSG_NRF_SCAN_STATUS  = 0x23;
-  static const int MSG_NRF_ATTACK_HID   = 0x24;
-  static const int MSG_NRF_ATTACK_STR   = 0x25;
+  static const int MSG_NRF_INIT = 0x20;
+  static const int MSG_NRF_SCAN_START = 0x21;
+  static const int MSG_NRF_SCAN_STOP = 0x22;
+  static const int MSG_NRF_SCAN_STATUS = 0x23;
+  static const int MSG_NRF_ATTACK_HID = 0x24;
+  static const int MSG_NRF_ATTACK_STR = 0x25;
   static const int MSG_NRF_ATTACK_DUCKY = 0x26;
-  static const int MSG_NRF_ATTACK_STOP  = 0x27;
+  static const int MSG_NRF_ATTACK_STOP = 0x27;
   static const int MSG_NRF_SPECTRUM_START = 0x28;
-  static const int MSG_NRF_SPECTRUM_STOP  = 0x29;
-  static const int MSG_NRF_JAM_START    = 0x2A;
-  static const int MSG_NRF_JAM_STOP     = 0x2B;
+  static const int MSG_NRF_SPECTRUM_STOP = 0x29;
+  static const int MSG_NRF_JAM_START = 0x2A;
+  static const int MSG_NRF_JAM_STOP = 0x2B;
   static const int MSG_NRF_JAM_SET_MODE = 0x2C;
-  static const int MSG_NRF_JAM_SET_CH   = 0x2D;
+  static const int MSG_NRF_JAM_SET_CH = 0x2D;
   static const int MSG_NRF_CLEAR_TARGETS = 0x2E;
-  static const int MSG_NRF_STOP_ALL     = 0x2F;
+  static const int MSG_NRF_STOP_ALL = 0x2F;
 
   // ── ProtoPirate Commands (0x60) ─────────────────────────────
   static const int MSG_PROTOPIRATE = 0x60;
 
   // ── SDR Commands (0x50-0x59) ────────────────────────────────
-  static const int MSG_SDR_ENABLE       = 0x50;
-  static const int MSG_SDR_DISABLE      = 0x51;
-  static const int MSG_SDR_SET_FREQ     = 0x52;
-  static const int MSG_SDR_SET_BW       = 0x53;
-  static const int MSG_SDR_SET_MOD      = 0x54;
-  static const int MSG_SDR_SPECTRUM     = 0x55;
-  static const int MSG_SDR_RX_START     = 0x56;
-  static const int MSG_SDR_RX_STOP      = 0x57;
-  static const int MSG_SDR_GET_STATUS   = 0x58;
+  static const int MSG_SDR_ENABLE = 0x50;
+  static const int MSG_SDR_DISABLE = 0x51;
+  static const int MSG_SDR_SET_FREQ = 0x52;
+  static const int MSG_SDR_SET_BW = 0x53;
+  static const int MSG_SDR_SET_MOD = 0x54;
+  static const int MSG_SDR_SPECTRUM = 0x55;
+  static const int MSG_SDR_RX_START = 0x56;
+  static const int MSG_SDR_RX_STOP = 0x57;
+  static const int MSG_SDR_GET_STATUS = 0x58;
   static const int MSG_SDR_SET_DATARATE = 0x59;
 
   // HW Button configuration (0x40)
   static const int MSG_HW_BUTTON_CONFIG = 0x40;
 
   // ── OTA Commands (0x30-0x35) ────────────────────────────────
-  static const int MSG_OTA_BEGIN   = 0x30;
-  static const int MSG_OTA_DATA    = 0x31;
-  static const int MSG_OTA_END     = 0x32;
-  static const int MSG_OTA_ABORT   = 0x33;
-  static const int MSG_OTA_REBOOT  = 0x34;
-  static const int MSG_OTA_STATUS  = 0x35;
+  static const int MSG_OTA_BEGIN = 0x30;
+  static const int MSG_OTA_DATA = 0x31;
+  static const int MSG_OTA_END = 0x32;
+  static const int MSG_OTA_ABORT = 0x33;
+  static const int MSG_OTA_REBOOT = 0x34;
+  static const int MSG_OTA_STATUS = 0x35;
 
   /// Calculate CRC32 checksum
   static int calculateCRC32(Uint8List data) {
@@ -170,8 +173,8 @@ class FirmwareBinaryProtocol {
   /// Create requestScan command
   static Uint8List createRequestScanCommand(int minRssi, int module) {
     Uint8List payload = Uint8List(2);
-    payload[0] = module;        // Module number (1 byte)
-    payload[1] = minRssi;      // Min RSSI (1 byte, signed)
+    payload[0] = module; // Module number (1 byte)
+    payload[1] = minRssi; // Min RSSI (1 byte, signed)
     return _createEnhancedCommand(MSG_REQUEST_SCAN, payload);
   }
 
@@ -187,7 +190,7 @@ class FirmwareBinaryProtocol {
     List<int> pathBytes = utf8.encode(path);
     Uint8List payload = Uint8List(2 + pathBytes.length);
     payload[0] = pathBytes.length;
-    payload[1] = pathType;  // 0=/DATA/RECORDS, 1=/DATA/SIGNALS, etc.
+    payload[1] = pathType; // 0=/DATA/RECORDS, 1=/DATA/SIGNALS, etc.
     for (int i = 0; i < pathBytes.length; i++) {
       payload[2 + i] = pathBytes[i];
     }
@@ -197,26 +200,27 @@ class FirmwareBinaryProtocol {
   /// Create getDirectoryTree command
   static Uint8List createGetDirectoryTreeCommand({int pathType = 0}) {
     Uint8List payload = Uint8List(1);
-    payload[0] = pathType;  // 0=/DATA/RECORDS, 1=/DATA/SIGNALS, etc.
+    payload[0] = pathType; // 0=/DATA/RECORDS, 1=/DATA/SIGNALS, etc.
     return _createEnhancedCommand(MSG_GET_DIRECTORY_TREE, payload);
   }
 
   /// Create transmitBinary command
-  static Uint8List createTransmitBinaryCommand(double frequency, int pulseDuration, String data) {
+  static Uint8List createTransmitBinaryCommand(
+      double frequency, int pulseDuration, String data) {
     List<int> dataBytes = utf8.encode(data);
     Uint8List payload = Uint8List(5 + dataBytes.length);
-    
+
     // Frequency as float (simplified - using 4 bytes)
     Uint8List freqBytes = floatToBytes(frequency);
     for (int i = 0; i < 4; i++) {
       payload[i] = freqBytes[i];
     }
-    
+
     payload[4] = pulseDuration;
     for (int i = 0; i < dataBytes.length; i++) {
       payload[5 + i] = dataBytes[i];
     }
-    
+
     return _createEnhancedCommand(MSG_TRANSMIT_BINARY, payload);
   }
 
@@ -232,14 +236,14 @@ class FirmwareBinaryProtocol {
   }) {
     Uint8List payload = Uint8List(68); // RequestRecord struct size
     int offset = 0;
-    
+
     // frequency (4 bytes)
     Uint8List freqBytes = _floatToBytes(frequency);
     for (int i = 0; i < 4; i++) {
       payload[offset + i] = freqBytes[i];
     }
     offset += 4;
-    
+
     // preset (50 bytes) - null-terminated string
     List<int> presetBytes = utf8.encode(preset ?? '');
     int presetLen = presetBytes.length > 49 ? 49 : presetBytes.length;
@@ -251,35 +255,35 @@ class FirmwareBinaryProtocol {
       payload[offset + i] = 0;
     }
     offset += 50;
-    
+
     // module (1 byte)
     payload[offset] = module;
     offset += 1;
-    
+
     // modulation (1 byte)
     payload[offset] = modulation ?? 0;
     offset += 1;
-    
+
     // deviation (4 bytes)
     Uint8List devBytes = _floatToBytes(deviation ?? 0.0);
     for (int i = 0; i < 4; i++) {
       payload[offset + i] = devBytes[i];
     }
     offset += 4;
-    
+
     // rxBandwidth (4 bytes)
     Uint8List bwBytes = _floatToBytes(rxBandwidth ?? 0.0);
     for (int i = 0; i < 4; i++) {
       payload[offset + i] = bwBytes[i];
     }
     offset += 4;
-    
+
     // dataRate (4 bytes)
     Uint8List rateBytes = _floatToBytes(dataRate ?? 0.0);
     for (int i = 0; i < 4; i++) {
       payload[offset + i] = rateBytes[i];
     }
-    
+
     return _createEnhancedCommand(MSG_REQUEST_RECORD, payload);
   }
 
@@ -293,7 +297,8 @@ class FirmwareBinaryProtocol {
 
   /// Create transmitFromFile command with path type
   /// [module] - optional module number (-1 means auto-select first idle module)
-  static Uint8List createTransmitFromFileCommand(String path, {int pathType = 0, int? module}) {
+  static Uint8List createTransmitFromFileCommand(String path,
+      {int pathType = 0, int? module}) {
     List<int> pathBytes = utf8.encode(path);
     int payloadLength = 2 + pathBytes.length;
     if (module != null && module >= 0) {
@@ -301,7 +306,7 @@ class FirmwareBinaryProtocol {
     }
     Uint8List payload = Uint8List(payloadLength);
     payload[0] = pathBytes.length;
-    payload[1] = pathType;  // 0=/DATA/RECORDS, 1=/DATA/SIGNALS, etc.
+    payload[1] = pathType; // 0=/DATA/RECORDS, 1=/DATA/SIGNALS, etc.
     for (int i = 0; i < pathBytes.length; i++) {
       payload[2 + i] = pathBytes[i];
     }
@@ -317,7 +322,8 @@ class FirmwareBinaryProtocol {
     List<int> pathBytes = utf8.encode(path);
     Uint8List payload = Uint8List(2 + pathBytes.length);
     payload[0] = pathBytes.length;
-    payload[1] = pathType;  // 0=/DATA/RECORDS, 1=/DATA/SIGNALS, 2=/DATA/PRESETS, etc.
+    payload[1] =
+        pathType; // 0=/DATA/RECORDS, 1=/DATA/SIGNALS, 2=/DATA/PRESETS, etc.
     for (int i = 0; i < pathBytes.length; i++) {
       payload[2 + i] = pathBytes[i];
     }
@@ -329,7 +335,7 @@ class FirmwareBinaryProtocol {
     List<int> pathBytes = utf8.encode(path);
     Uint8List payload = Uint8List(2 + pathBytes.length);
     payload[0] = pathBytes.length;
-    payload[1] = pathType;  // 0=/DATA/RECORDS, 1=/DATA/SIGNALS, etc.
+    payload[1] = pathType; // 0=/DATA/RECORDS, 1=/DATA/SIGNALS, etc.
     for (int i = 0; i < pathBytes.length; i++) {
       payload[2 + i] = pathBytes[i];
     }
@@ -337,11 +343,12 @@ class FirmwareBinaryProtocol {
   }
 
   /// Create renameFile command with path type
-  static Uint8List createRenameFileCommand(String fromPath, String toPath, {int pathType = 0}) {
+  static Uint8List createRenameFileCommand(String fromPath, String toPath,
+      {int pathType = 0}) {
     List<int> fromBytes = utf8.encode(fromPath);
     List<int> toBytes = utf8.encode(toPath);
     Uint8List payload = Uint8List(3 + fromBytes.length + toBytes.length);
-    payload[0] = pathType;  // 0=/DATA/RECORDS, 1=/DATA/SIGNALS, etc.
+    payload[0] = pathType; // 0=/DATA/RECORDS, 1=/DATA/SIGNALS, etc.
     payload[1] = fromBytes.length;
     for (int i = 0; i < fromBytes.length; i++) {
       payload[2 + i] = fromBytes[i];
@@ -354,11 +361,12 @@ class FirmwareBinaryProtocol {
   }
 
   /// Create createDirectory command with path type
-  static Uint8List createCreateDirectoryCommand(String path, {int pathType = 0}) {
+  static Uint8List createCreateDirectoryCommand(String path,
+      {int pathType = 0}) {
     List<int> pathBytes = utf8.encode(path);
     Uint8List payload = Uint8List(2 + pathBytes.length);
     payload[0] = pathBytes.length;
-    payload[1] = pathType;  // 0=/DATA/RECORDS, 1=/DATA/SIGNALS, etc.
+    payload[1] = pathType; // 0=/DATA/RECORDS, 1=/DATA/SIGNALS, etc.
     for (int i = 0; i < pathBytes.length; i++) {
       payload[2 + i] = pathBytes[i];
     }
@@ -367,11 +375,12 @@ class FirmwareBinaryProtocol {
 
   /// Create copyFile command with path type
   /// Format: [pathType:1][sourcePathLength:1][sourcePath:variable][destPathLength:1][destPath:variable]
-  static Uint8List createCopyFileCommand(String sourcePath, String destPath, {int pathType = 0}) {
+  static Uint8List createCopyFileCommand(String sourcePath, String destPath,
+      {int pathType = 0}) {
     List<int> sourceBytes = utf8.encode(sourcePath);
     List<int> destBytes = utf8.encode(destPath);
     Uint8List payload = Uint8List(3 + sourceBytes.length + destBytes.length);
-    
+
     payload[0] = pathType;
     payload[1] = sourceBytes.length;
     for (int i = 0; i < sourceBytes.length; i++) {
@@ -381,17 +390,18 @@ class FirmwareBinaryProtocol {
     for (int i = 0; i < destBytes.length; i++) {
       payload[3 + sourceBytes.length + i] = destBytes[i];
     }
-    
+
     return _createEnhancedCommand(MSG_COPY_FILE, payload);
   }
 
   /// Create moveFile command with separate path types for source and destination
   /// Format: [sourcePathType:1][destPathType:1][sourcePathLength:1][sourcePath:variable][destPathLength:1][destPath:variable]
-  static Uint8List createMoveFileCommand(String sourcePath, String destPath, {int sourcePathType = 0, int destPathType = 0}) {
+  static Uint8List createMoveFileCommand(String sourcePath, String destPath,
+      {int sourcePathType = 0, int destPathType = 0}) {
     List<int> sourceBytes = utf8.encode(sourcePath);
     List<int> destBytes = utf8.encode(destPath);
     Uint8List payload = Uint8List(4 + sourceBytes.length + destBytes.length);
-    
+
     payload[0] = sourcePathType;
     payload[1] = destPathType;
     payload[2] = sourceBytes.length;
@@ -402,104 +412,107 @@ class FirmwareBinaryProtocol {
     for (int i = 0; i < destBytes.length; i++) {
       payload[4 + sourceBytes.length + i] = destBytes[i];
     }
-    
+
     return _createEnhancedCommand(MSG_MOVE_FILE, payload);
   }
 
   /// Create upload file command (first chunk with path)
   /// Format: [0x0D][pathLength:1][pathType:1][path:variable]
-  static Uint8List createUploadFileStartCommand(String path, {int pathType = 0, int chunkId = 0, int totalChunks = 1}) {
+  static Uint8List createUploadFileStartCommand(String path,
+      {int pathType = 0, int chunkId = 0, int totalChunks = 1}) {
     List<int> pathBytes = utf8.encode(path);
     Uint8List payload = Uint8List(3 + pathBytes.length);
-    payload[0] = MSG_UPLOAD_FILE;  // Message type
+    payload[0] = MSG_UPLOAD_FILE; // Message type
     payload[1] = pathBytes.length; // Path length
-    payload[2] = pathType;         // Path type
+    payload[2] = pathType; // Path type
     for (int i = 0; i < pathBytes.length; i++) {
       payload[3 + i] = pathBytes[i];
     }
-    return _createEnhancedCommandWithChunking(MSG_UPLOAD_FILE, chunkId, 1, totalChunks, payload);
+    return _createEnhancedCommandWithChunking(
+        MSG_UPLOAD_FILE, chunkId, 1, totalChunks, payload);
   }
 
   /// Create upload file data chunk
-  static Uint8List createUploadFileChunkCommand(Uint8List data, int chunkId, int chunkNum, int totalChunks) {
-    return _createEnhancedCommandWithChunking(MSG_UPLOAD_FILE, chunkId, chunkNum, totalChunks, data);
+  static Uint8List createUploadFileChunkCommand(
+      Uint8List data, int chunkId, int chunkNum, int totalChunks) {
+    return _createEnhancedCommandWithChunking(
+        MSG_UPLOAD_FILE, chunkId, chunkNum, totalChunks, data);
   }
 
   /// Create enhanced command with chunking support
-  static Uint8List _createEnhancedCommandWithChunking(int messageType, int chunkId, int chunkNum, int totalChunks, Uint8List payload) {
+  static Uint8List _createEnhancedCommandWithChunking(int messageType,
+      int chunkId, int chunkNum, int totalChunks, Uint8List payload) {
     // Enhanced format: [Magic:1][Type:1][ChunkID:1][ChunkNum:1][TotalChunks:1][DataLen:2][Data:variable][Checksum:1]
     // Data includes: [MessageType:1][Payload:variable] for first chunk, or just [Payload:variable] for subsequent chunks
     int dataLength = payload.length;
-    Uint8List command = Uint8List(PACKET_HEADER_SIZE + dataLength + 1); // header + data + checksum
-    command[0] = MAGIC_BYTE;        // Magic byte
-    command[1] = PACKET_TYPE_DATA;  // Type: data
-    command[2] = chunkId & 0xFF;    // Chunk ID
-    command[3] = chunkNum & 0xFF;  // Chunk number
+    Uint8List command = Uint8List(
+        PACKET_HEADER_SIZE + dataLength + 1); // header + data + checksum
+    command[0] = MAGIC_BYTE; // Magic byte
+    command[1] = PACKET_TYPE_DATA; // Type: data
+    command[2] = chunkId & 0xFF; // Chunk ID
+    command[3] = chunkNum & 0xFF; // Chunk number
     command[4] = totalChunks & 0xFF; // Total chunks
-    command[5] = dataLength & 0xFF;        // Data length (low byte)
+    command[5] = dataLength & 0xFF; // Data length (low byte)
     command[6] = (dataLength >> 8) & 0xFF; // Data length (high byte)
-    
+
     // Copy payload
     for (int i = 0; i < payload.length; i++) {
       command[7 + i] = payload[i];
     }
-    
+
     // Calculate XOR checksum (of all bytes except checksum)
     int checksum = 0;
     for (int i = 0; i < PACKET_HEADER_SIZE + dataLength; i++) {
       checksum ^= command[i];
     }
     command[PACKET_HEADER_SIZE + dataLength] = checksum;
-    
+
     return command;
   }
 
-  /// Create a complete command with chunking support
-  static Uint8List _createCommand(int messageType, Uint8List payload) {
-    return _createCommandWithChunking(messageType, 0, payload); // 0 = single packet
-  }
-  
   /// Create enhanced protocol command (matching firmware format)
   static Uint8List _createEnhancedCommand(int messageType, Uint8List payload) {
     // Enhanced format: [Magic:1][Type:1][ChunkID:1][ChunkNum:1][TotalChunks:1][DataLen:2][Data:variable][Checksum:1]
     // Data includes: [MessageType:1][Payload:variable]
     int dataLength = 1 + payload.length; // messageType + payload
-    Uint8List command = Uint8List(PACKET_HEADER_SIZE + dataLength + 1); // header + data + checksum
-    command[0] = MAGIC_BYTE;        // Magic byte
-    command[1] = PACKET_TYPE_DATA;  // Type: data
-    command[2] = 0x00;              // Chunk ID (0 for single packet)
-    command[3] = 0x01;              // Chunk number (1 for single packet)
-    command[4] = 0x01;              // Total chunks (1 for single packet)
-    command[5] = dataLength & 0xFF;        // Data length (low byte)
+    Uint8List command = Uint8List(
+        PACKET_HEADER_SIZE + dataLength + 1); // header + data + checksum
+    command[0] = MAGIC_BYTE; // Magic byte
+    command[1] = PACKET_TYPE_DATA; // Type: data
+    command[2] = 0x00; // Chunk ID (0 for single packet)
+    command[3] = 0x01; // Chunk number (1 for single packet)
+    command[4] = 0x01; // Total chunks (1 for single packet)
+    command[5] = dataLength & 0xFF; // Data length (low byte)
     command[6] = (dataLength >> 8) & 0xFF; // Data length (high byte)
-    
+
     // Copy message type and payload
     command[7] = messageType;
     for (int i = 0; i < payload.length; i++) {
       command[8 + i] = payload[i];
     }
-    
+
     // Calculate XOR checksum (of all bytes except checksum)
     int checksum = 0;
     for (int i = 0; i < PACKET_HEADER_SIZE + dataLength; i++) {
       checksum ^= command[i];
     }
     command[PACKET_HEADER_SIZE + dataLength] = checksum;
-    
+
     return command;
   }
-  
+
   /// Create a command with chunking support
-  static Uint8List _createCommandWithChunking(int messageType, int chunkInfo, Uint8List payload) {
+  static Uint8List _createCommandWithChunking(
+      int messageType, int chunkInfo, Uint8List payload) {
     Uint8List command = Uint8List(1 + 2 + payload.length + 4);
     command[0] = messageType;
     command[1] = chunkInfo & 0xFF; // Chunk ID
     command[2] = (chunkInfo >> 8) & 0xFF; // Chunk Number
-    
+
     for (int i = 0; i < payload.length; i++) {
       command[3 + i] = payload[i];
     }
-    
+
     // Calculate CRC32 for the entire command (messageType + chunkInfo + payload)
     Uint8List dataForCrc = Uint8List(3 + payload.length);
     dataForCrc[0] = messageType;
@@ -508,55 +521,59 @@ class FirmwareBinaryProtocol {
     for (int i = 0; i < payload.length; i++) {
       dataForCrc[3 + i] = payload[i];
     }
-    
+
     int crc32 = calculateCRC32(dataForCrc);
     Uint8List crcBytes = intToBytes(crc32);
-    
+
     for (int i = 0; i < 4; i++) {
       command[3 + payload.length + i] = crcBytes[i];
     }
-    
+
     return command;
   }
-  
+
   /// Create chunked data for large responses
   static List<Uint8List> createChunkedResponse(int messageType, String data) {
     List<int> dataBytes = utf8.encode(data);
     List<Uint8List> chunks = [];
-    
+
     if (dataBytes.length <= MAX_CHUNK_SIZE) {
       // Single packet
-      chunks.add(_createCommandWithChunking(messageType, 0, Uint8List.fromList(dataBytes))); // 0 = single packet
+      chunks.add(_createCommandWithChunking(
+          messageType, 0, Uint8List.fromList(dataBytes))); // 0 = single packet
     } else {
       // Multiple chunks
-      int chunkId = DateTime.now().millisecondsSinceEpoch & 0xFF; // Simple chunk ID
+      int chunkId =
+          DateTime.now().millisecondsSinceEpoch & 0xFF; // Simple chunk ID
       int totalChunks = (dataBytes.length / MAX_CHUNK_SIZE).ceil();
-      
+
       for (int i = 0; i < totalChunks; i++) {
         int start = i * MAX_CHUNK_SIZE;
         int end = (start + MAX_CHUNK_SIZE).clamp(0, dataBytes.length);
         Uint8List chunkData = Uint8List(end - start);
-        
+
         for (int j = start; j < end; j++) {
           chunkData[j - start] = dataBytes[j];
         }
-        
+
         int chunkNumber = i + 1;
         if (i == totalChunks - 1) {
           chunkNumber = 0xFF; // Mark last chunk
         }
-        
+
         int chunkInfo = chunkId | (chunkNumber << 8);
-        chunks.add(_createCommandWithChunking(0xFE, chunkInfo, chunkData)); // 0xFE = chunk data
+        chunks.add(_createCommandWithChunking(
+            0xFE, chunkInfo, chunkData)); // 0xFE = chunk data
       }
     }
-    
+
     return chunks;
   }
 
   /// Parse response from firmware (matching firmware packet format)
   static Map<String, dynamic> parseResponse(Uint8List data) {
-    if (data.length < PACKET_HEADER_SIZE + 1) { // header + checksum
+    if (data.length < PACKET_HEADER_SIZE + 1) {
+      // header + checksum
       throw Exception('Response too short');
     }
 
@@ -567,40 +584,42 @@ class FirmwareBinaryProtocol {
     int chunkId = data[2];
     int chunkNumber = data[3];
     int totalChunks = data[4];
-    int dataLength = data[5] | (data[6] << 8);  // Little-endian: 2 bytes
-    
+    int dataLength = data[5] | (data[6] << 8); // Little-endian: 2 bytes
+
     // Validate magic byte
     if (magic != MAGIC_BYTE) {
       throw Exception('Invalid magic byte: 0x${magic.toRadixString(16)}');
     }
-    
+
     // Validate packet type
     if (packetType != PACKET_TYPE_DATA) {
       throw Exception('Invalid packet type: 0x${packetType.toRadixString(16)}');
     }
-    
+
     // Validate data length
     if (data.length < PACKET_HEADER_SIZE + dataLength + 1) {
       throw Exception('Packet length mismatch');
     }
-    
+
     // Extract data and checksum
-    Uint8List payload = data.sublist(PACKET_HEADER_SIZE, PACKET_HEADER_SIZE + dataLength);
+    Uint8List payload =
+        data.sublist(PACKET_HEADER_SIZE, PACKET_HEADER_SIZE + dataLength);
     int receivedChecksum = data[PACKET_HEADER_SIZE + dataLength];
-    
+
     // Calculate checksum (XOR of all bytes except checksum)
     int calculatedChecksum = 0;
     for (int i = 0; i < PACKET_HEADER_SIZE + dataLength; i++) {
       calculatedChecksum ^= data[i];
     }
-    
+
     if (receivedChecksum != calculatedChecksum) {
-      throw Exception('Invalid checksum: received 0x${receivedChecksum.toRadixString(16)}, calculated 0x${calculatedChecksum.toRadixString(16)}');
+      throw Exception(
+          'Invalid checksum: received 0x${receivedChecksum.toRadixString(16)}, calculated 0x${calculatedChecksum.toRadixString(16)}');
     }
 
     // Check if payload is binary (0x80-0xFF) or text
     bool isBinary = payload.isNotEmpty && payload[0] >= 0x80;
-    
+
     Map<String, dynamic> result = {
       'packetType': packetType,
       'chunkId': chunkId,
@@ -610,7 +629,7 @@ class FirmwareBinaryProtocol {
       'isLastChunk': chunkNumber == totalChunks,
       'isBinary': isBinary,
     };
-    
+
     if (isBinary) {
       // Binary message: keep as Uint8List
       result['payloadBytes'] = payload;
@@ -620,7 +639,7 @@ class FirmwareBinaryProtocol {
       try {
         String payloadString = utf8.decode(payload);
         result['payload'] = payloadString;
-        
+
         // Try to parse as JSON for single packet responses
         if (!result['isChunked']) {
           try {
@@ -636,64 +655,71 @@ class FirmwareBinaryProtocol {
         result['isBinary'] = true;
       }
     }
-    
+
     return result;
   }
 
   /// Create save to signals with custom name command
-  static Uint8List createSaveToSignalsWithNameCommand(String sourcePath, String targetName, {int pathType = 0, DateTime? preserveDate}) {
+  static Uint8List createSaveToSignalsWithNameCommand(
+      String sourcePath, String targetName,
+      {int pathType = 0, DateTime? preserveDate}) {
     List<int> sourcePathBytes = utf8.encode(sourcePath);
     List<int> targetNameBytes = utf8.encode(targetName);
     // Add 4 bytes for date (Unix timestamp) if specified
     int dateBytes = preserveDate != null ? 4 : 0;
-    Uint8List payload = Uint8List(3 + sourcePathBytes.length + targetNameBytes.length + dateBytes);
-    
+    Uint8List payload = Uint8List(
+        3 + sourcePathBytes.length + targetNameBytes.length + dateBytes);
+
     payload[0] = sourcePathBytes.length;
     payload[1] = targetNameBytes.length;
-    payload[2] = pathType; // 0=/DATA/RECORDS, 1=/DATA/SIGNALS, 2=/DATA/PRESETS, etc.
-    
+    payload[2] =
+        pathType; // 0=/DATA/RECORDS, 1=/DATA/SIGNALS, 2=/DATA/PRESETS, etc.
+
     // Copy source path
     for (int i = 0; i < sourcePathBytes.length; i++) {
       payload[3 + i] = sourcePathBytes[i];
     }
-    
+
     // Copy target name
     for (int i = 0; i < targetNameBytes.length; i++) {
       payload[3 + sourcePathBytes.length + i] = targetNameBytes[i];
     }
-    
+
     // Add date if provided (Unix timestamp in seconds, 4 bytes little-endian)
     if (preserveDate != null) {
-      final timestamp = preserveDate.millisecondsSinceEpoch ~/ 1000; // Convert to seconds
+      final timestamp =
+          preserveDate.millisecondsSinceEpoch ~/ 1000; // Convert to seconds
       final offset = 3 + sourcePathBytes.length + targetNameBytes.length;
       payload[offset] = timestamp & 0xFF;
       payload[offset + 1] = (timestamp >> 8) & 0xFF;
       payload[offset + 2] = (timestamp >> 16) & 0xFF;
       payload[offset + 3] = (timestamp >> 24) & 0xFF;
     }
-    
+
     return _createEnhancedCommand(MSG_SAVE_TO_SIGNALS_WITH_NAME, payload);
   }
 
   /// Create frequency search command
-  static Uint8List createFrequencySearchCommand(int module, int minRssi, {bool isBackground = false}) {
+  static Uint8List createFrequencySearchCommand(int module, int minRssi,
+      {bool isBackground = false}) {
     Uint8List payload = Uint8List(3);
     payload[0] = module;
     payload[1] = minRssi; // RSSI threshold (-100 to 0)
     payload[2] = isBackground ? 1 : 0; // Background scanner flag
-    
+
     return _createEnhancedCommand(MSG_FREQUENCY_SEARCH, payload);
   }
 
   /// Create set time command (Unix timestamp in seconds, 4 bytes little-endian)
   static Uint8List createSetTimeCommand(DateTime dateTime) {
-    final timestamp = dateTime.millisecondsSinceEpoch ~/ 1000; // Convert to seconds
+    final timestamp =
+        dateTime.millisecondsSinceEpoch ~/ 1000; // Convert to seconds
     Uint8List payload = Uint8List(4);
     payload[0] = timestamp & 0xFF;
     payload[1] = (timestamp >> 8) & 0xFF;
     payload[2] = (timestamp >> 16) & 0xFF;
     payload[3] = (timestamp >> 24) & 0xFF;
-    
+
     return _createEnhancedCommand(MSG_SET_TIME, payload);
   }
 
@@ -721,42 +747,44 @@ class FirmwareBinaryProtocol {
     int cooldownMs = 5000, // 5 seconds default
     List<int>? customPattern, // Optional custom pattern bytes
   }) {
-    int baseSize = 15; // module(1) + frequency(4) + power(1) + patternType(1) + maxDurationMs(4) + cooldownMs(4)
+    int baseSize =
+        15; // module(1) + frequency(4) + power(1) + patternType(1) + maxDurationMs(4) + cooldownMs(4)
     int customPatternSize = 0;
     if (patternType == 3 && customPattern != null) {
-      customPatternSize = 1 + customPattern.length; // length byte + pattern bytes
+      customPatternSize =
+          1 + customPattern.length; // length byte + pattern bytes
     }
-    
+
     Uint8List payload = Uint8List(baseSize + customPatternSize);
     int offset = 0;
-    
+
     // module (1 byte)
     payload[offset++] = module;
-    
+
     // frequency (4 bytes, float, little-endian)
     Uint8List freqBytes = _floatToBytes(frequency);
     for (int i = 0; i < 4; i++) {
       payload[offset++] = freqBytes[i];
     }
-    
+
     // power (1 byte, 0-7)
     payload[offset++] = power.clamp(0, 7);
-    
+
     // patternType (1 byte, 0-3)
     payload[offset++] = patternType.clamp(0, 3);
-    
+
     // maxDurationMs (4 bytes, uint32, little-endian)
     payload[offset++] = maxDurationMs & 0xFF;
     payload[offset++] = (maxDurationMs >> 8) & 0xFF;
     payload[offset++] = (maxDurationMs >> 16) & 0xFF;
     payload[offset++] = (maxDurationMs >> 24) & 0xFF;
-    
+
     // cooldownMs (4 bytes, uint32, little-endian)
     payload[offset++] = cooldownMs & 0xFF;
     payload[offset++] = (cooldownMs >> 8) & 0xFF;
     payload[offset++] = (cooldownMs >> 16) & 0xFF;
     payload[offset++] = (cooldownMs >> 24) & 0xFF;
-    
+
     // customPattern (optional)
     if (patternType == 3 && customPattern != null) {
       payload[offset++] = customPattern.length;
@@ -764,7 +792,7 @@ class FirmwareBinaryProtocol {
         payload[offset++] = customPattern[i];
       }
     }
-    
+
     return _createEnhancedCommand(MSG_START_JAM, payload);
   }
 
@@ -790,8 +818,8 @@ class FirmwareBinaryProtocol {
   static Uint8List createBruterSetDelayCommand(int delayMs) {
     Uint8List payload = Uint8List(3);
     payload[0] = 0xFE; // Sub-command: set delay
-    payload[1] = delayMs & 0xFF;         // Low byte
-    payload[2] = (delayMs >> 8) & 0xFF;  // High byte
+    payload[1] = delayMs & 0xFF; // Low byte
+    payload[2] = (delayMs >> 8) & 0xFF; // High byte
     return _createEnhancedCommand(MSG_BRUTER, payload);
   }
 
@@ -837,7 +865,7 @@ class FirmwareBinaryProtocol {
     final payload = Uint8List(9);
     payload[0] = 0xFD; // Sub-command: custom De Bruijn
     payload[1] = bits & 0xFF;
-    payload[2] = te & 0xFF;        // Te low byte
+    payload[2] = te & 0xFF; // Te low byte
     payload[3] = (te >> 8) & 0xFF; // Te high byte
     payload[4] = ratio & 0xFF;
     // IEEE 754 float, little-endian
@@ -875,7 +903,8 @@ class FirmwareBinaryProtocol {
 
   /// Send raw HID payload to target (0x24)
   /// [targetIndex] index in firmware target array, [hidData] raw HID bytes
-  static Uint8List createNrfAttackHidCommand(int targetIndex, Uint8List hidData) {
+  static Uint8List createNrfAttackHidCommand(
+      int targetIndex, Uint8List hidData) {
     Uint8List payload = Uint8List(1 + hidData.length);
     payload[0] = targetIndex;
     payload.setRange(1, 1 + hidData.length, hidData);
@@ -894,7 +923,8 @@ class FirmwareBinaryProtocol {
   }
 
   /// Run DuckyScript file from SD on target (0x26)
-  static Uint8List createNrfAttackDuckyCommand(int targetIndex, String filePath) {
+  static Uint8List createNrfAttackDuckyCommand(
+      int targetIndex, String filePath) {
     List<int> pathBytes = utf8.encode(filePath);
     Uint8List payload = Uint8List(2 + pathBytes.length);
     payload[0] = targetIndex;
@@ -923,7 +953,8 @@ class FirmwareBinaryProtocol {
   /// Start NRF jammer (0x2A)
   /// [mode] 0-9 jammer mode, optional [channel] for single-ch,
   /// optional [hopStart]/[hopStop]/[hopStep] for custom hopper
-  static Uint8List createNrfJamStartCommand(int mode, {
+  static Uint8List createNrfJamStartCommand(
+    int mode, {
     int channel = 50,
     int hopStart = 0,
     int hopStop = 80,
@@ -997,7 +1028,8 @@ class FirmwareBinaryProtocol {
     final normalizedButton = buttonId.clamp(1, 2);
     final normalizedAction = actionId.clamp(0, 6);
 
-    final hasReplayData = replayPath != null && replayPath.isNotEmpty && replayPathType != null;
+    final hasReplayData =
+        replayPath != null && replayPath.isNotEmpty && replayPathType != null;
     if (!hasReplayData) {
       final payload = Uint8List(2);
       payload[0] = normalizedButton;
@@ -1027,7 +1059,7 @@ class FirmwareBinaryProtocol {
 
   // ── NRF24 Jammer Per-Mode Commands (0x42-0x45) ──────────────
   static const int MSG_NRF_JAM_SET_DWELL = 0x42;
-  static const int MSG_NRF_JAM_MODE_CFG  = 0x43;
+  static const int MSG_NRF_JAM_MODE_CFG = 0x43;
   static const int MSG_NRF_JAM_MODE_INFO = 0x44;
   static const int MSG_NRF_JAM_RESET_CFG = 0x45;
 
@@ -1063,9 +1095,8 @@ class FirmwareBinaryProtocol {
 
   /// Set per-mode jammer config (0x43 SET)
   /// Payload: [mode:1][pa:1][dr:1][dwellLo:1][dwellHi:1][flood:1][bursts:1]
-  static Uint8List createNrfJamModeConfigSetCommand(
-      int mode, int paLevel, int dataRate, int dwellTimeMs,
-      bool useFlooding, int floodBursts) {
+  static Uint8List createNrfJamModeConfigSetCommand(int mode, int paLevel,
+      int dataRate, int dwellTimeMs, bool useFlooding, int floodBursts) {
     final payload = Uint8List(7);
     payload[0] = mode.clamp(0, 11);
     payload[1] = paLevel.clamp(0, 3);

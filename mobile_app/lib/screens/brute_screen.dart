@@ -15,8 +15,10 @@ class BruterProtocol {
   final int bits;
   final String encoding;
   final IconData icon;
+
   /// Timing element in microseconds (shortest pulse duration)
   final int te;
+
   /// Ratio of long pulse to short pulse (e.g. 3 means 1:3)
   final int ratio;
 
@@ -37,8 +39,7 @@ class BruterProtocol {
 
   /// Whether this protocol is compatible with De Bruijn attack.
   /// Requires binary encoding and n <= 16 bits.
-  bool get deBruijnCompatible =>
-      encoding == 'binary' && bits <= 16;
+  bool get deBruijnCompatible => encoding == 'binary' && bits <= 16;
 
   /// Estimated time for full keyspace brute force
   /// Formula: keyspace * (delay_ms * repetitions + singleCodeTime_ms) / 1000
@@ -48,15 +49,14 @@ class BruterProtocol {
     if (isDeBruijn) {
       return _estimatedTimeDeBruijn();
     }
-    final keyspace = encoding.contains('tristate')
-        ? _pow3(bits)
-        : (1 << bits);
+    final keyspace = encoding.contains('tristate') ? _pow3(bits) : (1 << bits);
     // Each code: repetitions * (inter_frame_delay + ~2ms RF transmission time)
     const int repetitions = 4;
-    const double singleTxMs = 2.0; // Approximate RF transmission time per repetition
+    const double singleTxMs =
+        2.0; // Approximate RF transmission time per repetition
     double totalPerCodeMs = repetitions * (delayMs + singleTxMs);
     double totalSeconds = keyspace * totalPerCodeMs / 1000.0;
-    
+
     if (totalSeconds < 60) return '< 1 min';
     if (totalSeconds < 3600) return '~${(totalSeconds / 60).round()} min';
     if (totalSeconds < 86400) return '~${(totalSeconds / 3600).round()} hrs';
@@ -100,58 +100,418 @@ class BruterProtocol {
 /// All supported bruter protocols
 const List<BruterProtocol> bruterProtocols = [
   // EU Garage Remotes
-  BruterProtocol(menuId: 1, name: 'CAME', category: 'EU Garage', frequencyMhz: 433.92, bits: 12, encoding: 'binary', icon: Icons.garage, te: 320, ratio: 2),
-  BruterProtocol(menuId: 2, name: 'Princeton', category: 'EU Garage', frequencyMhz: 433.92, bits: 12, encoding: 'tristate', icon: Icons.garage, te: 350, ratio: 3),
-  BruterProtocol(menuId: 3, name: 'NiceFlo', category: 'EU Garage', frequencyMhz: 433.92, bits: 12, encoding: 'binary', icon: Icons.garage, te: 700, ratio: 2),
-  BruterProtocol(menuId: 6, name: 'Holtek', category: 'EU Garage', frequencyMhz: 433.92, bits: 12, encoding: 'binary', icon: Icons.garage, te: 430, ratio: 2),
-  BruterProtocol(menuId: 8, name: 'Ansonic', category: 'EU Garage', frequencyMhz: 433.92, bits: 12, encoding: 'binary', icon: Icons.garage, te: 555, ratio: 2),
-  BruterProtocol(menuId: 11, name: 'FAAC', category: 'EU Garage', frequencyMhz: 433.92, bits: 12, encoding: 'binary', icon: Icons.garage, te: 400, ratio: 3),
-  BruterProtocol(menuId: 12, name: 'BFT', category: 'EU Garage', frequencyMhz: 433.92, bits: 12, encoding: 'binary', icon: Icons.garage, te: 400, ratio: 2),
-  BruterProtocol(menuId: 13, name: 'SMC5326', category: 'EU Garage', frequencyMhz: 433.42, bits: 12, encoding: 'tristate', icon: Icons.garage, te: 320, ratio: 3),
-  BruterProtocol(menuId: 14, name: 'Clemsa', category: 'EU Garage', frequencyMhz: 433.92, bits: 12, encoding: 'binary', icon: Icons.garage, te: 400, ratio: 2),
-  BruterProtocol(menuId: 15, name: 'GateTX', category: 'EU Garage', frequencyMhz: 433.92, bits: 12, encoding: 'binary', icon: Icons.garage, te: 350, ratio: 2),
-  BruterProtocol(menuId: 16, name: 'Phox', category: 'EU Garage', frequencyMhz: 433.92, bits: 12, encoding: 'binary', icon: Icons.garage, te: 400, ratio: 2),
-  BruterProtocol(menuId: 17, name: 'Phoenix V2', category: 'EU Garage', frequencyMhz: 433.92, bits: 12, encoding: 'binary', icon: Icons.garage, te: 500, ratio: 2),
-  BruterProtocol(menuId: 18, name: 'Prastel', category: 'EU Garage', frequencyMhz: 433.92, bits: 12, encoding: 'binary', icon: Icons.garage, te: 400, ratio: 2),
-  BruterProtocol(menuId: 19, name: 'Doitrand', category: 'EU Garage', frequencyMhz: 433.92, bits: 12, encoding: 'binary', icon: Icons.garage, te: 400, ratio: 2),
+  BruterProtocol(
+      menuId: 1,
+      name: 'CAME',
+      category: 'EU Garage',
+      frequencyMhz: 433.92,
+      bits: 12,
+      encoding: 'binary',
+      icon: Icons.garage,
+      te: 320,
+      ratio: 2),
+  BruterProtocol(
+      menuId: 2,
+      name: 'Princeton',
+      category: 'EU Garage',
+      frequencyMhz: 433.92,
+      bits: 12,
+      encoding: 'tristate',
+      icon: Icons.garage,
+      te: 350,
+      ratio: 3),
+  BruterProtocol(
+      menuId: 3,
+      name: 'NiceFlo',
+      category: 'EU Garage',
+      frequencyMhz: 433.92,
+      bits: 12,
+      encoding: 'binary',
+      icon: Icons.garage,
+      te: 700,
+      ratio: 2),
+  BruterProtocol(
+      menuId: 6,
+      name: 'Holtek',
+      category: 'EU Garage',
+      frequencyMhz: 433.92,
+      bits: 12,
+      encoding: 'binary',
+      icon: Icons.garage,
+      te: 430,
+      ratio: 2),
+  BruterProtocol(
+      menuId: 8,
+      name: 'Ansonic',
+      category: 'EU Garage',
+      frequencyMhz: 433.92,
+      bits: 12,
+      encoding: 'binary',
+      icon: Icons.garage,
+      te: 555,
+      ratio: 2),
+  BruterProtocol(
+      menuId: 11,
+      name: 'FAAC',
+      category: 'EU Garage',
+      frequencyMhz: 433.92,
+      bits: 12,
+      encoding: 'binary',
+      icon: Icons.garage,
+      te: 400,
+      ratio: 3),
+  BruterProtocol(
+      menuId: 12,
+      name: 'BFT',
+      category: 'EU Garage',
+      frequencyMhz: 433.92,
+      bits: 12,
+      encoding: 'binary',
+      icon: Icons.garage,
+      te: 400,
+      ratio: 2),
+  BruterProtocol(
+      menuId: 13,
+      name: 'SMC5326',
+      category: 'EU Garage',
+      frequencyMhz: 433.42,
+      bits: 12,
+      encoding: 'tristate',
+      icon: Icons.garage,
+      te: 320,
+      ratio: 3),
+  BruterProtocol(
+      menuId: 14,
+      name: 'Clemsa',
+      category: 'EU Garage',
+      frequencyMhz: 433.92,
+      bits: 12,
+      encoding: 'binary',
+      icon: Icons.garage,
+      te: 400,
+      ratio: 2),
+  BruterProtocol(
+      menuId: 15,
+      name: 'GateTX',
+      category: 'EU Garage',
+      frequencyMhz: 433.92,
+      bits: 12,
+      encoding: 'binary',
+      icon: Icons.garage,
+      te: 350,
+      ratio: 2),
+  BruterProtocol(
+      menuId: 16,
+      name: 'Phox',
+      category: 'EU Garage',
+      frequencyMhz: 433.92,
+      bits: 12,
+      encoding: 'binary',
+      icon: Icons.garage,
+      te: 400,
+      ratio: 2),
+  BruterProtocol(
+      menuId: 17,
+      name: 'Phoenix V2',
+      category: 'EU Garage',
+      frequencyMhz: 433.92,
+      bits: 12,
+      encoding: 'binary',
+      icon: Icons.garage,
+      te: 500,
+      ratio: 2),
+  BruterProtocol(
+      menuId: 18,
+      name: 'Prastel',
+      category: 'EU Garage',
+      frequencyMhz: 433.92,
+      bits: 12,
+      encoding: 'binary',
+      icon: Icons.garage,
+      te: 400,
+      ratio: 2),
+  BruterProtocol(
+      menuId: 19,
+      name: 'Doitrand',
+      category: 'EU Garage',
+      frequencyMhz: 433.92,
+      bits: 12,
+      encoding: 'binary',
+      icon: Icons.garage,
+      te: 400,
+      ratio: 2),
 
   // US Garage Remotes
-  BruterProtocol(menuId: 4, name: 'Chamberlain', category: 'US Garage', frequencyMhz: 315.0, bits: 12, encoding: 'binary', icon: Icons.door_sliding, te: 430, ratio: 2),
-  BruterProtocol(menuId: 5, name: 'Linear', category: 'US Garage', frequencyMhz: 300.0, bits: 10, encoding: 'binary', icon: Icons.door_sliding, te: 500, ratio: 3),
-  BruterProtocol(menuId: 7, name: 'LiftMaster', category: 'US Garage', frequencyMhz: 315.0, bits: 12, encoding: 'binary', icon: Icons.door_sliding, te: 400, ratio: 2),
-  BruterProtocol(menuId: 23, name: 'Firefly', category: 'US Garage', frequencyMhz: 300.0, bits: 10, encoding: 'binary', icon: Icons.door_sliding, te: 400, ratio: 2),
-  BruterProtocol(menuId: 24, name: 'Linear MegaCode', category: 'US Garage', frequencyMhz: 318.0, bits: 24, encoding: 'binary', icon: Icons.door_sliding, te: 500, ratio: 2),
+  BruterProtocol(
+      menuId: 4,
+      name: 'Chamberlain',
+      category: 'US Garage',
+      frequencyMhz: 315.0,
+      bits: 12,
+      encoding: 'binary',
+      icon: Icons.door_sliding,
+      te: 430,
+      ratio: 2),
+  BruterProtocol(
+      menuId: 5,
+      name: 'Linear',
+      category: 'US Garage',
+      frequencyMhz: 300.0,
+      bits: 10,
+      encoding: 'binary',
+      icon: Icons.door_sliding,
+      te: 500,
+      ratio: 3),
+  BruterProtocol(
+      menuId: 7,
+      name: 'LiftMaster',
+      category: 'US Garage',
+      frequencyMhz: 315.0,
+      bits: 12,
+      encoding: 'binary',
+      icon: Icons.door_sliding,
+      te: 400,
+      ratio: 2),
+  BruterProtocol(
+      menuId: 23,
+      name: 'Firefly',
+      category: 'US Garage',
+      frequencyMhz: 300.0,
+      bits: 10,
+      encoding: 'binary',
+      icon: Icons.door_sliding,
+      te: 400,
+      ratio: 2),
+  BruterProtocol(
+      menuId: 24,
+      name: 'Linear MegaCode',
+      category: 'US Garage',
+      frequencyMhz: 318.0,
+      bits: 24,
+      encoding: 'binary',
+      icon: Icons.door_sliding,
+      te: 500,
+      ratio: 2),
 
   // Home Automation
-  BruterProtocol(menuId: 20, name: 'Dooya', category: 'Home Auto', frequencyMhz: 433.92, bits: 24, encoding: 'binary', icon: Icons.blinds, te: 350, ratio: 2),
-  BruterProtocol(menuId: 21, name: 'Nero', category: 'Home Auto', frequencyMhz: 433.92, bits: 12, encoding: 'binary', icon: Icons.blinds, te: 450, ratio: 2),
-  BruterProtocol(menuId: 22, name: 'Magellen', category: 'Home Auto', frequencyMhz: 433.92, bits: 12, encoding: 'binary', icon: Icons.blinds, te: 400, ratio: 2),
+  BruterProtocol(
+      menuId: 20,
+      name: 'Dooya',
+      category: 'Home Auto',
+      frequencyMhz: 433.92,
+      bits: 24,
+      encoding: 'binary',
+      icon: Icons.blinds,
+      te: 350,
+      ratio: 2),
+  BruterProtocol(
+      menuId: 21,
+      name: 'Nero',
+      category: 'Home Auto',
+      frequencyMhz: 433.92,
+      bits: 12,
+      encoding: 'binary',
+      icon: Icons.blinds,
+      te: 450,
+      ratio: 2),
+  BruterProtocol(
+      menuId: 22,
+      name: 'Magellen',
+      category: 'Home Auto',
+      frequencyMhz: 433.92,
+      bits: 12,
+      encoding: 'binary',
+      icon: Icons.blinds,
+      te: 400,
+      ratio: 2),
 
   // Alarm / Sensors
-  BruterProtocol(menuId: 9, name: 'EV1527', category: 'Alarm', frequencyMhz: 433.92, bits: 12, encoding: 'binary', icon: Icons.security, te: 320, ratio: 3),
-  BruterProtocol(menuId: 10, name: 'Honeywell', category: 'Alarm', frequencyMhz: 433.92, bits: 12, encoding: 'binary', icon: Icons.security, te: 300, ratio: 2),
-  BruterProtocol(menuId: 29, name: 'EV1527 24b', category: 'Alarm', frequencyMhz: 433.92, bits: 24, encoding: 'binary', icon: Icons.security, te: 320, ratio: 3),
+  BruterProtocol(
+      menuId: 9,
+      name: 'EV1527',
+      category: 'Alarm',
+      frequencyMhz: 433.92,
+      bits: 12,
+      encoding: 'binary',
+      icon: Icons.security,
+      te: 320,
+      ratio: 3),
+  BruterProtocol(
+      menuId: 10,
+      name: 'Honeywell',
+      category: 'Alarm',
+      frequencyMhz: 433.92,
+      bits: 12,
+      encoding: 'binary',
+      icon: Icons.security,
+      te: 300,
+      ratio: 2),
+  BruterProtocol(
+      menuId: 29,
+      name: 'EV1527 24b',
+      category: 'Alarm',
+      frequencyMhz: 433.92,
+      bits: 24,
+      encoding: 'binary',
+      icon: Icons.security,
+      te: 320,
+      ratio: 3),
 
   // 868 MHz
-  BruterProtocol(menuId: 25, name: 'Hörmann', category: '868 MHz', frequencyMhz: 868.35, bits: 12, encoding: 'binary', icon: Icons.radio, te: 500, ratio: 2),
-  BruterProtocol(menuId: 26, name: 'Marantec', category: '868 MHz', frequencyMhz: 868.35, bits: 12, encoding: 'binary', icon: Icons.radio, te: 600, ratio: 2),
-  BruterProtocol(menuId: 27, name: 'Berner', category: '868 MHz', frequencyMhz: 868.35, bits: 12, encoding: 'binary', icon: Icons.radio, te: 400, ratio: 2),
+  BruterProtocol(
+      menuId: 25,
+      name: 'Hörmann',
+      category: '868 MHz',
+      frequencyMhz: 868.35,
+      bits: 12,
+      encoding: 'binary',
+      icon: Icons.radio,
+      te: 500,
+      ratio: 2),
+  BruterProtocol(
+      menuId: 26,
+      name: 'Marantec',
+      category: '868 MHz',
+      frequencyMhz: 868.35,
+      bits: 12,
+      encoding: 'binary',
+      icon: Icons.radio,
+      te: 600,
+      ratio: 2),
+  BruterProtocol(
+      menuId: 27,
+      name: 'Berner',
+      category: '868 MHz',
+      frequencyMhz: 868.35,
+      bits: 12,
+      encoding: 'binary',
+      icon: Icons.radio,
+      te: 400,
+      ratio: 2),
 
   // Misc
-  BruterProtocol(menuId: 28, name: 'Intertechno V3', category: 'Misc', frequencyMhz: 433.92, bits: 32, encoding: 'binary', icon: Icons.power, te: 250, ratio: 5),
-  BruterProtocol(menuId: 30, name: 'StarLine', category: 'Misc', frequencyMhz: 433.92, bits: 12, encoding: 'binary', icon: Icons.key, te: 500, ratio: 2),
-  BruterProtocol(menuId: 31, name: 'Tedsen', category: 'Misc', frequencyMhz: 433.92, bits: 12, encoding: 'binary', icon: Icons.key, te: 600, ratio: 2),
-  BruterProtocol(menuId: 32, name: 'Airforce', category: 'Misc', frequencyMhz: 433.92, bits: 12, encoding: 'binary', icon: Icons.key, te: 350, ratio: 3),
-  BruterProtocol(menuId: 33, name: 'Unilarm', category: 'Misc', frequencyMhz: 433.42, bits: 12, encoding: 'binary', icon: Icons.key, te: 350, ratio: 3),
-  BruterProtocol(menuId: 34, name: 'ELKA', category: 'Misc', frequencyMhz: 433.92, bits: 12, encoding: 'binary', icon: Icons.key, te: 400, ratio: 2),
+  BruterProtocol(
+      menuId: 28,
+      name: 'Intertechno V3',
+      category: 'Misc',
+      frequencyMhz: 433.92,
+      bits: 32,
+      encoding: 'binary',
+      icon: Icons.power,
+      te: 250,
+      ratio: 5),
+  BruterProtocol(
+      menuId: 30,
+      name: 'StarLine',
+      category: 'Misc',
+      frequencyMhz: 433.92,
+      bits: 12,
+      encoding: 'binary',
+      icon: Icons.key,
+      te: 500,
+      ratio: 2),
+  BruterProtocol(
+      menuId: 31,
+      name: 'Tedsen',
+      category: 'Misc',
+      frequencyMhz: 433.92,
+      bits: 12,
+      encoding: 'binary',
+      icon: Icons.key,
+      te: 600,
+      ratio: 2),
+  BruterProtocol(
+      menuId: 32,
+      name: 'Airforce',
+      category: 'Misc',
+      frequencyMhz: 433.92,
+      bits: 12,
+      encoding: 'binary',
+      icon: Icons.key,
+      te: 350,
+      ratio: 3),
+  BruterProtocol(
+      menuId: 33,
+      name: 'Unilarm',
+      category: 'Misc',
+      frequencyMhz: 433.42,
+      bits: 12,
+      encoding: 'binary',
+      icon: Icons.key,
+      te: 350,
+      ratio: 3),
+  BruterProtocol(
+      menuId: 34,
+      name: 'ELKA',
+      category: 'Misc',
+      frequencyMhz: 433.92,
+      bits: 12,
+      encoding: 'binary',
+      icon: Icons.key,
+      te: 400,
+      ratio: 2),
 
   // De Bruijn protocols (~90x faster for binary ≤16 bits)
-  BruterProtocol(menuId: 35, name: 'DeBruijn Generic 433', category: 'De Bruijn', frequencyMhz: 433.92, bits: 12, encoding: 'debruijn', icon: Icons.bolt, te: 300, ratio: 3),
-  BruterProtocol(menuId: 36, name: 'DeBruijn Generic 315', category: 'De Bruijn', frequencyMhz: 315.0, bits: 12, encoding: 'debruijn', icon: Icons.bolt, te: 300, ratio: 3),
-  BruterProtocol(menuId: 37, name: 'DeBruijn Holtek', category: 'De Bruijn', frequencyMhz: 433.92, bits: 12, encoding: 'debruijn', icon: Icons.bolt, te: 430, ratio: 2),
-  BruterProtocol(menuId: 38, name: 'DeBruijn Linear', category: 'De Bruijn', frequencyMhz: 300.0, bits: 10, encoding: 'debruijn', icon: Icons.bolt, te: 500, ratio: 3),
-  BruterProtocol(menuId: 39, name: 'DeBruijn EV1527', category: 'De Bruijn', frequencyMhz: 433.92, bits: 12, encoding: 'debruijn', icon: Icons.bolt, te: 320, ratio: 3),
-  BruterProtocol(menuId: 40, name: 'Universal Sweep', category: 'De Bruijn', frequencyMhz: 433.92, bits: 12, encoding: 'debruijn', icon: Icons.radar, te: 300, ratio: 3),
+  BruterProtocol(
+      menuId: 35,
+      name: 'DeBruijn Generic 433',
+      category: 'De Bruijn',
+      frequencyMhz: 433.92,
+      bits: 12,
+      encoding: 'debruijn',
+      icon: Icons.bolt,
+      te: 300,
+      ratio: 3),
+  BruterProtocol(
+      menuId: 36,
+      name: 'DeBruijn Generic 315',
+      category: 'De Bruijn',
+      frequencyMhz: 315.0,
+      bits: 12,
+      encoding: 'debruijn',
+      icon: Icons.bolt,
+      te: 300,
+      ratio: 3),
+  BruterProtocol(
+      menuId: 37,
+      name: 'DeBruijn Holtek',
+      category: 'De Bruijn',
+      frequencyMhz: 433.92,
+      bits: 12,
+      encoding: 'debruijn',
+      icon: Icons.bolt,
+      te: 430,
+      ratio: 2),
+  BruterProtocol(
+      menuId: 38,
+      name: 'DeBruijn Linear',
+      category: 'De Bruijn',
+      frequencyMhz: 300.0,
+      bits: 10,
+      encoding: 'debruijn',
+      icon: Icons.bolt,
+      te: 500,
+      ratio: 3),
+  BruterProtocol(
+      menuId: 39,
+      name: 'DeBruijn EV1527',
+      category: 'De Bruijn',
+      frequencyMhz: 433.92,
+      bits: 12,
+      encoding: 'debruijn',
+      icon: Icons.bolt,
+      te: 320,
+      ratio: 3),
+  BruterProtocol(
+      menuId: 40,
+      name: 'Universal Sweep',
+      category: 'De Bruijn',
+      frequencyMhz: 433.92,
+      bits: 12,
+      encoding: 'debruijn',
+      icon: Icons.radar,
+      te: 300,
+      ratio: 3),
 ];
 
 /// Get unique category list preserving order
@@ -202,6 +562,7 @@ class _BruteScreenState extends State<BruteScreen> {
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
   bool _completionShown = false;
+
   /// When true, compatible protocols launch in De Bruijn mode (~90x faster)
   bool _useDeBruijnMode = false;
 
@@ -220,10 +581,12 @@ class _BruteScreenState extends State<BruteScreen> {
     }
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toLowerCase();
-      list = list.where((p) =>
-          p.name.toLowerCase().contains(q) ||
-          p.category.toLowerCase().contains(q) ||
-          p.frequencyLabel.toLowerCase().contains(q)).toList();
+      list = list
+          .where((p) =>
+              p.name.toLowerCase().contains(q) ||
+              p.category.toLowerCase().contains(q) ||
+              p.frequencyLabel.toLowerCase().contains(q))
+          .toList();
     }
     return list;
   }
@@ -250,18 +613,23 @@ class _BruteScreenState extends State<BruteScreen> {
             final status = bleProvider.lastBruterCompletionStatus;
             final menuId = bleProvider.lastBruterCompletionMenuId;
             final protoName = bruterProtocols
-                .where((p) => p.menuId == menuId)
-                .map((p) => p.name)
-                .firstOrNull ?? 'Unknown';
-            
-            final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
+                    .where((p) => p.menuId == menuId)
+                    .map((p) => p.name)
+                    .firstOrNull ??
+                'Unknown';
+
+            final notificationProvider =
+                Provider.of<NotificationProvider>(context, listen: false);
             final l10n = AppLocalizations.of(context)!;
             if (status == 0) {
-              notificationProvider.showSuccess(l10n.bruteForceCompleted(protoName));
+              notificationProvider
+                  .showSuccess(l10n.bruteForceCompleted(protoName));
             } else if (status == 1) {
-              notificationProvider.showInfo(l10n.bruteForceCancelled(protoName));
+              notificationProvider
+                  .showInfo(l10n.bruteForceCancelled(protoName));
             } else {
-              notificationProvider.showError(l10n.bruteForceErrorMsg(protoName));
+              notificationProvider
+                  .showError(l10n.bruteForceErrorMsg(protoName));
             }
             bleProvider.clearBruterCompletion();
             _completionShown = false;
@@ -290,12 +658,15 @@ class _BruteScreenState extends State<BruteScreen> {
               child: _filteredProtocols.isEmpty
                   ? _buildEmptyState()
                   : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 4),
                       itemCount: _filteredProtocols.length,
                       itemBuilder: (context, index) {
                         final protocol = _filteredProtocols[index];
-                        final isActive = isRunning && activeProto == protocol.menuId;
-                        return _buildProtocolCard(context, bleProvider, protocol, isActive, isRunning, delayMs);
+                        final isActive =
+                            isRunning && activeProto == protocol.menuId;
+                        return _buildProtocolCard(context, bleProvider,
+                            protocol, isActive, isRunning, delayMs);
                       },
                     ),
             ),
@@ -306,23 +677,32 @@ class _BruteScreenState extends State<BruteScreen> {
   }
 
   /// Unified banner for running, paused, and resumable attack states
-  Widget _buildAttackBanner(BuildContext context, BleProvider bleProvider, bool isRunning, int activeProto) {
+  Widget _buildAttackBanner(BuildContext context, BleProvider bleProvider,
+      bool isRunning, int activeProto) {
     final bool isPaused = !isRunning && bleProvider.bruterSavedStateAvailable;
 
     // Determine protocol name and progress values
-    final int displayMenuId = isPaused ? bleProvider.bruterSavedMenuId : activeProto;
+    final int displayMenuId =
+        isPaused ? bleProvider.bruterSavedMenuId : activeProto;
     final activeName = bruterProtocols
-        .where((p) => p.menuId == displayMenuId)
-        .map((p) => p.name)
-        .firstOrNull ?? 'Protocol $displayMenuId';
+            .where((p) => p.menuId == displayMenuId)
+            .map((p) => p.name)
+            .firstOrNull ??
+        'Protocol $displayMenuId';
 
     final isDeBruijn = displayMenuId >= 35 && displayMenuId <= 40;
     final unitLabel = isDeBruijn ? 'bits' : 'codes';
     final rateLabel = isDeBruijn ? 'b/s' : 'c/s';
 
-    final int currentCode = isPaused ? bleProvider.bruterSavedCurrentCode : bleProvider.bruterCurrentCode;
-    final int totalCodes = isPaused ? bleProvider.bruterSavedTotalCodes : bleProvider.bruterTotalCodes;
-    final int percentage = isPaused ? bleProvider.bruterSavedPercentage : bleProvider.bruterPercentage;
+    final int currentCode = isPaused
+        ? bleProvider.bruterSavedCurrentCode
+        : bleProvider.bruterCurrentCode;
+    final int totalCodes = isPaused
+        ? bleProvider.bruterSavedTotalCodes
+        : bleProvider.bruterTotalCodes;
+    final int percentage = isPaused
+        ? bleProvider.bruterSavedPercentage
+        : bleProvider.bruterPercentage;
     final int codesPerSec = isPaused ? 0 : bleProvider.bruterCodesPerSec;
 
     // Calculate ETA (only when running)
@@ -373,11 +753,15 @@ class _BruteScreenState extends State<BruteScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      isPaused ? AppLocalizations.of(context)!.pausedProtocol(activeName) : AppLocalizations.of(context)!.bruteForceRunning(activeName),
+                      isPaused
+                          ? AppLocalizations.of(context)!
+                              .pausedProtocol(activeName)
+                          : AppLocalizations.of(context)!
+                              .bruteForceRunning(activeName),
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: bannerColor,
-                        fontWeight: FontWeight.w600,
-                      ),
+                            color: bannerColor,
+                            fontWeight: FontWeight.w600,
+                          ),
                     ),
                     if (totalCodes > 0)
                       Text(
@@ -385,9 +769,9 @@ class _BruteScreenState extends State<BruteScreen> {
                         '${codesPerSec > 0 ? ' · $codesPerSec $rateLabel' : ''}'
                         '${etaStr.isNotEmpty ? ' · ETA: $etaStr' : ''}',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: bannerColor.withValues(alpha: 0.8),
-                          fontSize: 11,
-                        ),
+                              color: bannerColor.withValues(alpha: 0.8),
+                              fontSize: 11,
+                            ),
                       ),
                   ],
                 ),
@@ -398,11 +782,14 @@ class _BruteScreenState extends State<BruteScreen> {
                     ? () => _resumeAttack(context, bleProvider)
                     : () => _pauseAttack(context, bleProvider),
                 icon: Icon(isPaused ? Icons.play_arrow : Icons.pause, size: 18),
-                label: Text(isPaused ? AppLocalizations.of(context)!.bruteResume : AppLocalizations.of(context)!.brutePause),
+                label: Text(isPaused
+                    ? AppLocalizations.of(context)!.bruteResume
+                    : AppLocalizations.of(context)!.brutePause),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: isPaused ? Colors.blue : AppColors.warning,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   minimumSize: Size.zero,
                 ),
               ),
@@ -414,7 +801,8 @@ class _BruteScreenState extends State<BruteScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.error,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   minimumSize: Size.zero,
                 ),
               ),
@@ -436,10 +824,10 @@ class _BruteScreenState extends State<BruteScreen> {
             Text(
               AppLocalizations.of(context)!.resumeInfo,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: bannerColor.withValues(alpha: 0.6),
-                fontSize: 10,
-                fontStyle: FontStyle.italic,
-              ),
+                    color: bannerColor.withValues(alpha: 0.6),
+                    fontSize: 10,
+                    fontStyle: FontStyle.italic,
+                  ),
             ),
           ],
         ],
@@ -469,12 +857,16 @@ class _BruteScreenState extends State<BruteScreen> {
               selectedColor: AppColors.primaryAccent.withValues(alpha: 0.2),
               checkmarkColor: AppColors.primaryAccent,
               labelStyle: TextStyle(
-                color: isSelected ? AppColors.primaryAccent : AppColors.secondaryText,
+                color: isSelected
+                    ? AppColors.primaryAccent
+                    : AppColors.secondaryText,
                 fontSize: 12,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
               ),
               side: BorderSide(
-                color: isSelected ? AppColors.primaryAccent : AppColors.borderDefault,
+                color: isSelected
+                    ? AppColors.primaryAccent
+                    : AppColors.borderDefault,
               ),
               padding: const EdgeInsets.symmetric(horizontal: 4),
               visualDensity: VisualDensity.compact,
@@ -527,13 +919,16 @@ class _BruteScreenState extends State<BruteScreen> {
             segments: [
               ButtonSegment<bool>(
                 value: false,
-                label: Text(AppLocalizations.of(context)!.standardMode, style: const TextStyle(fontSize: 11)),
+                label: Text(AppLocalizations.of(context)!.standardMode,
+                    style: const TextStyle(fontSize: 11)),
                 icon: const Icon(Icons.linear_scale, size: 14),
               ),
               ButtonSegment<bool>(
                 value: true,
-                label: Text(AppLocalizations.of(context)!.deBruijnMode, style: const TextStyle(fontSize: 11)),
-                icon: const Icon(Icons.bolt, size: 14, color: Color(0xFFFFE600)),
+                label: Text(AppLocalizations.of(context)!.deBruijnMode,
+                    style: const TextStyle(fontSize: 11)),
+                icon:
+                    const Icon(Icons.bolt, size: 14, color: Color(0xFFFFE600)),
               ),
             ],
             selected: {_useDeBruijnMode},
@@ -600,7 +995,9 @@ class _BruteScreenState extends State<BruteScreen> {
             )
           : null,
       child: InkWell(
-        onTap: isAnyRunning ? null : () => _confirmAndStart(context, bleProvider, protocol),
+        onTap: isAnyRunning
+            ? null
+            : () => _confirmAndStart(context, bleProvider, protocol),
         borderRadius: BorderRadius.circular(6),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -624,7 +1021,8 @@ class _BruteScreenState extends State<BruteScreen> {
                   color: isActive
                       ? AppColors.warning
                       : protocol.isDeBruijn
-                          ? const Color(0xFFFFE600) // Bright yellow for DeBruijn protocols
+                          ? const Color(
+                              0xFFFFE600) // Bright yellow for DeBruijn protocols
                           : AppColors.primaryAccent,
                 ),
               ),
@@ -640,21 +1038,27 @@ class _BruteScreenState extends State<BruteScreen> {
                         Expanded(
                           child: Text(
                             protocol.name,
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: isActive
-                                  ? AppColors.warning
-                                  : protocol.isDeBruijn
-                                      ? const Color(0xFFFFE600) // Bright yellow for DeBruijn
-                                      : AppColors.primaryText,
-                            ),
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: isActive
+                                      ? AppColors.warning
+                                      : protocol.isDeBruijn
+                                          ? const Color(
+                                              0xFFFFE600) // Bright yellow for DeBruijn
+                                          : AppColors.primaryText,
+                                ),
                           ),
                         ),
                         // Frequency badge
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: _getFrequencyColor(protocol.frequencyMhz).withValues(alpha: 0.15),
+                            color: _getFrequencyColor(protocol.frequencyMhz)
+                                .withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
@@ -674,16 +1078,18 @@ class _BruteScreenState extends State<BruteScreen> {
                         Expanded(
                           child: Text(
                             '${protocol.bits}-bit ${protocol.encoding} · ${protocol.estimatedTimeWithDelay(delayMs)}',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppColors.secondaryText,
-                              fontSize: 11,
-                            ),
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: AppColors.secondaryText,
+                                      fontSize: 11,
+                                    ),
                           ),
                         ),
                         // De Bruijn compatibility badge for standard protocols
                         if (!protocol.isDeBruijn && protocol.deBruijnCompatible)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 4, vertical: 1),
                             decoration: BoxDecoration(
                               color: Colors.green.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(3),
@@ -710,7 +1116,8 @@ class _BruteScreenState extends State<BruteScreen> {
                   height: 20,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.warning),
+                    valueColor:
+                        AlwaysStoppedAnimation<Color>(AppColors.warning),
                   ),
                 )
               else if (!isAnyRunning)
@@ -738,7 +1145,8 @@ class _BruteScreenState extends State<BruteScreen> {
     BleProvider bleProvider,
     BruterProtocol protocol,
   ) async {
-    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+    final settingsProvider =
+        Provider.of<SettingsProvider>(context, listen: false);
     final delayMs = settingsProvider.bruterDelayMs;
 
     // Determine if we should use custom De Bruijn (per-protocol timing/freq)
@@ -746,7 +1154,9 @@ class _BruteScreenState extends State<BruteScreen> {
     bool useCustomDeBruijn = false;
     int actualMenuId = protocol.menuId;
     String modeSuffix = '';
-    if (_useDeBruijnMode && !protocol.isDeBruijn && protocol.deBruijnCompatible) {
+    if (_useDeBruijnMode &&
+        !protocol.isDeBruijn &&
+        protocol.deBruijnCompatible) {
       useCustomDeBruijn = true;
       modeSuffix = ' (DeBruijn)';
     }
@@ -757,16 +1167,21 @@ class _BruteScreenState extends State<BruteScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.startBruteForceSuffix(modeSuffix)),
+        title: Text(
+            AppLocalizations.of(context)!.startBruteForceSuffix(modeSuffix)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _infoRow(AppLocalizations.of(context)!.protocol, '${protocol.name}$modeSuffix'),
-            _infoRow(AppLocalizations.of(context)!.frequency, protocol.frequencyLabel),
-            _infoRow(AppLocalizations.of(context)!.keySpace, '${protocol.bits}-bit ${protocol.encoding}'),
+            _infoRow(AppLocalizations.of(context)!.protocol,
+                '${protocol.name}$modeSuffix'),
+            _infoRow(AppLocalizations.of(context)!.frequency,
+                protocol.frequencyLabel),
+            _infoRow(AppLocalizations.of(context)!.keySpace,
+                '${protocol.bits}-bit ${protocol.encoding}'),
             if (modeSuffix.isNotEmpty)
-              _infoRow(AppLocalizations.of(context)!.modeLabel, AppLocalizations.of(context)!.deBruijnFaster),
+              _infoRow(AppLocalizations.of(context)!.modeLabel,
+                  AppLocalizations.of(context)!.deBruijnFaster),
             _infoRow(AppLocalizations.of(context)!.delay, '$delayMs ms'),
             _infoRow(AppLocalizations.of(context)!.estTime, estTime),
             const SizedBox(height: 12),
@@ -776,16 +1191,20 @@ class _BruteScreenState extends State<BruteScreen> {
                 decoration: BoxDecoration(
                   color: AppColors.warning.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+                  border: Border.all(
+                      color: AppColors.warning.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.warning_amber, color: AppColors.warning, size: 18),
+                    Icon(Icons.warning_amber,
+                        color: AppColors.warning, size: 18),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        AppLocalizations.of(context)!.largeKeyspaceWarning(protocol.bits, estTime),
-                        style: TextStyle(color: AppColors.warning, fontSize: 12),
+                        AppLocalizations.of(context)!
+                            .largeKeyspaceWarning(protocol.bits, estTime),
+                        style:
+                            TextStyle(color: AppColors.warning, fontSize: 12),
                       ),
                     ),
                   ],
@@ -828,80 +1247,82 @@ class _BruteScreenState extends State<BruteScreen> {
       }
 
       if (context.mounted) {
-        final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
+        final notificationProvider =
+            Provider.of<NotificationProvider>(context, listen: false);
         notificationProvider.showSuccess(
-          AppLocalizations.of(context)!.bruteForceStarted('${protocol.name}$modeSuffix'),
+          AppLocalizations.of(context)!
+              .bruteForceStarted('${protocol.name}$modeSuffix'),
         );
       }
     } catch (e) {
       if (context.mounted) {
-        final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
-        notificationProvider.showError(AppLocalizations.of(context)!.failedToStart('$e'));
+        final notificationProvider =
+            Provider.of<NotificationProvider>(context, listen: false);
+        notificationProvider
+            .showError(AppLocalizations.of(context)!.failedToStart('$e'));
       }
     }
   }
 
-  Future<void> _pauseAttack(BuildContext context, BleProvider bleProvider) async {
+  Future<void> _pauseAttack(
+      BuildContext context, BleProvider bleProvider) async {
     try {
       await bleProvider.sendBruterPauseCommand();
 
       if (context.mounted) {
-        final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
-        notificationProvider.showInfo(AppLocalizations.of(context)!.bruteForcePausing);
+        final notificationProvider =
+            Provider.of<NotificationProvider>(context, listen: false);
+        notificationProvider
+            .showInfo(AppLocalizations.of(context)!.bruteForcePausing);
       }
     } catch (e) {
       if (context.mounted) {
-        final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
-        notificationProvider.showError(AppLocalizations.of(context)!.failedToPause('$e'));
+        final notificationProvider =
+            Provider.of<NotificationProvider>(context, listen: false);
+        notificationProvider
+            .showError(AppLocalizations.of(context)!.failedToPause('$e'));
       }
     }
   }
 
-  Future<void> _resumeAttack(BuildContext context, BleProvider bleProvider) async {
+  Future<void> _resumeAttack(
+      BuildContext context, BleProvider bleProvider) async {
     try {
       await bleProvider.sendBruterResumeCommand();
 
       if (context.mounted) {
-        final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
-        notificationProvider.showSuccess(AppLocalizations.of(context)!.bruteForceResumed);
+        final notificationProvider =
+            Provider.of<NotificationProvider>(context, listen: false);
+        notificationProvider
+            .showSuccess(AppLocalizations.of(context)!.bruteForceResumed);
       }
     } catch (e) {
       if (context.mounted) {
-        final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
-        notificationProvider.showError(AppLocalizations.of(context)!.failedToResume('$e'));
+        final notificationProvider =
+            Provider.of<NotificationProvider>(context, listen: false);
+        notificationProvider
+            .showError(AppLocalizations.of(context)!.failedToResume('$e'));
       }
     }
   }
 
-  Future<void> _discardSavedState(BuildContext context, BleProvider bleProvider) async {
-    // Discard the saved state by sending a cancel (which clears LittleFS state)
+  Future<void> _cancelAttack(
+      BuildContext context, BleProvider bleProvider) async {
     try {
       await bleProvider.sendBruterCancelCommand();
 
       if (context.mounted) {
-        final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
-        notificationProvider.showInfo(AppLocalizations.of(context)!.savedStateDiscarded);
+        final notificationProvider =
+            Provider.of<NotificationProvider>(context, listen: false);
+        notificationProvider
+            .showSuccess(AppLocalizations.of(context)!.bruteForceStopped);
       }
     } catch (e) {
       if (context.mounted) {
-        final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
-        notificationProvider.showError(AppLocalizations.of(context)!.failedToDiscard('$e'));
-      }
-    }
-  }
-
-  Future<void> _cancelAttack(BuildContext context, BleProvider bleProvider) async {
-    try {
-      await bleProvider.sendBruterCancelCommand();
-
-      if (context.mounted) {
-        final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
-        notificationProvider.showSuccess(AppLocalizations.of(context)!.bruteForceStopped);
-      }
-    } catch (e) {
-      if (context.mounted) {
-        final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
-        notificationProvider.showError(AppLocalizations.of(context)!.failedToStop('$e'));
+        final notificationProvider =
+            Provider.of<NotificationProvider>(context, listen: false);
+        notificationProvider
+            .showError(AppLocalizations.of(context)!.failedToStop('$e'));
       }
     }
   }

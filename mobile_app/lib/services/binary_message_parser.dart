@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'logger_service.dart';
 
 /// Binary message types from firmware (0x80-0xFF)
 enum BinaryMessageType {
@@ -15,45 +16,46 @@ enum BinaryMessageType {
   // Enum kept for protocol documentation only.
   frequencySearch(0x94),
   fileContent(0xA0), // RAW file content (NO JSON!)
-  fileList(0xA1),    // File list BINARY
+  fileList(0xA1), // File list BINARY
   directoryTree(0xA2),
   fileActionResult(0xA3),
-  bruterProgress(0xB0),  // Brute force progress update
-  bruterComplete(0xB1),  // Brute force attack finished
-  bruterPaused(0xB2),    // Brute force attack paused (state saved)
-  bruterResumed(0xB3),   // Brute force attack resumed from saved state
-  bruterStateAvail(0xB4),// A resumable saved state exists on device
-  settingsSync(0xC0),    // Device settings sync (sent on connect)
-  versionInfo(0xC2),     // Firmware version info (sent on connect)
-  batteryStatus(0xC3),   // Battery voltage and percentage (periodic + on connect)
-  sdrStatus(0xC4),        // SDR mode status (active, submode, freq, mod)
+  bruterProgress(0xB0), // Brute force progress update
+  bruterComplete(0xB1), // Brute force attack finished
+  bruterPaused(0xB2), // Brute force attack paused (state saved)
+  bruterResumed(0xB3), // Brute force attack resumed from saved state
+  bruterStateAvail(0xB4), // A resumable saved state exists on device
+  settingsSync(0xC0), // Device settings sync (sent on connect)
+  versionInfo(0xC2), // Firmware version info (sent on connect)
+  batteryStatus(0xC3), // Battery voltage and percentage (periodic + on connect)
+  sdrStatus(0xC4), // SDR mode status (active, submode, freq, mod)
   // NRF24 notifications (0xD0-0xD5)
-  nrfDeviceFound(0xD0),     // MouseJack target discovered
-  nrfAttackComplete(0xD1),  // NRF attack finished
-  nrfScanComplete(0xD2),    // MouseJack scan completed
-  nrfScanStatus(0xD3),      // Scan status / target list
-  nrfSpectrumData(0xD4),    // Spectrum analyzer 126-channel levels (full 2.4 GHz ISM band)
-  nrfJamStatus(0xD5),       // Jammer status update
-  nrfJamModeConfig(0xD6),   // Per-mode config response/update
-  nrfJamModeInfo(0xD7),     // Mode info (name, description, channels)
+  nrfDeviceFound(0xD0), // MouseJack target discovered
+  nrfAttackComplete(0xD1), // NRF attack finished
+  nrfScanComplete(0xD2), // MouseJack scan completed
+  nrfScanStatus(0xD3), // Scan status / target list
+  nrfSpectrumData(
+      0xD4), // Spectrum analyzer 126-channel levels (full 2.4 GHz ISM band)
+  nrfJamStatus(0xD5), // Jammer status update
+  nrfJamModeConfig(0xD6), // Per-mode config response/update
+  nrfJamModeInfo(0xD7), // Mode info (name, description, channels)
   // OTA notifications (0xE0-0xE2)
-  otaProgress(0xE0),        // OTA write progress
-  otaComplete(0xE1),        // OTA finished successfully
-  otaError(0xE2),           // OTA error
+  otaProgress(0xE0), // OTA write progress
+  otaComplete(0xE1), // OTA finished successfully
+  otaError(0xE2), // OTA error
   // Device identity
-  deviceName(0xC7),         // BLE device name from device
+  deviceName(0xC7), // BLE device name from device
   // Device status extensions (sent on connect / GetState)
-  hwButtonStatus(0xC8),     // HW button config sync
-  sdStatus(0xC9),           // SD card storage info
-  nrfModuleStatus(0xCA),    // nRF24 module presence/state
+  hwButtonStatus(0xC8), // HW button config sync
+  sdStatus(0xC9), // SD card storage info
+  nrfModuleStatus(0xCA), // nRF24 module presence/state
   // ProtoPirate (automotive key fob decoder) notifications
-  ppDecodeResult(0xB5),     // Decoded signal result
-  ppHistoryEntry(0xB6),     // History entry with timestamp
-  ppStatus(0xB7),           // Module status (state, module, freq)
-  ppHistoryCount(0xB8),     // History entry count
-  ppFileList(0xB9),         // File list response
-  ppTxStatus(0xBA),         // TX emulate status
-  ppSaveResult(0xBB),       // Save capture result
+  ppDecodeResult(0xB5), // Decoded signal result
+  ppHistoryEntry(0xB6), // History entry with timestamp
+  ppStatus(0xB7), // Module status (state, module, freq)
+  ppHistoryCount(0xB8), // History entry count
+  ppFileList(0xB9), // File list response
+  ppTxStatus(0xBA), // TX emulate status
+  ppSaveResult(0xBB), // Save capture result
   error(0xF0),
   lowMemory(0xF1),
   commandSuccess(0xF2),
@@ -74,8 +76,8 @@ enum BinaryMessageType {
 class BinaryFileEntry {
   final String name;
   final bool isDirectory;
-  final int size;       // Only for files
-  final int timestamp;  // Only for files (Unix timestamp in seconds)
+  final int size; // Only for files
+  final int timestamp; // Only for files (Unix timestamp in seconds)
 
   BinaryFileEntry({
     required this.name,
@@ -95,7 +97,7 @@ class BinaryFileEntry {
 }
 
 /// File list message - STREAMING BINARY PROTOCOL (no JSON!)
-/// 
+///
 /// Format (each message):
 /// [0xA1][pathLen:1][path:pathLen][flags:1][totalFiles:2][fileCount:1][files...]
 ///
@@ -112,10 +114,10 @@ class BinaryFileEntry {
 ///     [size:4][date:4]  (little-endian)
 class BinaryFileList {
   final String path;
-  final bool hasMore;         // true if more messages coming
-  final bool isError;         // true if this is an error response
-  final int errorCode;        // Error code (valid only if isError)
-  final int totalFiles;       // Total files in directory (for progress)
+  final bool hasMore; // true if more messages coming
+  final bool isError; // true if this is an error response
+  final int errorCode; // Error code (valid only if isError)
+  final int totalFiles; // Total files in directory (for progress)
   final List<BinaryFileEntry> files;
 
   BinaryFileList({
@@ -134,62 +136,63 @@ class BinaryFileList {
 
     int offset = 1; // Skip 0xA1
     int pathLen = data[offset++];
-    
+
     // Header: type + pathLen + path + flags + totalFiles(2) + fileCount
     if (data.length < 2 + pathLen + 4) {
       throw Exception('Invalid BinaryFileList: insufficient data for header');
     }
-    
+
     String path = String.fromCharCodes(data.sublist(offset, offset + pathLen));
     offset += pathLen;
-    
+
     int flags = data[offset++];
     bool hasMore = (flags & 0x01) != 0;
     bool isError = (flags & 0x80) != 0;
     int errorCode = isError ? (flags & 0x7F) : 0;
-    
+
     // Total files (2 bytes, little-endian)
     int totalFiles = data[offset] | (data[offset + 1] << 8);
     offset += 2;
-    
+
     int fileCount = data[offset++];
-    
+
     // Parse file entries
     List<BinaryFileEntry> files = [];
-    
+
     if (!isError) {
       for (int i = 0; i < fileCount && offset < data.length; i++) {
         if (offset >= data.length) break;
-        
+
         int nameLen = data[offset++];
         if (offset + nameLen > data.length) break;
-        
-        String name = String.fromCharCodes(data.sublist(offset, offset + nameLen));
+
+        String name =
+            String.fromCharCodes(data.sublist(offset, offset + nameLen));
         offset += nameLen;
-        
+
         if (offset >= data.length) break;
         int fileFlags = data[offset++];
         bool isDirectory = (fileFlags & 0x01) != 0;
-        
+
         int size = 0;
         int timestamp = 0;
-        
+
         if (!isDirectory) {
           if (offset + 8 > data.length) break;
           // Read size (4 bytes, little-endian)
-          size = data[offset] | 
-                 (data[offset + 1] << 8) | 
-                 (data[offset + 2] << 16) | 
-                 (data[offset + 3] << 24);
+          size = data[offset] |
+              (data[offset + 1] << 8) |
+              (data[offset + 2] << 16) |
+              (data[offset + 3] << 24);
           offset += 4;
           // Read date (4 bytes, little-endian)
-          timestamp = data[offset] | 
-                      (data[offset + 1] << 8) | 
-                      (data[offset + 2] << 16) | 
-                      (data[offset + 3] << 24);
+          timestamp = data[offset] |
+              (data[offset + 1] << 8) |
+              (data[offset + 2] << 16) |
+              (data[offset + 3] << 24);
           offset += 4;
         }
-        
+
         files.add(BinaryFileEntry(
           name: name,
           isDirectory: isDirectory,
@@ -220,7 +223,7 @@ class BinaryFileList {
         'totalFiles': 0,
       };
     }
-    
+
     return {
       'action': 'list',
       'files': files.map((f) => f.toJson()).toList(),
@@ -228,15 +231,21 @@ class BinaryFileList {
       'totalFiles': totalFiles,
     };
   }
-  
+
   static String _getErrorMessage(int errorCode) {
     switch (errorCode) {
-      case 1: return 'Insufficient memory';
-      case 2: return 'Failed to create directory';
-      case 3: return 'Failed to open directory';
-      case 4: return 'Path is not a directory';
-      case 5: return 'Unknown error';
-      default: return 'Error code: $errorCode';
+      case 1:
+        return 'Insufficient memory';
+      case 2:
+        return 'Failed to create directory';
+      case 3:
+        return 'Failed to open directory';
+      case 4:
+        return 'Path is not a directory';
+      case 5:
+        return 'Unknown error';
+      default:
+        return 'Error code: $errorCode';
     }
   }
 }
@@ -261,21 +270,22 @@ class BinaryFileContent {
 
     int offset = 1; // Skip 0xA0
     int pathLen = data[offset++];
-    
+
     if (data.length < 2 + pathLen + 4) {
-      throw Exception('Invalid BinaryFileContent: insufficient data for path and size');
+      throw Exception(
+          'Invalid BinaryFileContent: insufficient data for path and size');
     }
-    
+
     String path = String.fromCharCodes(data.sublist(offset, offset + pathLen));
     offset += pathLen;
-    
+
     // Read file size (4 bytes, little-endian)
-    int fileSize = data[offset] | 
-                   (data[offset + 1] << 8) | 
-                   (data[offset + 2] << 16) | 
-                   (data[offset + 3] << 24);
+    int fileSize = data[offset] |
+        (data[offset + 1] << 8) |
+        (data[offset + 2] << 16) |
+        (data[offset + 3] << 24);
     offset += 4;
-    
+
     // Read file content
     Uint8List content = data.sublist(offset);
 
@@ -311,7 +321,8 @@ class BinarySignalDetected {
 
   factory BinarySignalDetected.parse(Uint8List data) {
     if (data.length < 12) {
-      throw Exception('Invalid BinarySignalDetected data length: ${data.length}');
+      throw Exception(
+          'Invalid BinarySignalDetected data length: ${data.length}');
     }
 
     final byteData = ByteData.sublistView(data);
@@ -344,7 +355,8 @@ class BinarySignalRecorded {
 
   factory BinarySignalRecorded.parse(Uint8List data) {
     if (data.length < 3) {
-      throw Exception('Invalid BinarySignalRecorded data length: ${data.length}');
+      throw Exception(
+          'Invalid BinarySignalRecorded data length: ${data.length}');
     }
 
     int module = data[1];
@@ -431,15 +443,24 @@ class BinaryFileActionResult {
 
   String getActionString() {
     switch (action) {
-      case 1: return 'delete';
-      case 2: return 'rename';
-      case 3: return 'create-directory';
-      case 4: return 'copy';
-      case 5: return 'move';
-      case 6: return 'tree';
-      case 7: return 'load';
-      case 8: return 'format-sd';
-      default: return 'unknown';
+      case 1:
+        return 'delete';
+      case 2:
+        return 'rename';
+      case 3:
+        return 'create-directory';
+      case 4:
+        return 'copy';
+      case 5:
+        return 'move';
+      case 6:
+        return 'tree';
+      case 7:
+        return 'load';
+      case 8:
+        return 'format-sd';
+      default:
+        return 'unknown';
     }
   }
 
@@ -458,24 +479,36 @@ class BinaryFileActionResult {
 
   static String _getErrorMessage(int code) {
     switch (code) {
-      case 1: return 'Insufficient data';
-      case 2: return 'Path length mismatch';
-      case 3: return 'Not found';
-      case 4: return 'Delete failed';
-      case 5: return 'To length missing';
-      case 6: return 'Rename failed';
-      case 7: return 'Mkdir failed';
-      case 13: return 'Failed to open file';
-      case 14: return 'Path too long';
-      case 15: return 'BLE adapter not found';
-      case 16: return 'File too large';
-      default: return 'Error $code';
+      case 1:
+        return 'Insufficient data';
+      case 2:
+        return 'Path length mismatch';
+      case 3:
+        return 'Not found';
+      case 4:
+        return 'Delete failed';
+      case 5:
+        return 'To length missing';
+      case 6:
+        return 'Rename failed';
+      case 7:
+        return 'Mkdir failed';
+      case 13:
+        return 'Failed to open file';
+      case 14:
+        return 'Path too long';
+      case 15:
+        return 'BLE adapter not found';
+      case 16:
+        return 'File too large';
+      default:
+        return 'Error $code';
     }
   }
 }
 
 /// Directory tree message - STREAMING BINARY PROTOCOL
-/// 
+///
 /// Format (each message):
 /// [0xA2][pathType:1][flags:1][totalDirs:2][dirCount:2][paths...]
 ///
@@ -490,10 +523,10 @@ class BinaryFileActionResult {
 ///   [pathLen:1][path:pathLen]
 class BinaryDirectoryTree {
   final int pathType;
-  final bool hasMore;         // true if more messages coming
-  final bool isError;         // true if this is an error response
-  final int errorCode;        // Error code (valid only if isError)
-  final int totalDirs;        // Total directories (for progress)
+  final bool hasMore; // true if more messages coming
+  final bool isError; // true if this is an error response
+  final int errorCode; // Error code (valid only if isError)
+  final int totalDirs; // Total directories (for progress)
   final List<String> paths;
 
   BinaryDirectoryTree({
@@ -507,7 +540,8 @@ class BinaryDirectoryTree {
 
   factory BinaryDirectoryTree.parse(Uint8List data) {
     if (data.length < 7) {
-      throw Exception('Invalid BinaryDirectoryTree data length: ${data.length}');
+      throw Exception(
+          'Invalid BinaryDirectoryTree data length: ${data.length}');
     }
 
     int pathType = data[1];
@@ -515,23 +549,23 @@ class BinaryDirectoryTree {
     bool hasMore = (flags & 0x01) != 0;
     bool isError = (flags & 0x80) != 0;
     int errorCode = isError ? (flags & 0x7F) : 0;
-    
+
     // Total dirs (2 bytes, little-endian)
     int totalDirs = data[3] | (data[4] << 8);
-    
+
     // Dir count (2 bytes, little-endian)
     int dirCount = data[5] | (data[6] << 8);
-    
+
     int offset = 7;
     List<String> paths = [];
 
     if (!isError) {
       for (int i = 0; i < dirCount && offset < data.length; i++) {
         if (offset >= data.length) break;
-        
+
         int pathLen = data[offset++];
         if (offset + pathLen > data.length) break;
-        
+
         paths.add(String.fromCharCodes(data.sublist(offset, offset + pathLen)));
         offset += pathLen;
       }
@@ -557,7 +591,7 @@ class BinaryDirectoryTree {
         'totalDirs': 0,
       };
     }
-    
+
     return {
       'pathType': pathType,
       'paths': paths,
@@ -565,12 +599,15 @@ class BinaryDirectoryTree {
       'totalDirs': totalDirs,
     };
   }
-  
+
   static String _getErrorMessage(int errorCode) {
     switch (errorCode) {
-      case 1: return 'Insufficient memory';
-      case 5: return 'Unknown error';
-      default: return 'Error code: $errorCode';
+      case 1:
+        return 'Insufficient memory';
+      case 5:
+        return 'Unknown error';
+      default:
+        return 'Error code: $errorCode';
     }
   }
 }
@@ -601,13 +638,20 @@ class BinaryModeSwitch {
 
   String getModeString(int mode) {
     switch (mode) {
-      case 0: return 'Idle';
-      case 1: return 'DetectSignal';
-      case 2: return 'RecordSignal';
-      case 3: return 'Transmitting';
-      case 4: return 'Analyzing';
-      case 5: return 'Jamming';
-      default: return 'Unknown';
+      case 0:
+        return 'Idle';
+      case 1:
+        return 'DetectSignal';
+      case 2:
+        return 'RecordSignal';
+      case 3:
+        return 'Transmitting';
+      case 4:
+        return 'Analyzing';
+      case 5:
+        return 'Jamming';
+      default:
+        return 'Unknown';
     }
   }
 
@@ -648,7 +692,8 @@ class BinaryStatus {
 
   factory BinaryStatus.parse(Uint8List data) {
     if (data.length < 102) {
-      throw Exception('Invalid BinaryStatus data length: ${data.length}, expected >= 102');
+      throw Exception(
+          'Invalid BinaryStatus data length: ${data.length}, expected >= 102');
     }
 
     final hasCpuTelemetry = data.length >= 108;
@@ -675,20 +720,29 @@ class BinaryStatus {
       cpuTempC: cpuTempC,
       core0Mhz: core0Mhz,
       core1Mhz: core1Mhz,
-      module0Registers: data.sublist(registersStart, registersStart + 47).toList(),
-      module1Registers: data.sublist(registersStart + 47, registersStart + 94).toList(),
+      module0Registers:
+          data.sublist(registersStart, registersStart + 47).toList(),
+      module1Registers:
+          data.sublist(registersStart + 47, registersStart + 94).toList(),
     );
   }
 
   String getModeString(int mode) {
     switch (mode) {
-      case 0: return 'Idle';
-      case 1: return 'DetectSignal';
-      case 2: return 'RecordSignal';
-      case 3: return 'Transmitting';
-      case 4: return 'Analyzing';
-      case 5: return 'Jamming';
-      default: return 'Unknown';
+      case 0:
+        return 'Idle';
+      case 1:
+        return 'DetectSignal';
+      case 2:
+        return 'RecordSignal';
+      case 3:
+        return 'Transmitting';
+      case 4:
+        return 'Analyzing';
+      case 5:
+        return 'Jamming';
+      default:
+        return 'Unknown';
     }
   }
 
@@ -722,7 +776,8 @@ class BinaryStatus {
       if (i > 0) buffer.write(' ');
       buffer.write(i.toRadixString(16).padLeft(2, '0').toUpperCase());
       buffer.write(' ');
-      buffer.write(registers[i].toRadixString(16).padLeft(2, '0').toUpperCase());
+      buffer
+          .write(registers[i].toRadixString(16).padLeft(2, '0').toUpperCase());
     }
     return buffer.toString();
   }
@@ -862,7 +917,8 @@ class BinaryMessageParser {
           if (data.length > 3) {
             int filenameLength = data[3];
             if (data.length >= 4 + filenameLength) {
-              filename = String.fromCharCodes(data.sublist(4, 4 + filenameLength));
+              filename =
+                  String.fromCharCodes(data.sublist(4, 4 + filenameLength));
             }
           }
           return {
@@ -891,7 +947,10 @@ class BinaryMessageParser {
         case BinaryMessageType.commandError:
           return {
             'type': 'CommandResult',
-            'data': {'success': false, 'errorCode': data.length > 1 ? data[1] : 0},
+            'data': {
+              'success': false,
+              'errorCode': data.length > 1 ? data[1] : 0
+            },
           };
 
         case BinaryMessageType.error:
@@ -916,8 +975,10 @@ class BinaryMessageParser {
         case BinaryMessageType.bruterProgress:
           // [0xB0][currentCode:4][totalCodes:4][menuId:1][percentage:1][codesPerSec:2] = 13 bytes
           if (data.length < 13) return null;
-          int currentCode = data[1] | (data[2] << 8) | (data[3] << 16) | (data[4] << 24);
-          int totalCodes = data[5] | (data[6] << 8) | (data[7] << 16) | (data[8] << 24);
+          int currentCode =
+              data[1] | (data[2] << 8) | (data[3] << 16) | (data[4] << 24);
+          int totalCodes =
+              data[5] | (data[6] << 8) | (data[7] << 16) | (data[8] << 24);
           int menuId = data[9];
           int percentage = data[10];
           int codesPerSec = data[11] | (data[12] << 8);
@@ -940,7 +1001,8 @@ class BinaryMessageParser {
             'data': {
               'menuId': data[1],
               'status': data[2], // 0=completed, 1=cancelled, 2=error
-              'totalSent': data[4] | (data[5] << 8) | (data[6] << 16) | (data[7] << 24),
+              'totalSent':
+                  data[4] | (data[5] << 8) | (data[6] << 16) | (data[7] << 24),
             },
           };
 
@@ -951,8 +1013,10 @@ class BinaryMessageParser {
             'type': 'BruterPaused',
             'data': {
               'menuId': data[1],
-              'currentCode': data[2] | (data[3] << 8) | (data[4] << 16) | (data[5] << 24),
-              'totalCodes': data[6] | (data[7] << 8) | (data[8] << 16) | (data[9] << 24),
+              'currentCode':
+                  data[2] | (data[3] << 8) | (data[4] << 16) | (data[5] << 24),
+              'totalCodes':
+                  data[6] | (data[7] << 8) | (data[8] << 16) | (data[9] << 24),
               'percentage': data[10],
             },
           };
@@ -964,8 +1028,10 @@ class BinaryMessageParser {
             'type': 'BruterResumed',
             'data': {
               'menuId': data[1],
-              'resumeCode': data[2] | (data[3] << 8) | (data[4] << 16) | (data[5] << 24),
-              'totalCodes': data[6] | (data[7] << 8) | (data[8] << 16) | (data[9] << 24),
+              'resumeCode':
+                  data[2] | (data[3] << 8) | (data[4] << 16) | (data[5] << 24),
+              'totalCodes':
+                  data[6] | (data[7] << 8) | (data[8] << 16) | (data[9] << 24),
             },
           };
 
@@ -976,8 +1042,10 @@ class BinaryMessageParser {
             'type': 'BruterStateAvail',
             'data': {
               'menuId': data[1],
-              'currentCode': data[2] | (data[3] << 8) | (data[4] << 16) | (data[5] << 24),
-              'totalCodes': data[6] | (data[7] << 8) | (data[8] << 16) | (data[9] << 24),
+              'currentCode':
+                  data[2] | (data[3] << 8) | (data[4] << 16) | (data[5] << 24),
+              'totalCodes':
+                  data[6] | (data[7] << 8) | (data[8] << 16) | (data[9] << 24),
               'percentage': data[10],
             },
           };
@@ -995,13 +1063,18 @@ class BinaryMessageParser {
           return {
             'type': 'SettingsSync',
             'data': {
-              'scannerRssi': data[1] >= 128 ? data[1] - 256 : data[1],  // int8_t
+              'scannerRssi': data[1] >= 128 ? data[1] - 256 : data[1], // int8_t
               'bruterPower': data[2],
               'bruterDelay': data[3] | (data[4] << 8),
               'bruterRepeats': data[5],
-              'radioPowerMod1': data.length >= 7 ? (data[6] >= 128 ? data[6] - 256 : data[6]) : 10,
-              'radioPowerMod2': data.length >= 8 ? (data[7] >= 128 ? data[7] - 256 : data[7]) : 10,
-              if (cpuTempOffsetDeciC != null) 'cpuTempOffsetDeciC': cpuTempOffsetDeciC,
+              'radioPowerMod1': data.length >= 7
+                  ? (data[6] >= 128 ? data[6] - 256 : data[6])
+                  : 10,
+              'radioPowerMod2': data.length >= 8
+                  ? (data[7] >= 128 ? data[7] - 256 : data[7])
+                  : 10,
+              if (cpuTempOffsetDeciC != null)
+                'cpuTempOffsetDeciC': cpuTempOffsetDeciC,
             },
           };
 
@@ -1101,10 +1174,8 @@ class BinaryMessageParser {
             // signalCount added in FW v2.x — backward compatible
             int signalCount = 0;
             if (data.length >= 9) {
-              signalCount = data[5] |
-                  (data[6] << 8) |
-                  (data[7] << 16) |
-                  (data[8] << 24);
+              signalCount =
+                  data[5] | (data[6] << 8) | (data[7] << 16) | (data[8] << 24);
             }
             return {
               'type': 'PPStatus',
@@ -1137,7 +1208,7 @@ class BinaryMessageParser {
           return {
             'type': 'PPTxStatus',
             'data': {
-              'state': data[1],   // 0=idle, 1=transmitting, 2=done, 3=error
+              'state': data[1], // 0=idle, 1=transmitting, 2=done, 3=error
               'errorCode': data[2],
             },
           };
@@ -1322,7 +1393,8 @@ class BinaryMessageParser {
         case BinaryMessageType.sdrStatus:
           // [0xC4][active:1][module:1][freqKhz:4LE][modulation:1] = 8 bytes
           if (data.length < 8) return null;
-          int freqKhz = data[3] | (data[4] << 8) | (data[5] << 16) | (data[6] << 24);
+          int freqKhz =
+              data[3] | (data[4] << 8) | (data[5] << 16) | (data[6] << 24);
           return {
             'type': 'SdrStatus',
             'data': {
@@ -1338,8 +1410,10 @@ class BinaryMessageParser {
         case BinaryMessageType.otaProgress:
           // FW format: [0xE0][received:4LE][total:4LE][percentage:1] = 10 bytes
           if (data.length < 10) return null;
-          int received = data[1] | (data[2] << 8) | (data[3] << 16) | (data[4] << 24);
-          int total = data[5] | (data[6] << 8) | (data[7] << 16) | (data[8] << 24);
+          int received =
+              data[1] | (data[2] << 8) | (data[3] << 16) | (data[4] << 24);
+          int total =
+              data[5] | (data[6] << 8) | (data[7] << 16) | (data[8] << 24);
           int pct = data[9];
           return {
             'type': 'OtaProgress',
@@ -1371,13 +1445,9 @@ class BinaryMessageParser {
               'message': errorMsg.isNotEmpty ? errorMsg : 'Unknown OTA error',
             },
           };
-
-        default:
-          print('Unsupported binary message type: 0x${data[0].toRadixString(16)}');
-          return null;
       }
     } catch (e) {
-      print('Error parsing binary message: $e');
+      AppLogger.debug('Error parsing binary message', e);
       return null;
     }
   }
@@ -1406,7 +1476,10 @@ class BinaryMessageParser {
     if (data.length < 8) return null;
     int offset = 1; // Skip 0xB6
     int index = data[offset++];
-    int ts = data[offset] | (data[offset + 1] << 8) | (data[offset + 2] << 16) | (data[offset + 3] << 24);
+    int ts = data[offset] |
+        (data[offset + 1] << 8) |
+        (data[offset + 2] << 16) |
+        (data[offset + 3] << 24);
     offset += 4;
     int nameLen = data[offset++];
     if (data.length < offset + nameLen + 27) return null;
@@ -1442,12 +1515,18 @@ class BinaryMessageParser {
     offset += 8;
 
     // serial: 4 bytes LE
-    int serial = data[offset] | (data[offset + 1] << 8) | (data[offset + 2] << 16) | (data[offset + 3] << 24);
+    int serial = data[offset] |
+        (data[offset + 1] << 8) |
+        (data[offset + 2] << 16) |
+        (data[offset + 3] << 24);
     offset += 4;
 
     int button = data[offset++];
 
-    int counter = data[offset] | (data[offset + 1] << 8) | (data[offset + 2] << 16) | (data[offset + 3] << 24);
+    int counter = data[offset] |
+        (data[offset + 1] << 8) |
+        (data[offset + 2] << 16) |
+        (data[offset + 3] << 24);
     offset += 4;
 
     int dataBits = data[offset++];
@@ -1477,7 +1556,8 @@ class BinaryMessageParser {
       if (offset >= data.length) break;
       int pathLen = data[offset++];
       if (offset + pathLen + 4 > data.length) break;
-      String path = String.fromCharCodes(data.sublist(offset, offset + pathLen));
+      String path =
+          String.fromCharCodes(data.sublist(offset, offset + pathLen));
       offset += pathLen;
       int size = data[offset] |
           (data[offset + 1] << 8) |
