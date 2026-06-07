@@ -253,7 +253,10 @@ class BleProvider extends ChangeNotifier {
           BluetoothDevice knownDevice = BluetoothDevice.fromId(_knownDeviceId!);
           print(
               'Created device object for known device: ${knownDevice.name} (${knownDevice.id})');
-          await connectToDevice(knownDevice);
+          // Use shorter timeout for cached device — if address is stale,
+          // don't wait the full 10s.
+          await connectToDevice(knownDevice,
+              connectTimeout: const Duration(seconds: 3));
           return; // Success, exit early
         } catch (e) {
           print('Direct connection failed: $e');
@@ -262,37 +265,58 @@ class BleProvider extends ChangeNotifier {
         }
       }
 
-      // Second try: Scan for target device
+      // Second try: Scan reactively — connect as soon as a matching device
+      // appears in the scan stream, rather than taking a one-shot snapshot.
+      // This handles the case where the first advertisement for a device has
+      // incomplete data (empty service UUIDs / name) but subsequent ones
+      // have the full data.
       print('Scanning for target device: $targetDeviceName');
       statusMessage = 'Scanning for device...';
       notifyListeners();
 
+      final completer = Completer<void>();
+      StreamSubscription<List<ScanResult>>? sub;
+      Timer? timeout;
+
       await startScan();
 
-      // Wait for scan results (reduced timeout)
-      await Future.delayed(const Duration(seconds: 2));
-
-      // Look for target device in supported scan results
-      List<ScanResult> supportedDevices = supportedScanResults;
-      for (var result in supportedDevices) {
-        if (result.device.name == targetDeviceName) {
-          print('Found target device: ${result.device.id}');
-          await connectToDevice(result.device);
-          // Save this device for future quick connections
-          await saveKnownDevice(result.device.id.toString());
-          break;
+      sub = FlutterBluePlus.scanResults.listen((results) {
+        for (var result in results) {
+          if (isDeviceMatching(result)) {
+            print(
+                'Found target device: ${result.device.id} (${result.device.name})');
+            sub?.cancel();
+            timeout?.cancel();
+            stopScan();
+            connectToDevice(result.device).then((_) {
+              saveKnownDevice(result.device.id.toString());
+              if (!completer.isCompleted) completer.complete();
+            }).catchError((e) {
+              if (!completer.isCompleted) completer.completeError(e);
+            });
+            return;
+          }
         }
-      }
+      });
 
-      // If no device found, show error
+      // Safety timeout: if no matching device found within 8 seconds, fail
+      timeout = Timer(const Duration(seconds: 8), () {
+        sub?.cancel();
+        stopScan();
+        if (!completer.isCompleted) {
+          completer.completeError(
+              TimeoutException('No matching device found during scan'));
+        }
+      });
+
+      await completer.future;
+    } catch (e) {
+      print('quickConnect failed: $e');
       if (!isConnected) {
         statusMessage =
             'Device not found. Make sure it\'s powered on and nearby.';
         notifyListeners();
       }
-    } catch (e) {
-      statusMessage = 'Connection error: $e';
-      notifyListeners();
     }
   }
 
@@ -475,39 +499,48 @@ class BleProvider extends ChangeNotifier {
         await Permission.location.isGranted;
   }
 
-  // Filter scan results to show only supported devices
-  List<ScanResult> get supportedScanResults {
-    return scanResults.where((result) {
-      // Primary method: Check for our Service UUID
-      if (result.advertisementData.serviceUuids.contains(evilCrowServiceUuid)) {
-        return true;
-      }
+  /// Check whether a scan result matches our device.
+  /// Matches by cached ID, service UUID, manufacturer data, or device name.
+  bool isDeviceMatching(ScanResult result) {
+    // If we've successfully connected to this device before, recognize it
+    // immediately regardless of whether scan data is fully parsed yet.
+    if (_knownDeviceId != null &&
+        result.device.id.toString() == _knownDeviceId) {
+      return true;
+    }
 
-      // Secondary method: Check Manufacturer Data
-      var manufacturerData = result.advertisementData.manufacturerData;
-      if (manufacturerData.containsKey(evilCrowManufacturerId)) {
-        var data = manufacturerData[evilCrowManufacturerId];
-        if (data != null && data.length >= evilCrowDeviceId.length) {
-          bool deviceIdMatch = true;
-          for (int i = 0; i < evilCrowDeviceId.length; i++) {
-            if (data[i] != evilCrowDeviceId[i]) {
-              deviceIdMatch = false;
-              break;
-            }
-          }
-          if (deviceIdMatch) {
-            return true;
+    // Primary method: Check for our Service UUID
+    if (result.advertisementData.serviceUuids.contains(evilCrowServiceUuid)) {
+      return true;
+    }
+
+    // Secondary method: Check Manufacturer Data
+    var manufacturerData = result.advertisementData.manufacturerData;
+    if (manufacturerData.containsKey(evilCrowManufacturerId)) {
+      var data = manufacturerData[evilCrowManufacturerId];
+      if (data != null && data.length >= evilCrowDeviceId.length) {
+        bool deviceIdMatch = true;
+        for (int i = 0; i < evilCrowDeviceId.length; i++) {
+          if (data[i] != evilCrowDeviceId[i]) {
+            deviceIdMatch = false;
+            break;
           }
         }
+        if (deviceIdMatch) {
+          return true;
+        }
       }
+    }
 
-      // Fallback method: Check device name
-      String deviceName = result.device.name;
-      bool nameMatch = supportedDeviceNames.any((supportedName) =>
-          deviceName.toLowerCase().contains(supportedName.toLowerCase()));
+    // Fallback method: Check device name
+    String deviceName = result.device.name;
+    return supportedDeviceNames.any((supportedName) =>
+        deviceName.toLowerCase().contains(supportedName.toLowerCase()));
+  }
 
-      return nameMatch;
-    }).toList();
+  /// Filter scan results to show only supported devices
+  List<ScanResult> get supportedScanResults {
+    return scanResults.where((result) => isDeviceMatching(result)).toList();
   }
 
   Future<void> stopScan() async {
@@ -524,7 +557,8 @@ class BleProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> connectToDevice(BluetoothDevice device) async {
+  Future<void> connectToDevice(BluetoothDevice device,
+      {Duration connectTimeout = const Duration(seconds: 10)}) async {
     try {
       // Cancel any pending auto-reconnect from a previous disconnection
       _reconnectTimer?.cancel();
@@ -536,7 +570,7 @@ class BleProvider extends ChangeNotifier {
       print('Connecting to device: ${device.name} (${device.id})');
       notifyListeners();
 
-      await device.connect(timeout: const Duration(seconds: 10));
+      await device.connect(timeout: connectTimeout);
       connectedDevice = device;
 
       // Set up connection state monitoring (cancel previous subscription on reconnect)
