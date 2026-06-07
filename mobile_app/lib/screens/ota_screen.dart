@@ -476,9 +476,6 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final settingsProvider = Provider.of<SettingsProvider>(context);
-    final isDebugMode = settingsProvider.debugMode;
-
     return Consumer<BleProvider>(
       builder: (context, bleProvider, _) {
         // Keep current version in sync with BLE provider
@@ -516,11 +513,8 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
                   const SizedBox(height: 16),
                   _buildErrorCard(),
                 ],
-                // Local binary flash — only visible in debug mode
-                if (isDebugMode) ...[
-                  const SizedBox(height: 24),
-                  _buildLocalFlashCard(bleProvider),
-                ],
+                const SizedBox(height: 24),
+                _buildLocalFlashCard(bleProvider),
               ],
             ),
           ),

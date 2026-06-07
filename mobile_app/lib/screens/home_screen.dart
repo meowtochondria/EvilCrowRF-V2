@@ -27,8 +27,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
-  int _settingsTapCount = 0;
-  Timer? _tapTimer;
   BleProvider? _bleProvider; // Saved reference for safe dispose
 
   final List<Widget> _screens = [
@@ -92,18 +90,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _bleProvider?.removeListener(_onConnectionStateChanged);
-    _tapTimer?.cancel();
     super.dispose();
-  }
-
-  void _startTapTimer() {
-    _tapTimer?.cancel();
-    _tapTimer = Timer(const Duration(seconds: 2), _resetTapCount);
-  }
-
-  void _resetTapCount() {
-    _settingsTapCount = 0;
-    _tapTimer?.cancel();
   }
 
   bool _settingsSyncShown = false;
@@ -210,28 +197,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             );
             return;
-          }
-
-          // Handle debug mode activation on Settings tap
-          if (index == 4) {
-            _settingsTapCount++;
-            if (_settingsTapCount == 1) {
-              _startTapTimer();
-            }
-            if (_settingsTapCount >= 5) {
-              final settingsProvider =
-                  Provider.of<SettingsProvider>(context, listen: false);
-              settingsProvider.setDebugMode(true);
-              _resetTapCount();
-              // Optional: show a snackbar to confirm
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                    content:
-                        Text(AppLocalizations.of(context)!.debugModeEnabled)),
-              );
-            }
-          } else {
-            _resetTapCount();
           }
 
           setState(() {

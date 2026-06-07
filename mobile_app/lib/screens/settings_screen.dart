@@ -39,24 +39,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.dispose();
   }
 
-  /// Navigates to DebugScreen on single tap.
+  /// Navigates to DebugScreen.
   void _onDebugTap(BuildContext context) {
-    final settingsProvider =
-        Provider.of<SettingsProvider>(context, listen: false);
-    if (settingsProvider.debugMode) {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (context) => const DebugScreen()),
-      );
-    }
-  }
-
-  /// Disables debug mode and shows confirmation.
-  void _onDisableDebug(BuildContext context) {
-    final settingsProvider =
-        Provider.of<SettingsProvider>(context, listen: false);
-    settingsProvider.setDebugMode(false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(AppLocalizations.of(context)!.debugModeDisabled)),
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => const DebugScreen()),
     );
   }
 
@@ -604,58 +590,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           backgroundColor: AppColors.warning,
                           foregroundColor: AppColors.primaryBackground,
                         ),
-                      ),
-                      // Debug-only buttons
-                      Consumer<SettingsProvider>(
-                        builder: (context, settingsProvider, child) {
-                          if (!settingsProvider.debugMode) {
-                            return const SizedBox.shrink();
-                          }
-                          return Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              ElevatedButton.icon(
-                                onPressed: () =>
-                                    bleProvider.requestPermissions(),
-                                icon: const Icon(Icons.security),
-                                label: Text(AppLocalizations.of(context)!
-                                    .requestPermissions),
-                              ),
-                              ElevatedButton.icon(
-                                onPressed: () =>
-                                    _resetTransmitConfirmation(context),
-                                icon: const Icon(Icons.refresh),
-                                label: Text(AppLocalizations.of(context)!
-                                    .resetTransmitConfirmation),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.info,
-                                  foregroundColor: AppColors.primaryBackground,
-                                ),
-                              ),
-                              ElevatedButton.icon(
-                                onPressed: () => _onDebugTap(context),
-                                icon: const Icon(Icons.bug_report),
-                                label:
-                                    Text(AppLocalizations.of(context)!.debug),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.warning,
-                                  foregroundColor: AppColors.primaryBackground,
-                                ),
-                              ),
-                              ElevatedButton.icon(
-                                onPressed: () => _onDisableDebug(context),
-                                icon: const Icon(Icons.bug_report_outlined),
-                                label: Text(
-                                    AppLocalizations.of(context)!.disableDbg),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.error,
-                                  foregroundColor: AppColors.primaryBackground,
-                                ),
-                              ),
-                            ],
-                          );
-                        },
                       ),
                     ],
                   ),
@@ -1703,11 +1637,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   // FlipperZero SubGHz DB Cloning
                   _buildSubGhzDbCloneButton(context, bleProvider),
+                  const SizedBox(height: 16),
+                  // Debug logs
+                  _buildDebugButton(context),
                 ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Build the Debug log navigation button.
+  Widget _buildDebugButton(BuildContext context) {
+    return Card(
+      color: AppColors.secondaryBackground,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      child: ListTile(
+        leading: const Icon(Icons.bug_report, color: AppColors.warning),
+        title: Text(
+          AppLocalizations.of(context)!.debug,
+          style: const TextStyle(
+            fontWeight: FontWeight.w500,
+            color: AppColors.primaryText,
+          ),
+        ),
+        subtitle: const Text(
+          'View debug logs and telemetry',
+          style: TextStyle(color: AppColors.secondaryText, fontSize: 12),
+        ),
+        trailing: const Icon(Icons.chevron_right, color: AppColors.secondaryText),
+        onTap: () => _onDebugTap(context),
       ),
     );
   }
@@ -2600,14 +2561,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 icon: const Icon(Icons.folder_open, size: 16),
                 label: const Text('Select .sub'),
               ),
-            ],
-          ),
+            ),
+          ],
         ],
-      ],
-    );
-  }
+      );
+    }
 
-  Future<void> _pickReplaySubFile(
+    Future<void> _pickReplaySubFile(
     BuildContext context,
     SettingsProvider settingsProvider,
     int buttonId,

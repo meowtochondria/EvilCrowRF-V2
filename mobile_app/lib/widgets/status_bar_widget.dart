@@ -242,13 +242,11 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
 
               // 8. CPU Temperature + (debug) core clock info
               if (bleProvider.isConnected)
-                Consumer<SettingsProvider>(
-                  builder: (context, settingsProvider, _) => _CpuStatusIcon(
-                    temperatureC: bleProvider.cpuTempC,
-                    core0Mhz: bleProvider.core0Mhz,
-                    core1Mhz: bleProvider.core1Mhz,
-                    showCoreClocks: settingsProvider.debugMode,
-                  ),
+                _CpuStatusIcon(
+                  temperatureC: bleProvider.cpuTempC,
+                  core0Mhz: bleProvider.core0Mhz,
+                  core1Mhz: bleProvider.core1Mhz,
+                  showCoreClocks: true,
                 ),
             ],
           ),

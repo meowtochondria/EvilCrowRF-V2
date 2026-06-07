@@ -19,10 +19,15 @@ class AppLogger {
   static LogProvider? _logProvider;
 
   /// Initialize the logger. Call this once from main().
-  static void init({LogProvider? logProvider}) {
+  ///
+  /// If [appName] is null, it will be resolved from [PackageInfo] synchronously.
+  /// In practice, pass the value from [PackageInfo.fromPlatform] in main().
+  static void init({LogProvider? logProvider, String? appName}) {
     _logProvider = logProvider;
 
-    _logger = logging.Logger('EvilCrowRF');
+    // Resolve app name — passed in from main() via PackageInfo, or fallback
+    final name = appName ?? 'evilcrow_rf2_controller';
+    _logger = logging.Logger(name);
 
     // Log all messages at FINEST and above to the console
     logging.hierarchicalLoggingEnabled = true;

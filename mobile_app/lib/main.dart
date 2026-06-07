@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'l10n/app_localizations.dart';
 import 'screens/home_screen.dart';
@@ -12,24 +13,29 @@ import 'providers/settings_provider.dart';
 import 'services/logger_service.dart';
 import 'theme/app_colors.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final packageInfo = await PackageInfo.fromPlatform();
+  final appName = packageInfo.appName;
+
   runApp(
     ChangeNotifierProvider(
       create: (context) => LogProvider(),
-      child: const _LoggerInit(child: MyApp()),
+      child: _LoggerInit(appName: appName, child: const MyApp()),
     ),
   );
 }
 
 /// Initializes [AppLogger] once [LogProvider] is available.
 class _LoggerInit extends StatelessWidget {
+  final String appName;
   final Widget child;
-  const _LoggerInit({required this.child});
+  const _LoggerInit({required this.appName, required this.child});
 
   @override
   Widget build(BuildContext context) {
     final logProvider = context.read<LogProvider>();
-    AppLogger.init(logProvider: logProvider);
+    AppLogger.init(logProvider: logProvider, appName: appName);
     return child;
   }
 }
