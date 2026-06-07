@@ -12,7 +12,6 @@
 #include "OtaCommands.h"
 #include "ButtonCommands.h"
 #include "SdrCommands.h"
-#include "AllProtocols.h"
 #if PROTOPIRATE_MODULE_ENABLED
 #include "ProtoPirateCommands.h"
 #include "modules/protopirate/ProtoPirateModule.h"
@@ -21,7 +20,6 @@
 #include "core/ble/ClientsManager.h"
 #include "ConfigManager.h"
 #include "core/device_controls/DeviceControls.h"
-#include "FS.h"
 #include <LittleFS.h>
 #include "SD.h"
 #include "SPI.h"

@@ -2,7 +2,6 @@
 #define ConfigManager_h
 
 #include <LittleFS.h>
-#include "esp_log.h"
 #include <cstring>
 
 // Maximum length for BLE device name (NimBLE limit is ~29, keep it safe)

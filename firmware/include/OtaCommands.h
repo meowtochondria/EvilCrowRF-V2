@@ -20,7 +20,6 @@
 #include "core/ble/ClientsManager.h"
 #include "BinaryMessages.h"
 #include "modules/ota/OtaModule.h"
-#include "esp_log.h"
 
 class OtaCommands {
 public:

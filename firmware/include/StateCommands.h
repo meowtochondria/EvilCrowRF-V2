@@ -5,7 +5,6 @@
 #include "DeviceTasks.h"
 #include "core/ble/ControllerAdapter.h"
 #include "core/ble/Request.h"
-#include "esp_log.h"
 #include "config.h"
 #include "ConfigManager.h"
 #include "BinaryMessages.h"

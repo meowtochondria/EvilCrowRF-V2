@@ -4,7 +4,6 @@
 #include "StringBuffer.h"
 #include "core/ble/CommandHandler.h"
 #include "core/ble/ClientsManager.h"
-#include "StringHelpers.h"
 #include "BinaryMessages.h"
 #include "core/ble/BleAdapter.h"
 #include "SD.h"
@@ -1602,8 +1601,8 @@ public:
     }
 };
 // Static buffers
-JsonBuffer FileCommands::jsonBuffer;
-PathBuffer FileCommands::pathBuffer;
-LogBuffer FileCommands::logBuffer;
+inline JsonBuffer FileCommands::jsonBuffer;
+inline PathBuffer FileCommands::pathBuffer;
+inline LogBuffer FileCommands::logBuffer;
 
 #endif // FileCommands_h

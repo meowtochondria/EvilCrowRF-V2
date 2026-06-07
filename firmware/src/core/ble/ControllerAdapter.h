@@ -2,9 +2,6 @@
 #define ControllerAdapter_h
 
 #include "DeviceTasks.h"
-#include <queue>
-#include <memory>
-#include <functional>
 
 class ControllerAdapter
 {

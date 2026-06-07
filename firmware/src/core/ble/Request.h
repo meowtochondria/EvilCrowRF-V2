@@ -1,7 +1,8 @@
 #ifndef Request_h
 #define Request_h
 
-#include <string>
+#include <stdint.h>
+#include <cstddef>
 
 struct RequestRecord {
     float frequency;      // 4 bytes for frequency

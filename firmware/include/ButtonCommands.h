@@ -31,7 +31,6 @@
 #include "core/device_controls/DeviceControls.h"
 #include "modules/nrf/NrfJammer.h"
 #include "modules/CC1101_driver/CC1101_Worker.h"
-#include "esp_log.h"
 
 /// Available actions for hardware buttons.
 /// Must match the Flutter HwButtonAction enum order.

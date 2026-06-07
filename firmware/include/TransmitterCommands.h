@@ -1,11 +1,10 @@
 #ifndef TransmitterCommands_h
 #define TransmitterCommands_h
 
-#include "StringBuffer.h"
+#include "BinaryMessages.h"
 #include "core/ble/CommandHandler.h"
 #include "core/ble/ControllerAdapter.h"
 #include "DeviceTasks.h"
-#include "StringHelpers.h"
 #include "core/ble/ClientsManager.h"
 #include "config.h"
 #include "modules/CC1101_driver/CC1101_Worker.h"
