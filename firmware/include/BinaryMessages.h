@@ -3,8 +3,6 @@
 
 #include <stdint.h>
 
-#pragma pack(push, 1)
-
 // Message type IDs (0x80-0xFF reserved for responses)
 enum BinaryMessageType : uint8_t {
     // Status & State messages
@@ -91,7 +89,7 @@ enum BinaryMessageType : uint8_t {
     MSG_PP_SAVE_RESULT   = 0xBB,  // Save result: [success:1][pathLen:1][path...]
 };
 
-// Mode switch notification (4 bytes)
+#pragma pack(push, 1)
 struct BinaryModeSwitch {
     uint8_t messageType = MSG_MODE_SWITCH;
     uint8_t module;
