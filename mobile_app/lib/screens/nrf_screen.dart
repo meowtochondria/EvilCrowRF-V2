@@ -104,13 +104,28 @@ class _NrfScreenState extends State<NrfScreen>
     setState(() => _initializing = true);
 
     try {
+      // Send the init command
       final cmd = FirmwareBinaryProtocol.createNrfInitCommand();
       await bleProvider.sendBinaryCommand(cmd);
-      await Future.delayed(const Duration(milliseconds: 500));
-      bleProvider.nrfInitialized = true;
-      bleProvider.nrfNotify();
-      setState(() => _initializing = false);
+
+      // Wait for firmware to respond with MSG_NRF_STATUS (0xCA).
+      // The firmware now sends this after init so the app learns the real
+      // detection result (present=true/false).
+      final present = await bleProvider.awaitNrfInitResult();
+
+      if (present) {
+        bleProvider.nrfInitialized = true;
+        bleProvider.nrfNotify();
+        setState(() => _initializing = false);
+      } else {
+        // Firmware responded: NRF24 chip is NOT present on the SPI bus
+        setState(() {
+          _initializing = false;
+          _initFailed = true;
+        });
+      }
     } catch (e) {
+      // BLE write failure or timeout
       setState(() {
         _initializing = false;
         _initFailed = true;
@@ -273,8 +288,11 @@ class _NrfScreenState extends State<NrfScreen>
         if (!bleProvider.isConnected) {
           return _buildNotConnected();
         }
+
+        // If GetState already told us NRF24 hardware is absent (from a
+        // previous init attempt that failed), show the not-detected screen.
         if (!bleProvider.nrfInitialized) {
-          return _buildInitScreen();
+          return _buildInitScreen(bleProvider: bleProvider);
         }
         return _buildMainScreen(bleProvider);
       },
@@ -296,12 +314,22 @@ class _NrfScreenState extends State<NrfScreen>
     );
   }
 
-  Widget _buildInitScreen() {
+  Widget _buildInitScreen({BleProvider? bleProvider}) {
+    // Proactive message: GetState already told us NRF24 hardware is absent
+    // (from a previous init attempt that set present=false).
+    final bool knownNotPresent = bleProvider != null &&
+        bleProvider.isConnected &&
+        !bleProvider.nrfPresent;
+
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.memory, size: 72, color: AppColors.primaryAccent),
+          Icon(Icons.memory,
+              size: 72,
+              color: knownNotPresent
+                  ? AppColors.disabledText
+                  : AppColors.primaryAccent),
           const SizedBox(height: 24),
           Text('nRF24L01 Module',
               style: TextStyle(
@@ -312,6 +340,22 @@ class _NrfScreenState extends State<NrfScreen>
           Text('MouseJack / Spectrum / Jammer',
               style: TextStyle(color: AppColors.secondaryText, fontSize: 14)),
           const SizedBox(height: 32),
+          if (knownNotPresent && !_initFailed && !_initializing)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.error.withValues(alpha: 0.1),
+                  border:
+                      Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text('nRF24L01 hardware absent on this device',
+                    style: TextStyle(color: AppColors.error, fontSize: 13)),
+              ),
+            ),
           _initializing
               ? const CircularProgressIndicator(color: AppColors.primaryAccent)
               : ElevatedButton.icon(

@@ -164,6 +164,21 @@ class BleProvider extends ChangeNotifier {
   /// use this instead of calling notifyListeners() from outside the class.
   void nrfNotify() => notifyListeners();
 
+  /// Completer that resolves when MSG_NRF_STATUS (0xCA) arrives after an
+  /// NRF init command.  The NRF screen awaits this to learn the real result.
+  Completer<bool>? _nrfInitResult;
+
+  /// Await the result of an NRF init command.
+  /// Returns `true` if the module was detected and initialized, `false` if not.
+  /// Throws on timeout (10 seconds).
+  Future<bool> awaitNrfInitResult() {
+    _nrfInitResult = Completer<bool>();
+    return _nrfInitResult!.future.timeout(
+      const Duration(seconds: 10),
+      onTimeout: () => false, // treat timeout as "not detected"
+    );
+  }
+
   // ── SDR state (reactive, used by SettingsScreen via Consumer) ──
   bool sdrModeActive = false;
   int sdrSubMode = 0;
@@ -458,7 +473,8 @@ class BleProvider extends ChangeNotifier {
       _scanResultsSubscription?.cancel();
       _scanResultsSubscription = FlutterBluePlus.scanResults.listen((results) {
         scanResults = results;
-        AppLogger.debug('Scan results updated: ${results.length} devices found');
+        AppLogger.debug(
+            'Scan results updated: ${results.length} devices found');
 
         // Log all devices
         for (var result in results) {
@@ -4138,7 +4154,7 @@ class BleProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Handle nRF24 module status (0xCA) — received on GetState.
+  /// Handle nRF24 module status (0xCA) — received on GetState or after init.
   void _handleNrfModuleStatus(Map<String, dynamic> data) {
     nrfPresent = data['present'] ?? false;
     nrfInitialized = data['initialized'] ?? false;
@@ -4151,6 +4167,11 @@ class BleProvider extends ChangeNotifier {
     _log('info',
         'NrfModuleStatus: present=$nrfPresent init=$nrfInitialized state=$state');
     notifyListeners();
+
+    // Resolve any pending NRF init completer
+    if (_nrfInitResult != null && !_nrfInitResult!.isCompleted) {
+      _nrfInitResult!.complete(nrfPresent);
+    }
   }
 
   /// Send updated settings to the device (0xC1).

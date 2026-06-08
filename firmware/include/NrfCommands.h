@@ -78,10 +78,20 @@ private:
             MouseJack::init();
         }
 
-        // Response: [MSG_COMMAND_SUCCESS/ERROR][nrf_present:1]
+        // Send MSG_NRF_STATUS (0xCA) so the app gets proper present/initialized
+        // flags and can distinguish "absent hardware" from "not yet initialized".
+        BinaryNrfStatus status;
+        status.present     = NrfModule::isPresent() ? 1 : 0;
+        status.initialized = NrfModule::isInitialized() ? 1 : 0;
+        status.activeState = 0;  // idle
+        ClientsManager::getInstance().notifyAllBinary(
+            NotificationType::State,
+            reinterpret_cast<const uint8_t*>(&status), sizeof(status));
+
+        // Also send legacy command success/error for backward compat
         uint8_t resp[2];
         resp[0] = ok ? MSG_COMMAND_SUCCESS : MSG_COMMAND_ERROR;
-        resp[1] = NrfModule::isPresent() ? 1 : 0;
+        resp[1] = status.present;
         ClientsManager::getInstance().notifyAllBinary(
             NotificationType::NrfEvent, resp, sizeof(resp));
         return ok;
