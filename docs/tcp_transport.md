@@ -455,6 +455,133 @@ OTA currently uses BLE chunked writes. WiFi OTA uses the same `Update` class:
 - `POST /api/ota/end` — verify MD5, apply update
 - `POST /api/ota/reboot` — reboot into new firmware
 
+### Phase 3.5: Mobile App — Linux Build & Desktop Testing
+
+This phase is enabled by the WiFi transport itself: the WebSocket + HTTP approach replaces
+BLE, which was the single blocker for Linux desktop support. Once complete, developers can
+build, run, and debug the full app on a Linux machine without a phone or BLE adapter.
+
+**Prerequisite:** Phases 1–3 must be complete (or at least the firmware must be built in
+`EVILCROW_WIFI_MODE` so there is a WiFi-capable device to test against).
+
+---
+
+#### 3.5.1 Scaffold the Linux Platform
+
+```bash
+cd mobile_app
+flutter create --platforms linux .
+```
+
+This generates:
+
+| File | Purpose |
+|------|---------|
+| `linux/flutter/generated_plugin_registrant.h` / `.cc` | Auto-managed plugin registration |
+| `linux/my_application.h` / `.cc` | GTK application entry point, window creation |
+| `linux/main.cc` | `main()` — instantiates `MyApplication` |
+| `linux/CMakeLists.txt` | Build rules; may need edits for custom deps |
+
+After scaffolding, verify it compiles:
+
+```bash
+cd mobile_app && flutter build linux --debug
+```
+
+---
+
+#### 3.5.2 Why WiFi Unblocks Linux
+
+| Dependency | BLE mode (existing) | WiFi mode (this plan) | Linux support |
+|------------|---------------------|----------------------|---------------|
+| `flutter_blue_plus` | **Required** | Not used | ❌ No Linux support |
+| `web_socket_channel` | Not used | **Required** | ✅ Pure Dart — works everywhere |
+| `http` | Not used | **Required** | ✅ Pure Dart — works everywhere |
+| `network_info_plus` | Not used | **Required** | ✅ Yes (via NetworkManager/connman) |
+| `permission_handler` | Bluetooth perms | Network perms | ✅ Yes (v9.0+, D-Bus) |
+| `shared_preferences` | Used | Used | ✅ Yes |
+| `path_provider` | Used | Used | ✅ Yes (XDG dirs) |
+| `file_picker` | Used | Used | ✅ Yes (GTK file dialog) |
+| `wakelock_plus` | Used | Used | ✅ Yes (GNOME inhibit) |
+| `package_info_plus` | Used | Used | ✅ Yes (AppStream/CMake) |
+
+**Key insight:** Every dependency that the WiFi-mode app needs already supports Linux.
+The only Linux-hostile dependency (`flutter_blue_plus`) is eliminated by the WiFi transport.
+
+---
+
+#### 3.5.3 Linux-Specific Configuration
+
+**Permissions (AppStream / D-Bus):**
+
+The `linux/my_application.cc` runner must request network permission. Add the following to
+the generated `.desktop` file or the AppStream metainfo:
+
+```xml
+<!-- linux/io.evilcrow.evilcrowrf.metainfo.xml -->
+<component>
+  <id>io.evilcrow.evilcrowrf</id>
+  <name>EvilCrow RF</name>
+  <summary>RF device controller</summary>
+  <url type="homepage">https://github.com/EvilCrowRF/EvilCrowRF-V2</url>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <requires>
+    <!-- Network access for WebSocket + mDNS -->
+    <display_length compare="ge">800</display_length>
+  </requires>
+</component>
+```
+
+**mDNS on Linux:**
+
+The app discovers devices via mDNS (`_evilcrow._tcp`). Linux needs `avahi-daemon` running.
+For development, wrap the app launch:
+
+```bash
+sudo systemctl start avahi-daemon
+```
+
+**Window configuration (`linux/my_application.cc`):**
+
+```cpp
+// Set minimum window size appropriate for the app's UI
+static void my_application_activate(GApplication* application) {
+  MyApplication* self = MY_APPLICATION(application);
+  GtkWindow* window = GTK_WINDOW(gtk_application_get_active_window(
+      GTK_APPLICATION(application)));
+
+  gtk_window_set_default_size(window, 400, 700);
+  gtk_window_set_resizable(window, TRUE);
+  gtk_window_set_title(window, "EvilCrow RF");
+}
+```
+
+---
+
+#### 3.5.4 Build Profiles
+
+| Profile | Command | Use case |
+|---------|---------|----------|
+| Debug | `flutter build linux --debug` | Development, hot reload available |
+| Profile | `flutter build linux --profile` | Performance tracing, no asserts |
+| Release | `flutter build linux --release` | End-user builds, stripped binary |
+
+---
+
+#### 3.5.5 Desktop-Specific Considerations
+
+| Concern | Guidance |
+|---------|----------|
+| **Hot reload** | Works on Linux desktop — the fastest development cycle for UI work. |
+| **No BLE dependencies** | `flutter_blue_plus` is never bundled in WiFi mode, so no link errors from missing native BLE libraries. |
+| **Manual IP fallback** | Add a text field in app settings to enter device IP directly (for environments where mDNS is blocked). |
+| **Multiple windows** | GTK runner creates one window by default; the app does not need more. |
+| **Packaging** | Use `flutter build linux --release` then package with `linuxdeploy` or distribute as an AppImage. |
+| **Testing without hardware** | The `WifiProvider` can be driven by a mock WebSocket server for unit/integration tests. |
+
+---
+
 ### Phase 4: Mobile App — WifiProvider
 
 **File to create:** `lib/providers/wifi_provider.dart`
@@ -548,3 +675,13 @@ For v1, since the device is intended for controlled testing environments, **omit
 | `lib/transport/transport_adapter.dart` | Add wifi transport type |
 | `lib/main.dart` | Conditionally inject `WifiProvider` or `BleProvider` |
 | `Makefile` | Add `apk-bt`, `apk-wifi` targets |
+
+### Linux Platform (Flutter/Dart)
+
+| File | Action |
+|------|--------|
+| `linux/flutter/generated_plugin_registrant.h` / `.cc` | **NEW** — auto-generated by `flutter create --platforms linux` |
+| `linux/my_application.h` / `.cc` | **NEW** — GTK runner, window sizing, app name |
+| `linux/main.cc` | **NEW** — entry point |
+| `linux/CMakeLists.txt` | **NEW** — build rules; add `GTK3`, `avahi-client` linkage if needed |
+| `linux/io.evilcrow.evilcrowrf.metainfo.xml` | **NEW** — AppStream metadata, permissions |
