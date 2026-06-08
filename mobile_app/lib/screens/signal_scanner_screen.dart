@@ -254,7 +254,7 @@ class _SignalScannerScreenState extends State<SignalScannerScreen>
                         style:
                             Theme.of(context).textTheme.titleMedium?.copyWith(
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.white,
+                                  color: AppColors.onButton,
                                 ),
                       ),
                     ),
@@ -452,7 +452,9 @@ class _SignalScannerScreenState extends State<SignalScannerScreen>
             label,
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: isSelected ? Colors.black : AppColors.secondaryText,
+              color: isSelected
+                  ? AppColors.primaryBackground
+                  : AppColors.secondaryText,
               fontWeight: FontWeight.bold,
               fontSize: 12,
             ),
@@ -499,7 +501,7 @@ class _SignalScannerScreenState extends State<SignalScannerScreen>
               child: Text(
                 '${signal.module}',
                 style: const TextStyle(
-                    color: Colors.white,
+                    color: AppColors.onButton,
                     fontWeight: FontWeight.bold,
                     fontSize: 13),
               ),
@@ -688,12 +690,12 @@ class _SignalScannerScreenState extends State<SignalScannerScreen>
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _buildLegendItem(
-              Colors.red, AppLocalizations.of(context)!.signalStrengthStrong),
-          _buildLegendItem(Colors.orange,
+          _buildLegendItem(AppColors.error,
+              AppLocalizations.of(context)!.signalStrengthStrong),
+          _buildLegendItem(AppColors.statusOrange,
               AppLocalizations.of(context)!.signalStrengthMedium),
-          _buildLegendItem(
-              Colors.green, AppLocalizations.of(context)!.signalStrengthWeak),
+          _buildLegendItem(AppColors.success,
+              AppLocalizations.of(context)!.signalStrengthWeak),
           _buildLegendItem(AppColors.disabledText,
               AppLocalizations.of(context)!.signalStrengthNone),
         ],
@@ -722,10 +724,10 @@ class _SignalScannerScreenState extends State<SignalScannerScreen>
   // ── Helpers ───────────────────────────────────────────────────────
 
   Color _getRssiColor(int rssi) {
-    if (rssi >= -30) return Colors.red;
-    if (rssi >= -50) return Colors.orange;
-    if (rssi >= -70) return Colors.yellow;
-    if (rssi >= -90) return Colors.green;
+    if (rssi >= -30) return AppColors.error;
+    if (rssi >= -50) return AppColors.statusOrange;
+    if (rssi >= -70) return AppColors.warning;
+    if (rssi >= -90) return AppColors.success;
     return AppColors.disabledText;
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
+import '../theme/app_colors.dart';
 
 class FilePreviewWidget extends StatelessWidget {
   final String fileName;
@@ -40,14 +41,14 @@ class FilePreviewWidget extends StatelessWidget {
             const Icon(
               Icons.error_outline,
               size: 48,
-              color: Colors.red,
+              color: AppColors.error,
             ),
             const SizedBox(height: 16),
             Text(
               AppLocalizations.of(context)!.previewError,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: Colors.red,
-              ),
+                    color: AppColors.error,
+                  ),
             ),
             const SizedBox(height: 8),
             Padding(
@@ -55,8 +56,8 @@ class FilePreviewWidget extends StatelessWidget {
               child: Text(
                 errorMessage!,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.grey,
-                ),
+                      color: AppColors.greyLight,
+                    ),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -78,9 +79,9 @@ class FilePreviewWidget extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.grey[50],
+        color: AppColors.secondaryBackground,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey[300]!),
+        border: Border.all(color: AppColors.greyLight),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -97,16 +98,16 @@ class FilePreviewWidget extends StatelessWidget {
                 child: Text(
                   fileName,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w500,
-                  ),
+                        fontWeight: FontWeight.w500,
+                      ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               Text(
                 AppLocalizations.of(context)!.chars(content.length),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.grey[600],
-                ),
+                      color: AppColors.greyDark,
+                    ),
               ),
             ],
           ),
@@ -116,9 +117,9 @@ class FilePreviewWidget extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AppColors.onButton,
                 borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: Colors.grey[200]!),
+                border: Border.all(color: AppColors.greyLight),
               ),
               child: SingleChildScrollView(
                 child: Text(
@@ -137,9 +138,9 @@ class FilePreviewWidget extends StatelessWidget {
             Text(
               AppLocalizations.of(context)!.previewTruncated,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Colors.grey[600],
-                fontStyle: FontStyle.italic,
-              ),
+                    color: AppColors.greyDark,
+                    fontStyle: FontStyle.italic,
+                  ),
             ),
           ],
         ],
@@ -184,47 +185,47 @@ class FilePreviewWidget extends StatelessWidget {
     switch (extension) {
       case 'txt':
       case 'log':
-        return Colors.blue;
+        return AppColors.statusBlue;
       case 'json':
-        return Colors.orange;
+        return AppColors.statusOrange;
       case 'sub':
-        return Colors.purple;
+        return AppColors.statusPurple;
       case 'bin':
       case 'hex':
-        return Colors.red;
+        return AppColors.error;
       case 'wav':
       case 'mp3':
-        return Colors.green;
+        return AppColors.success;
       case 'jpg':
       case 'jpeg':
       case 'png':
       case 'gif':
-        return Colors.teal;
+        return AppColors.statusTeal;
       case 'zip':
       case 'rar':
-        return Colors.brown;
+        return AppColors.statusBrown;
       default:
-        return Colors.grey;
+        return AppColors.greyLight;
     }
   }
 
   String _getPreviewContent(String content, String extension) {
     // Limit preview length
     const maxPreviewLength = 500;
-    
+
     if (content.length <= maxPreviewLength) {
       return content;
     }
-    
+
     String preview = content.substring(0, maxPreviewLength);
-    
+
     // For JSON try to find end of object/array
     if (extension == 'json') {
       try {
         int braceCount = 0;
         int bracketCount = 0;
         int lastValidPos = 0;
-        
+
         for (int i = 0; i < preview.length; i++) {
           switch (preview[i]) {
             case '{':
@@ -247,7 +248,7 @@ class FilePreviewWidget extends StatelessWidget {
               break;
           }
         }
-        
+
         if (lastValidPos > 100) {
           preview = preview.substring(0, lastValidPos);
         }
@@ -255,7 +256,7 @@ class FilePreviewWidget extends StatelessWidget {
         // If something went wrong, use regular truncation
       }
     }
-    
+
     return '$preview...';
   }
 }

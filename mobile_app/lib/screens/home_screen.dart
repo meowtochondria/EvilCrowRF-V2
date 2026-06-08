@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'dart:async';
 import '../l10n/app_localizations.dart';
 import '../providers/ble_provider.dart';
 import '../providers/log_provider.dart';
 import '../providers/notification_provider.dart';
-import '../providers/settings_provider.dart';
 import '../widgets/quick_connect_widget.dart';
 
 import '../widgets/status_bar_widget.dart';
@@ -106,7 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
           SnackBar(
             content: Row(
               children: [
-                const Icon(Icons.sync, color: Colors.white, size: 18),
+                const Icon(Icons.sync, color: AppColors.onButton, size: 18),
                 const SizedBox(width: 8),
                 Text(AppLocalizations.of(context)!.settingsSyncedWithDevice),
               ],
@@ -217,7 +215,7 @@ class _HomeScreenState extends State<HomeScreen> {
               builder: (context, ble, _) => Icon(
                 Icons.wifi_tethering,
                 color: (ble.isConnected && !ble.nrfPresent)
-                    ? Colors.grey.shade600
+                    ? AppColors.greyDark
                     : null,
               ),
             ),
@@ -255,12 +253,12 @@ class HomeTab extends StatelessWidget {
                 child: Row(
                   children: [
                     const Icon(Icons.bluetooth_connected,
-                        size: 16, color: Colors.green),
+                        size: 16, color: AppColors.success),
                     const SizedBox(width: 6),
                     Text(
                       'Connected',
                       style: TextStyle(
-                          color: Colors.green,
+                          color: AppColors.success,
                           fontSize: 12,
                           fontWeight: FontWeight.w500),
                     ),

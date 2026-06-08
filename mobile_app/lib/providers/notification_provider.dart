@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_colors.dart';
 
 enum NotificationLevel {
   info,
@@ -22,13 +23,13 @@ class AppNotification {
   Color get color {
     switch (level) {
       case NotificationLevel.info:
-        return Colors.blue;
+        return AppColors.statusBlue;
       case NotificationLevel.success:
-        return Colors.green;
+        return AppColors.success;
       case NotificationLevel.warning:
-        return Colors.orange;
+        return AppColors.statusOrange;
       case NotificationLevel.error:
-        return Colors.red;
+        return AppColors.error;
     }
   }
 
@@ -49,10 +50,11 @@ class AppNotification {
 class NotificationProvider extends ChangeNotifier {
   AppNotification? _currentNotification;
   AppNotification? get currentNotification => _currentNotification;
-  
+
   final List<AppNotification> _notificationHistory = [];
-  List<AppNotification> get notificationHistory => List.unmodifiable(_notificationHistory);
-  
+  List<AppNotification> get notificationHistory =>
+      List.unmodifiable(_notificationHistory);
+
   static const int maxHistorySize = 50;
 
   void showInfo(String message, {Duration? duration}) {
@@ -89,13 +91,13 @@ class NotificationProvider extends ChangeNotifier {
 
   void _showNotification(AppNotification notification) {
     _currentNotification = notification;
-    
+
     // Add to history
     _notificationHistory.insert(0, notification);
     if (_notificationHistory.length > maxHistorySize) {
       _notificationHistory.removeLast();
     }
-    
+
     notifyListeners();
 
     // Auto-dismiss after duration
@@ -110,12 +112,9 @@ class NotificationProvider extends ChangeNotifier {
     _currentNotification = null;
     notifyListeners();
   }
-  
+
   void clearHistory() {
     _notificationHistory.clear();
     notifyListeners();
   }
 }
-
-
-

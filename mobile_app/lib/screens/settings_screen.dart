@@ -113,7 +113,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   width: 16,
                   height: 16,
                   child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white),
+                      strokeWidth: 2, color: AppColors.onButton),
                 ),
                 const SizedBox(width: 12),
                 Text(AppLocalizations.of(context)!.checkingForAppUpdates),
@@ -1117,7 +1117,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          leading: const Icon(Icons.wifi_tethering, color: Color(0xFF00BCD4)),
+          leading: const Icon(Icons.wifi_tethering, color: AppColors.nrfAccent),
           title: Text(
             AppLocalizations.of(context)!.nrf24Settings,
             style: const TextStyle(
@@ -1202,10 +1202,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   context, bleProvider, settingsProvider);
                             },
                             selectedColor:
-                                const Color(0xFF00BCD4).withValues(alpha: 0.2),
+                                AppColors.nrfAccent.withValues(alpha: 0.2),
                             labelStyle: TextStyle(
                               color: isSelected
-                                  ? const Color(0xFF00BCD4)
+                                  ? AppColors.nrfAccent
                                   : AppColors.secondaryText,
                               fontSize: 11,
                               fontWeight: isSelected
@@ -1256,10 +1256,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   context, bleProvider, settingsProvider);
                             },
                             selectedColor:
-                                const Color(0xFF00BCD4).withValues(alpha: 0.2),
+                                AppColors.nrfAccent.withValues(alpha: 0.2),
                             labelStyle: TextStyle(
                               color: isSelected
-                                  ? const Color(0xFF00BCD4)
+                                  ? AppColors.nrfAccent
                                   : AppColors.secondaryText,
                               fontSize: 11,
                               fontWeight: isSelected
@@ -1310,7 +1310,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         divisions: 125,
                         label:
                             'Ch ${settingsProvider.nrfChannel} (${2400 + settingsProvider.nrfChannel} MHz)',
-                        activeColor: const Color(0xFF00BCD4),
+                        activeColor: AppColors.nrfAccent,
                         onChanged: (value) {
                           settingsProvider.setNrfChannel(value.round());
                           _debouncedSendNrfSettings(
@@ -1357,7 +1357,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         max: 15,
                         divisions: 15,
                         label: '${settingsProvider.nrfAutoRetransmit}x',
-                        activeColor: const Color(0xFF00BCD4),
+                        activeColor: AppColors.nrfAccent,
                         onChanged: (value) {
                           settingsProvider.setNrfAutoRetransmit(value.round());
                           _debouncedSendNrfSettings(
@@ -1667,7 +1667,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'View debug logs and telemetry',
           style: TextStyle(color: AppColors.secondaryText, fontSize: 12),
         ),
-        trailing: const Icon(Icons.chevron_right, color: AppColors.secondaryText),
+        trailing:
+            const Icon(Icons.chevron_right, color: AppColors.secondaryText),
         onTap: () => _onDebugTap(context),
       ),
     );
@@ -1685,7 +1686,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             Row(
               children: [
-                Icon(Icons.cloud_download, size: 22, color: Colors.orange),
+                Icon(Icons.cloud_download,
+                    size: 22, color: AppColors.statusOrange),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -1722,9 +1724,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 icon: const Icon(Icons.download, size: 18),
                 label: Text('Clone SubGHz DB to SDCard'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: Colors.grey.withOpacity(0.3),
+                  backgroundColor: AppColors.statusOrange,
+                  foregroundColor: AppColors.onBright,
+                  disabledBackgroundColor: AppColors.greyLight.withOpacity(0.3),
                 ),
               ),
             ),
@@ -1754,7 +1756,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (ctx) => AlertDialog(
         title: Row(
           children: [
-            Icon(Icons.cloud_download, color: Colors.orange),
+            Icon(Icons.cloud_download, color: AppColors.statusOrange),
             const SizedBox(width: 8),
             Text('Clone SubGHz Database'),
           ],
@@ -1802,8 +1804,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             icon: const Icon(Icons.download, size: 18),
             label: Text('Start'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange,
-              foregroundColor: Colors.white,
+              backgroundColor: AppColors.statusOrange,
+              foregroundColor: AppColors.onBright,
             ),
           ),
         ],
@@ -1983,7 +1985,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             label: const Text('Format SD Card'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.warning,
-                              foregroundColor: Colors.white,
+                              foregroundColor: AppColors.onBright,
                               disabledBackgroundColor:
                                   AppColors.warning.withValues(alpha: 0.3),
                             ),
@@ -2041,7 +2043,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             label: const Text('Factory Reset'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.error,
-                              foregroundColor: Colors.white,
+                              foregroundColor: AppColors.onButton,
                               disabledBackgroundColor:
                                   AppColors.error.withValues(alpha: 0.3),
                             ),
@@ -2185,7 +2187,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.error,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.onButton,
             ),
             child: const Text('Yes, Reset', style: TextStyle(fontSize: 16)),
           ),
@@ -2242,7 +2244,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.warning,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.onButton,
             ),
             child: const Text('Yes, Format', style: TextStyle(fontSize: 16)),
           ),
@@ -2561,13 +2563,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 icon: const Icon(Icons.folder_open, size: 16),
                 label: const Text('Select .sub'),
               ),
-            ),
-          ],
+            ],
+          ),
         ],
-      );
-    }
+      ],
+    );
+  }
 
-    Future<void> _pickReplaySubFile(
+  Future<void> _pickReplaySubFile(
     BuildContext context,
     SettingsProvider settingsProvider,
     int buttonId,
@@ -3007,7 +3010,7 @@ class _AboutPopupState extends State<_AboutPopup>
                             return LinearGradient(
                               colors: const [
                                 AppColors.primaryAccent,
-                                Colors.white,
+                                AppColors.onButton,
                                 AppColors.primaryAccent,
                               ],
                               stops: [
@@ -3026,7 +3029,7 @@ class _AboutPopupState extends State<_AboutPopup>
                             style: TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.bold,
-                              color: Colors.white,
+                              color: AppColors.onButton,
                               letterSpacing: 1.5,
                             ),
                           ),
@@ -3165,7 +3168,7 @@ class _AboutPopupState extends State<_AboutPopup>
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: AppColors.onButton,
                       letterSpacing: 1.0,
                     ),
                   ),
@@ -3748,7 +3751,7 @@ class _SubGhzCloneDialogState extends State<_SubGhzCloneDialog> {
       return AlertDialog(
         title: Row(
           children: [
-            Icon(Icons.replay, color: Colors.orange),
+            Icon(Icons.replay, color: AppColors.statusOrange),
             const SizedBox(width: 8),
             const Expanded(
               child: Text('Resume Clone?', style: TextStyle(fontSize: 16)),
@@ -3795,8 +3798,8 @@ class _SubGhzCloneDialogState extends State<_SubGhzCloneDialog> {
             color: _isDone
                 ? (_hasError ? AppColors.error : AppColors.success)
                 : _isPaused
-                    ? Colors.orange
-                    : Colors.orange,
+                    ? AppColors.statusOrange
+                    : AppColors.statusOrange,
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -3824,7 +3827,8 @@ class _SubGhzCloneDialogState extends State<_SubGhzCloneDialog> {
                   height: 16,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.orange),
+                    valueColor:
+                        AlwaysStoppedAnimation<Color>(AppColors.statusOrange),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -3862,15 +3866,15 @@ class _SubGhzCloneDialogState extends State<_SubGhzCloneDialog> {
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: _isDone ? 1.0 : (_progress > 0 ? _progress : null),
-              backgroundColor: Colors.grey.withOpacity(0.2),
+              backgroundColor: AppColors.greyLight.withOpacity(0.2),
               valueColor: AlwaysStoppedAnimation<Color>(
                 _hasError
                     ? AppColors.error
                     : _isDone
                         ? AppColors.success
                         : _isPaused
-                            ? Colors.orange.shade300
-                            : Colors.orange,
+                            ? AppColors.statusOrange
+                            : AppColors.statusOrange,
               ),
               minHeight: 8,
             ),
@@ -3930,7 +3934,7 @@ class _SubGhzCloneDialogState extends State<_SubGhzCloneDialog> {
             icon: const Icon(Icons.pause, size: 18),
             label: const Text('Pause'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange,
+              backgroundColor: AppColors.statusOrange,
             ),
           ),
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_colors.dart';
 
 enum LogLevel {
   info,
@@ -30,15 +31,15 @@ class LogEntry {
   Color get levelColor {
     switch (level) {
       case LogLevel.info:
-        return Colors.blue;
+        return AppColors.statusBlue;
       case LogLevel.warning:
-        return Colors.orange;
+        return AppColors.statusOrange;
       case LogLevel.error:
-        return Colors.red;
+        return AppColors.error;
       case LogLevel.command:
-        return Colors.green;
+        return AppColors.success;
       case LogLevel.response:
-        return Colors.purple;
+        return AppColors.statusPurple;
     }
   }
 

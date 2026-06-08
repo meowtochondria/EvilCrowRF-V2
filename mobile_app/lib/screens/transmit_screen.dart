@@ -5,6 +5,7 @@ import '../providers/ble_provider.dart';
 import '../providers/notification_provider.dart';
 import '../services/cc1101/cc1101_values.dart';
 import '../widgets/record_screen_widgets.dart';
+import '../theme/app_colors.dart';
 
 /// Signal transmission screen
 /// Allows configuring CC1101 parameters and transmitting signals
@@ -266,7 +267,7 @@ class _TransmitScreenState extends State<TransmitScreen>
                             Icon(
                               Icons.send,
                               size: 18,
-                              color: isAvailable ? null : Colors.grey,
+                              color: isAvailable ? null : AppColors.greyLight,
                             ),
                             if (!isAvailable)
                               Positioned(
@@ -276,7 +277,7 @@ class _TransmitScreenState extends State<TransmitScreen>
                                   width: 8,
                                   height: 8,
                                   decoration: const BoxDecoration(
-                                    color: Colors.red,
+                                    color: AppColors.error,
                                     shape: BoxShape.circle,
                                   ),
                                 ),
@@ -354,19 +355,19 @@ class _TransmitScreenState extends State<TransmitScreen>
 
     switch (mode.toLowerCase()) {
       case 'idle':
-        statusColor = Colors.green;
+        statusColor = AppColors.success;
         statusIcon = Icons.pause_circle;
         break;
       case 'sendsignal':
-        statusColor = Colors.orange;
+        statusColor = AppColors.statusOrange;
         statusIcon = Icons.send;
         break;
       case 'detectsignal':
-        statusColor = Colors.blue;
+        statusColor = AppColors.statusBlue;
         statusIcon = Icons.radar;
         break;
       default:
-        statusColor = Colors.grey;
+        statusColor = AppColors.greyLight;
         statusIcon = Icons.help_outline;
     }
 
@@ -398,7 +399,7 @@ class _TransmitScreenState extends State<TransmitScreen>
                             : AppLocalizations.of(context)!
                                 .connectionDisconnected),
                     style: TextStyle(
-                      color: isConnected ? Colors.green : Colors.red,
+                      color: isConnected ? AppColors.success : AppColors.error,
                     ),
                   ),
                 ],
@@ -458,7 +459,9 @@ class _TransmitScreenState extends State<TransmitScreen>
                     },
               secondary: Icon(
                 config.advancedMode ? Icons.settings : Icons.tune,
-                color: config.advancedMode ? Colors.orange : Colors.blue,
+                color: config.advancedMode
+                    ? AppColors.statusOrange
+                    : AppColors.statusBlue,
               ),
             ),
 
@@ -641,8 +644,8 @@ class _TransmitScreenState extends State<TransmitScreen>
             icon: const Icon(Icons.send),
             label: Text(AppLocalizations.of(context)!.transmitSignal),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
+              backgroundColor: AppColors.statusBlue,
+              foregroundColor: AppColors.onButton,
               padding: const EdgeInsets.symmetric(vertical: 16),
             ),
           ),

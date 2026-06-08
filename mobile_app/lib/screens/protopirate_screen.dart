@@ -8,8 +8,8 @@ import '../providers/notification_provider.dart';
 import '../theme/app_colors.dart';
 
 /// Accent color for the ProtoPirate module (cyan / teal)
-const Color _ppAccent = Color(0xFF00BCD4);
-const Color _ppAccentDim = Color(0xFF006064);
+const Color _ppAccent = AppColors.ppAccent;
+const Color _ppAccentDim = AppColors.ppAccentDim;
 
 /// Preset frequencies for automotive key fob protocols
 const List<_FreqPreset> _frequencyPresets = [
@@ -23,7 +23,8 @@ class _FreqPreset {
   final String label;
   final double mhz;
   final String region;
-  const _FreqPreset({required this.label, required this.mhz, required this.region});
+  const _FreqPreset(
+      {required this.label, required this.mhz, required this.region});
 }
 
 /// ProtoPirate screen — automotive key fob protocol decoder
@@ -91,8 +92,8 @@ class _ProtoPirateScreenState extends State<ProtoPirateScreen>
   //  Control Panel — frequency, module, start/stop
   // ══════════════════════════════════════════════════════════════
 
-  Widget _buildControlPanel(
-      BuildContext context, BleProvider ble, bool isDecoding, AppLocalizations l10n) {
+  Widget _buildControlPanel(BuildContext context, BleProvider ble,
+      bool isDecoding, AppLocalizations l10n) {
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 4, 12, 4),
       padding: const EdgeInsets.all(12),
@@ -162,9 +163,7 @@ class _ProtoPirateScreenState extends State<ProtoPirateScreen>
                 selectedColor: _ppAccent.withValues(alpha: 0.25),
                 backgroundColor: AppColors.surfaceElevated,
                 side: BorderSide(
-                  color: selected
-                      ? _ppAccent
-                      : AppColors.borderDefault,
+                  color: selected ? _ppAccent : AppColors.borderDefault,
                 ),
                 labelStyle: TextStyle(
                   color: selected ? _ppAccent : AppColors.primaryText,
@@ -207,19 +206,22 @@ class _ProtoPirateScreenState extends State<ProtoPirateScreen>
                         ? () => _toggleDecode(context, ble, isDecoding)
                         : null,
                     icon: Icon(
-                      isDecoding ? Icons.stop_rounded : Icons.play_arrow_rounded,
+                      isDecoding
+                          ? Icons.stop_rounded
+                          : Icons.play_arrow_rounded,
                       size: 20,
                     ),
                     label: Text(
                       isDecoding ? l10n.ppStopDecode : l10n.ppStartDecode,
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w600),
                       overflow: TextOverflow.ellipsis,
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: isDecoding
                           ? AppColors.error.withValues(alpha: 0.9)
                           : _ppAccent,
-                      foregroundColor: Colors.white,
+                      foregroundColor: AppColors.onButton,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -299,10 +301,12 @@ class _ProtoPirateScreenState extends State<ProtoPirateScreen>
           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
-            color: _ppAccent.withValues(alpha: 0.08 + _pulseController.value * 0.07),
+            color: _ppAccent.withValues(
+                alpha: 0.08 + _pulseController.value * 0.07),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: _ppAccent.withValues(alpha: 0.3 + _pulseController.value * 0.2),
+              color: _ppAccent.withValues(
+                  alpha: 0.3 + _pulseController.value * 0.2),
             ),
           ),
           child: Row(
@@ -325,7 +329,9 @@ class _ProtoPirateScreenState extends State<ProtoPirateScreen>
                     Text(
                       l10n.ppDecodingOn(
                         ble.ppModule >= 0 ? ble.ppModule : _selectedModule,
-                        _frequencyPresets[_selectedFreqIndex].mhz.toStringAsFixed(2),
+                        _frequencyPresets[_selectedFreqIndex]
+                            .mhz
+                            .toStringAsFixed(2),
                       ),
                       style: TextStyle(
                         color: _ppAccent.withValues(alpha: opacity),
@@ -361,7 +367,8 @@ class _ProtoPirateScreenState extends State<ProtoPirateScreen>
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
       child: Row(
         children: [
-          Icon(Icons.wifi_tethering, size: 14, color: _ppAccent.withValues(alpha: 0.7)),
+          Icon(Icons.wifi_tethering,
+              size: 14, color: _ppAccent.withValues(alpha: 0.7)),
           const SizedBox(width: 6),
           Text(
             l10n.ppResultCount(results.length),
@@ -385,7 +392,8 @@ class _ProtoPirateScreenState extends State<ProtoPirateScreen>
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.delete_outline, size: 14,
+                  Icon(Icons.delete_outline,
+                      size: 14,
                       color: AppColors.secondaryText.withValues(alpha: 0.7)),
                   const SizedBox(width: 4),
                   Text(
@@ -408,7 +416,8 @@ class _ProtoPirateScreenState extends State<ProtoPirateScreen>
   //  Results List
   // ══════════════════════════════════════════════════════════════
 
-  Widget _buildResultsList(BuildContext context, List<ProtoPirateResult> results) {
+  Widget _buildResultsList(
+      BuildContext context, List<ProtoPirateResult> results) {
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       itemCount: results.length,
@@ -423,7 +432,8 @@ class _ProtoPirateScreenState extends State<ProtoPirateScreen>
   //  Empty State
   // ══════════════════════════════════════════════════════════════
 
-  Widget _buildEmptyState(BuildContext context, AppLocalizations l10n, bool isDecoding) {
+  Widget _buildEmptyState(
+      BuildContext context, AppLocalizations l10n, bool isDecoding) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -487,7 +497,8 @@ class _ProtoPirateScreenState extends State<ProtoPirateScreen>
 
   Future<void> _toggleDecode(
       BuildContext context, BleProvider ble, bool isDecoding) async {
-    final notifications = Provider.of<NotificationProvider>(context, listen: false);
+    final notifications =
+        Provider.of<NotificationProvider>(context, listen: false);
     final l10n = AppLocalizations.of(context)!;
 
     try {
@@ -580,8 +591,7 @@ class _ProtoPirateScreenState extends State<ProtoPirateScreen>
                     subtitle: Text(
                       '$path  ·  $sizeStr',
                       style: TextStyle(
-                          color:
-                              AppColors.secondaryText.withValues(alpha: 0.7),
+                          color: AppColors.secondaryText.withValues(alpha: 0.7),
                           fontSize: 10),
                     ),
                     onTap: () => Navigator.pop(ctx, path),
@@ -663,13 +673,12 @@ class _ProtoPirateScreenState extends State<ProtoPirateScreen>
             const SizedBox(height: 12),
             TextField(
               controller: controller,
-              style: const TextStyle(
-                  color: AppColors.primaryText, fontSize: 13),
+              style:
+                  const TextStyle(color: AppColors.primaryText, fontSize: 13),
               decoration: InputDecoration(
                 hintText: '/protopirate/test.sub',
                 hintStyle: TextStyle(
-                    color:
-                        AppColors.secondaryText.withValues(alpha: 0.5)),
+                    color: AppColors.secondaryText.withValues(alpha: 0.5)),
                 border: const OutlineInputBorder(),
                 isDense: true,
                 contentPadding:
@@ -686,8 +695,8 @@ class _ProtoPirateScreenState extends State<ProtoPirateScreen>
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, controller.text.trim()),
             style: ElevatedButton.styleFrom(backgroundColor: _ppAccent),
-            child:
-                const Text('Analyze', style: TextStyle(color: Colors.white)),
+            child: const Text('Analyze',
+                style: TextStyle(color: AppColors.onBright)),
           ),
         ],
       ),
@@ -722,13 +731,12 @@ class _ResultCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       decoration: BoxDecoration(
-        color: isEven
-            ? AppColors.secondaryBackground
-            : AppColors.surfaceElevated,
+        color:
+            isEven ? AppColors.secondaryBackground : AppColors.surfaceElevated,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: result.encrypted
-              ? const Color(0xFFFF6D00).withValues(alpha: 0.3)
+              ? AppColors.encryptedOrange.withValues(alpha: 0.3)
               : _ppAccent.withValues(alpha: 0.15),
         ),
       ),
@@ -773,7 +781,8 @@ class _ResultCard extends StatelessWidget {
                             Text(
                               result.type!,
                               style: TextStyle(
-                                color: AppColors.secondaryText.withValues(alpha: 0.8),
+                                color: AppColors.secondaryText
+                                    .withValues(alpha: 0.8),
                                 fontSize: 11,
                               ),
                             ),
@@ -781,7 +790,8 @@ class _ResultCard extends StatelessWidget {
                       ),
                     ),
                     // Badges
-                    if (result.encrypted) _buildBadge('ENC', const Color(0xFFFF6D00)),
+                    if (result.encrypted)
+                      _buildBadge('ENC', AppColors.encryptedOrange),
                     if (result.encrypted) const SizedBox(width: 4),
                     _buildBadge(
                       result.crcValid ? 'CRC ✓' : 'CRC ✗',
@@ -885,8 +895,7 @@ class _ResultCard extends StatelessWidget {
         defaultVerticalAlignment: TableCellVerticalAlignment.middle,
         children: [
           _dataRow(l10n.ppData, result.dataHex),
-          if (result.serial != 0)
-            _dataRow(l10n.ppSerial, result.serialHex),
+          if (result.serial != 0) _dataRow(l10n.ppSerial, result.serialHex),
           if (result.button != 0)
             _dataRow(l10n.ppButton, '${result.buttonName} (${result.button})'),
           if (result.counter != 0)
@@ -1000,15 +1009,18 @@ class _ResultCard extends StatelessWidget {
                 // All fields
                 _detailRow(l10n.ppData, result.dataHex),
                 if (result.data2 != 0)
-                  _detailRow('Data2', '0x${result.data2.toRadixString(16).toUpperCase()}'),
+                  _detailRow('Data2',
+                      '0x${result.data2.toRadixString(16).toUpperCase()}'),
                 _detailRow(l10n.ppSerial, result.serialHex),
-                _detailRow(l10n.ppButton, '${result.buttonName} (${result.button})'),
+                _detailRow(
+                    l10n.ppButton, '${result.buttonName} (${result.button})'),
                 _detailRow(l10n.ppCounter, result.counter.toString()),
                 _detailRow('Bits', result.dataBits.toString()),
                 _detailRow(l10n.ppEncrypted, result.encrypted ? 'Yes' : 'No'),
                 _detailRow('CRC', result.crcValid ? 'Valid ✓' : 'Invalid ✗'),
                 if (result.frequency > 0)
-                  _detailRow(l10n.ppFrequency, '${result.frequency.toStringAsFixed(2)} MHz'),
+                  _detailRow(l10n.ppFrequency,
+                      '${result.frequency.toStringAsFixed(2)} MHz'),
 
                 const SizedBox(height: 16),
 
@@ -1029,7 +1041,7 @@ class _ResultCard extends StatelessWidget {
                             label: const Text('Emulate'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: _ppAccent,
-                              foregroundColor: Colors.white,
+                              foregroundColor: AppColors.onBright,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(8),
                               ),
@@ -1140,26 +1152,22 @@ class _ResultCard extends StatelessWidget {
                       ChoiceChip(
                         label: const Text('#1'),
                         selected: module == 0,
-                        onSelected: (v) =>
-                            setDialogState(() => module = 0),
+                        onSelected: (v) => setDialogState(() => module = 0),
                         selectedColor: _ppAccent.withValues(alpha: 0.25),
                         labelStyle: TextStyle(
-                            color: module == 0
-                                ? _ppAccent
-                                : AppColors.primaryText,
+                            color:
+                                module == 0 ? _ppAccent : AppColors.primaryText,
                             fontSize: 12),
                       ),
                       const SizedBox(width: 8),
                       ChoiceChip(
                         label: const Text('#2'),
                         selected: module == 1,
-                        onSelected: (v) =>
-                            setDialogState(() => module = 1),
+                        onSelected: (v) => setDialogState(() => module = 1),
                         selectedColor: _ppAccent.withValues(alpha: 0.25),
                         labelStyle: TextStyle(
-                            color: module == 1
-                                ? _ppAccent
-                                : AppColors.primaryText,
+                            color:
+                                module == 1 ? _ppAccent : AppColors.primaryText,
                             fontSize: 12),
                       ),
                     ],
@@ -1178,10 +1186,8 @@ class _ResultCard extends StatelessWidget {
                           child: ChoiceChip(
                             label: Text('$r'),
                             selected: repeat == r,
-                            onSelected: (v) =>
-                                setDialogState(() => repeat = r),
-                            selectedColor:
-                                _ppAccent.withValues(alpha: 0.25),
+                            onSelected: (v) => setDialogState(() => repeat = r),
+                            selectedColor: _ppAccent.withValues(alpha: 0.25),
                             labelStyle: TextStyle(
                                 color: repeat == r
                                     ? _ppAccent
@@ -1207,16 +1213,14 @@ class _ResultCard extends StatelessWidget {
                       notifications.showSuccess(
                           'Emulating ${result.protocolName} on module #${module + 1}…');
                     } catch (e) {
-                      notifications
-                          .showError('Emulate failed: $e');
+                      notifications.showError('Emulate failed: $e');
                     }
                   },
-                  icon:
-                      const Icon(Icons.send, size: 16),
+                  icon: const Icon(Icons.send, size: 16),
                   label: const Text('Transmit'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _ppAccent,
-                    foregroundColor: Colors.white,
+                    foregroundColor: AppColors.onBright,
                   ),
                 ),
               ],
@@ -1235,8 +1239,7 @@ class _ResultCard extends StatelessWidget {
 
     try {
       await ble.ppSaveCapture(result);
-      notifications
-          .showSuccess('Saving ${result.protocolName} to SD card…');
+      notifications.showSuccess('Saving ${result.protocolName} to SD card…');
     } catch (e) {
       notifications.showError('Save failed: $e');
     }

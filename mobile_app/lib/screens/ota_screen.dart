@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
@@ -10,7 +9,6 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:flutter/services.dart';
 import '../providers/ble_provider.dart';
 import '../providers/firmware_protocol.dart';
-import '../providers/settings_provider.dart';
 import '../services/update_service.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/app_colors.dart';
@@ -899,7 +897,7 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
                           label: Text(AppLocalizations.of(context)!.flash),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.error,
-                            foregroundColor: Colors.white,
+                            foregroundColor: AppColors.onButton,
                           ),
                         ),
                       ),

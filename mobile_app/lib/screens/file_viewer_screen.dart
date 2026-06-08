@@ -529,7 +529,7 @@ class _FileViewerScreenState extends State<FileViewerScreen>
           // Warnings
           if (parseResult!.warnings.isNotEmpty) ...[
             Card(
-              color: Colors.orange[50],
+              color: AppColors.statusOrange.withOpacity(0.1),
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(
@@ -539,7 +539,7 @@ class _FileViewerScreenState extends State<FileViewerScreen>
                       children: [
                         Icon(
                           Icons.warning,
-                          color: Colors.orange[700],
+                          color: AppColors.statusOrange,
                         ),
                         const SizedBox(width: 8),
                         Text(
@@ -547,7 +547,7 @@ class _FileViewerScreenState extends State<FileViewerScreen>
                           style:
                               Theme.of(context).textTheme.titleMedium?.copyWith(
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.orange[700],
+                                    color: AppColors.statusOrange,
                                   ),
                         ),
                       ],
@@ -557,7 +557,7 @@ class _FileViewerScreenState extends State<FileViewerScreen>
                           padding: const EdgeInsets.only(bottom: 4),
                           child: Text(
                             '• $warning',
-                            style: TextStyle(color: Colors.orange[700]),
+                            style: TextStyle(color: AppColors.statusOrange),
                           ),
                         )),
                   ],

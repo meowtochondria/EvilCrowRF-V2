@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../l10n/app_localizations.dart';
+import '../theme/app_colors.dart';
 
 /// Widget for signal preview
 class SignalPreviewWidget extends StatelessWidget {
@@ -28,7 +29,7 @@ class SignalPreviewWidget extends StatelessWidget {
           child: Center(
             child: Text(
               AppLocalizations.of(context)!.noSignalDataToPreview,
-              style: const TextStyle(color: Colors.grey),
+              style: const TextStyle(color: AppColors.greyLight),
             ),
           ),
         ),
@@ -126,9 +127,10 @@ class SignalPreviewWidget extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
+                    color: AppColors.statusBlue.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                    border: Border.all(
+                        color: AppColors.statusBlue.withOpacity(0.3)),
                   ),
                   child: Text(
                     sample,
@@ -139,9 +141,10 @@ class SignalPreviewWidget extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.grey.withOpacity(0.1),
+                  color: AppColors.greyLight.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                  border:
+                      Border.all(color: AppColors.greyLight.withOpacity(0.3)),
                 ),
                 child: Text(
                   l10n.moreSamples(samples.length - 20),
@@ -190,7 +193,7 @@ class FileLoadWidget extends StatelessWidget {
                     label: Text(AppLocalizations.of(context)!.selectFile),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Theme.of(context).primaryColor,
-                      foregroundColor: Colors.white,
+                      foregroundColor: AppColors.onButton,
                     ),
                   ),
                 ),
@@ -210,7 +213,7 @@ class FileLoadWidget extends StatelessWidget {
               AppLocalizations.of(context)!.supportedFormatsShort,
               style: const TextStyle(
                 fontSize: 12,
-                color: Colors.grey,
+                color: AppColors.greyLight,
               ),
             ),
           ],
@@ -279,7 +282,9 @@ class TransmitStatusWidget extends StatelessWidget {
               children: [
                 Icon(
                   isTransmitting ? Icons.send : Icons.pause_circle,
-                  color: isTransmitting ? Colors.orange : Colors.green,
+                  color: isTransmitting
+                      ? AppColors.statusOrange
+                      : AppColors.success,
                   size: 32,
                 ),
                 const SizedBox(width: 16),
@@ -312,7 +317,7 @@ class TransmitStatusWidget extends StatelessWidget {
               const SizedBox(height: 16),
               LinearProgressIndicator(
                 value: progress! / 100.0,
-                backgroundColor: Colors.grey.withOpacity(0.3),
+                backgroundColor: AppColors.greyLight.withOpacity(0.3),
               ),
               const SizedBox(height: 8),
               Text(AppLocalizations.of(context)!.percentComplete(progress!)),
@@ -425,7 +430,7 @@ class TransmitHistoryWidget extends StatelessWidget {
           child: Center(
             child: Text(
               AppLocalizations.of(context)!.noTransmissionHistory,
-              style: const TextStyle(color: Colors.grey),
+              style: const TextStyle(color: AppColors.greyLight),
             ),
           ),
         ),
@@ -454,7 +459,7 @@ class TransmitHistoryWidget extends StatelessWidget {
                 return ListTile(
                   leading: Icon(
                     item.success ? Icons.check_circle : Icons.error,
-                    color: item.success ? Colors.green : Colors.red,
+                    color: item.success ? AppColors.success : AppColors.error,
                   ),
                   title: Text('${item.frequency.toStringAsFixed(2)} MHz'),
                   subtitle: Text(
@@ -469,7 +474,7 @@ class TransmitHistoryWidget extends StatelessWidget {
                         ? AppLocalizations.of(context)!.success
                         : AppLocalizations.of(context)!.failed,
                     style: TextStyle(
-                      color: item.success ? Colors.green : Colors.red,
+                      color: item.success ? AppColors.success : AppColors.error,
                       fontWeight: FontWeight.bold,
                     ),
                   ),

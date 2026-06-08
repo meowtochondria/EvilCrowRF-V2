@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../models/file_item.dart';
+import '../theme/app_colors.dart';
 
 class FileExplorerWidget extends StatelessWidget {
   final List<FileItem> files;
@@ -57,9 +58,11 @@ class FileExplorerWidget extends StatelessWidget {
                     child: Text(
                       AppLocalizations.of(context)!.sdCardPath(currentPath),
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onPrimaryContainer,
-                        fontWeight: FontWeight.w500,
-                      ),
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onPrimaryContainer,
+                            fontWeight: FontWeight.w500,
+                          ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -85,7 +88,7 @@ class FileExplorerWidget extends StatelessWidget {
               ],
             ),
           ),
-          
+
           // Progress Bar for Chunking
           if (isChunking)
             Container(
@@ -103,23 +106,24 @@ class FileExplorerWidget extends StatelessWidget {
                       Text(
                         AppLocalizations.of(context)!.downloadingFiles,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
                       ),
                       const Spacer(),
                       Text(
                         '${(chunkProgress * 100).toStringAsFixed(0)}%',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.primary,
-                          fontWeight: FontWeight.bold,
-                        ),
+                              color: Theme.of(context).colorScheme.primary,
+                              fontWeight: FontWeight.bold,
+                            ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 4),
                   LinearProgressIndicator(
                     value: chunkProgress,
-                    backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    backgroundColor:
+                        Theme.of(context).colorScheme.surfaceContainerHighest,
                     valueColor: AlwaysStoppedAnimation<Color>(
                       Theme.of(context).colorScheme.primary,
                     ),
@@ -127,7 +131,7 @@ class FileExplorerWidget extends StatelessWidget {
                 ],
               ),
             ),
-          
+
           // File List
           Expanded(
             child: files.isEmpty
@@ -138,21 +142,24 @@ class FileExplorerWidget extends StatelessWidget {
                         Icon(
                           Icons.folder_open,
                           size: 64,
-                          color: Colors.grey[400],
+                          color: AppColors.greyLight,
                         ),
                         const SizedBox(height: 16),
                         Text(
                           AppLocalizations.of(context)!.noFilesFound,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: Colors.grey[600],
-                          ),
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    color: AppColors.greyDark,
+                                  ),
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          AppLocalizations.of(context)!.connectToDeviceToSeeFiles,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Colors.grey[500],
-                          ),
+                          AppLocalizations.of(context)!
+                              .connectToDeviceToSeeFiles,
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: AppColors.greyMedium,
+                                  ),
                         ),
                       ],
                     ),
@@ -206,14 +213,14 @@ class FileExplorerWidget extends StatelessWidget {
           ? Text(
               file.sizeFormatted,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Colors.grey[600],
-              ),
+                    color: AppColors.greyDark,
+                  ),
             )
           : null,
       trailing: file.isDirectory
           ? Icon(
               Icons.chevron_right,
-              color: Colors.grey[400],
+              color: AppColors.greyLight,
             )
           : null,
       onTap: () {
@@ -228,7 +235,7 @@ class FileExplorerWidget extends StatelessWidget {
 
   IconData _getFileIcon(String fileName) {
     final extension = fileName.split('.').last.toLowerCase();
-    
+
     switch (extension) {
       case 'txt':
       case 'log':
@@ -253,7 +260,7 @@ class FileExplorerWidget extends StatelessWidget {
         return Icons.insert_drive_file;
     }
   }
-  
+
   void _showFullPath(BuildContext context) {
     showDialog(
       context: context,

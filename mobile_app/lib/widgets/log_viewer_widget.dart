@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/log_provider.dart';
 import '../models/log_entry.dart';
+import '../theme/app_colors.dart';
 
 class LogViewerWidget extends StatelessWidget {
   const LogViewerWidget({super.key});
@@ -21,20 +22,21 @@ class LogViewerWidget extends StatelessWidget {
                 const Icon(
                   Icons.description_outlined,
                   size: 64,
-                  color: Colors.grey,
+                  color: AppColors.greyLight,
                 ),
                 const SizedBox(height: 16),
                 Text(
                   AppLocalizations.of(context)!.noLogsYet,
                   style: const TextStyle(
                     fontSize: 18,
-                    color: Colors.grey,
+                    color: AppColors.greyLight,
                   ),
                 ),
                 Text(
-                  AppLocalizations.of(context)!.commandsAndResponsesWillAppearHere,
+                  AppLocalizations.of(context)!
+                      .commandsAndResponsesWillAppearHere,
                   style: const TextStyle(
-                    color: Colors.grey,
+                    color: AppColors.greyLight,
                   ),
                 ),
               ],
@@ -51,20 +53,23 @@ class LogViewerWidget extends StatelessWidget {
                 children: [
                   Text(
                     AppLocalizations.of(context)!.logsCount(logs.length),
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    style: const TextStyle(
                       fontWeight: FontWeight.bold,
+                      color: AppColors.primaryText,
+                      fontSize: 16,
                     ),
                   ),
                   const Spacer(),
                   IconButton(
                     onPressed: () => logProvider.clearLogs(),
-                    icon: const Icon(Icons.clear_all),
+                    icon: const Icon(Icons.clear_all,
+                        color: AppColors.primaryText),
                     tooltip: AppLocalizations.of(context)!.clearAllLogs,
                   ),
                 ],
               ),
             ),
-            
+
             // Logs list
             Expanded(
               child: ListView.builder(
@@ -86,7 +91,7 @@ class LogViewerWidget extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.grey[50],
+        color: AppColors.secondaryBackground,
         border: Border(
           left: BorderSide(
             color: log.levelColor,
@@ -118,7 +123,7 @@ class LogViewerWidget extends StatelessWidget {
               Text(
                 log.formattedTime,
                 style: TextStyle(
-                  color: Colors.grey[600],
+                  color: AppColors.secondaryText,
                   fontSize: 12,
                 ),
               ),
@@ -129,6 +134,7 @@ class LogViewerWidget extends StatelessWidget {
             log.message,
             style: const TextStyle(
               fontSize: 14,
+              color: AppColors.primaryText,
             ),
           ),
           if (log.details != null) ...[
@@ -137,7 +143,7 @@ class LogViewerWidget extends StatelessWidget {
               log.details!,
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.grey[600],
+                color: AppColors.secondaryText,
                 fontStyle: FontStyle.italic,
               ),
             ),

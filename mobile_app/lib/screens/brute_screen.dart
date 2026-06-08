@@ -720,7 +720,8 @@ class _BruteScreenState extends State<BruteScreen> {
     }
 
     // Colors based on state
-    final Color bannerColor = isPaused ? Colors.blue : AppColors.warning;
+    final Color bannerColor =
+        isPaused ? AppColors.statusBlue : AppColors.warning;
 
     return Container(
       width: double.infinity,
@@ -786,8 +787,9 @@ class _BruteScreenState extends State<BruteScreen> {
                     ? AppLocalizations.of(context)!.bruteResume
                     : AppLocalizations.of(context)!.brutePause),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: isPaused ? Colors.blue : AppColors.warning,
-                  foregroundColor: Colors.white,
+                  backgroundColor:
+                      isPaused ? AppColors.statusBlue : AppColors.warning,
+                  foregroundColor: AppColors.onBright,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   minimumSize: Size.zero,
@@ -800,7 +802,7 @@ class _BruteScreenState extends State<BruteScreen> {
                 label: Text(AppLocalizations.of(context)!.bruteStop),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.error,
-                  foregroundColor: Colors.white,
+                  foregroundColor: AppColors.onButton,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   minimumSize: Size.zero,
@@ -924,12 +926,11 @@ class _BruteScreenState extends State<BruteScreen> {
                 icon: const Icon(Icons.linear_scale, size: 14),
               ),
               ButtonSegment<bool>(
-                value: true,
-                label: Text(AppLocalizations.of(context)!.deBruijnMode,
-                    style: const TextStyle(fontSize: 11)),
-                icon:
-                    const Icon(Icons.bolt, size: 14, color: Color(0xFFFFE600)),
-              ),
+                  value: true,
+                  label: Text(AppLocalizations.of(context)!.deBruijnMode,
+                      style: const TextStyle(fontSize: 11)),
+                  icon: const Icon(Icons.bolt,
+                      size: 14, color: AppColors.deBruijnAccent)),
             ],
             selected: {_useDeBruijnMode},
             onSelectionChanged: (selected) {
@@ -947,7 +948,8 @@ class _BruteScreenState extends State<BruteScreen> {
             const SizedBox(width: 6),
             Tooltip(
               message: AppLocalizations.of(context)!.deBruijnTooltip,
-              child: Icon(Icons.info_outline, size: 14, color: Colors.green),
+              child:
+                  Icon(Icons.info_outline, size: 14, color: AppColors.success),
             ),
           ],
         ],
@@ -986,7 +988,7 @@ class _BruteScreenState extends State<BruteScreen> {
       color: isActive
           ? AppColors.warning.withValues(alpha: 0.08)
           : isDeBruijnCard
-              ? const Color(0xFFFFE600).withValues(alpha: 0.10)
+              ? AppColors.deBruijnAccent.withValues(alpha: 0.10)
               : AppColors.secondaryBackground,
       shape: isDeBruijnCard
           ? RoundedRectangleBorder(
@@ -1011,7 +1013,7 @@ class _BruteScreenState extends State<BruteScreen> {
                   color: isActive
                       ? AppColors.warning.withValues(alpha: 0.2)
                       : protocol.isDeBruijn
-                          ? const Color(0xFFFFE600).withValues(alpha: 0.18)
+                          ? AppColors.deBruijnAccent.withValues(alpha: 0.18)
                           : AppColors.primaryAccent.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -1091,7 +1093,7 @@ class _BruteScreenState extends State<BruteScreen> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 4, vertical: 1),
                             decoration: BoxDecoration(
-                              color: Colors.green.withValues(alpha: 0.15),
+                              color: AppColors.success.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(3),
                             ),
                             child: Text(
@@ -1099,7 +1101,7 @@ class _BruteScreenState extends State<BruteScreen> {
                               style: TextStyle(
                                 fontSize: 9,
                                 fontWeight: FontWeight.w600,
-                                color: Colors.green,
+                                color: AppColors.success,
                               ),
                             ),
                           ),
@@ -1134,10 +1136,10 @@ class _BruteScreenState extends State<BruteScreen> {
   }
 
   Color _getFrequencyColor(double mhz) {
-    if (mhz >= 868) return Colors.deepPurple;
+    if (mhz >= 868) return AppColors.statusDeepPurple;
     if (mhz >= 433) return AppColors.primaryAccent;
-    if (mhz >= 315) return Colors.teal;
-    return Colors.orange;
+    if (mhz >= 315) return AppColors.statusTeal;
+    return AppColors.statusOrange;
   }
 
   Future<void> _confirmAndStart(

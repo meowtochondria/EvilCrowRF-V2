@@ -4,6 +4,7 @@ import '../providers/ble_provider.dart';
 import '../providers/log_provider.dart';
 import '../widgets/log_viewer_widget.dart';
 import '../l10n/app_localizations.dart';
+import '../theme/app_colors.dart';
 
 class DebugScreen extends StatefulWidget {
   const DebugScreen({super.key});
@@ -24,30 +25,35 @@ class _DebugScreenState extends State<DebugScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.primaryBackground,
       body: Column(
         children: [
           // Compact header
           Container(
             height: 48, // Compact height
-            color: Theme.of(context).colorScheme.inversePrimary,
+            color: AppColors.surfaceElevated,
             padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
             child: Row(
               children: [
-                const Icon(Icons.bug_report, size: 20),
+                const Icon(Icons.bug_report,
+                    size: 20, color: AppColors.primaryText),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     AppLocalizations.of(context)!.debug,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primaryText,
+                      fontSize: 16,
+                    ),
                   ),
                 ),
                 Consumer<LogProvider>(
                   builder: (context, logProvider, child) {
                     return IconButton(
                       onPressed: () => logProvider.clearLogs(),
-                      icon: const Icon(Icons.clear_all),
+                      icon: const Icon(Icons.clear_all,
+                          color: AppColors.primaryText),
                       tooltip: AppLocalizations.of(context)!.clearAllLogs,
                     );
                   },
@@ -78,19 +84,18 @@ class _DebugScreenState extends State<DebugScreen> {
                                         ? Icons.bluetooth_connected
                                         : Icons.bluetooth_disabled,
                                     color: bleProvider.isConnected
-                                        ? Colors.green
-                                        : Colors.red,
+                                        ? AppColors.success
+                                        : AppColors.error,
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
                                     AppLocalizations.of(context)!
                                         .connectionStatus,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleMedium
-                                        ?.copyWith(
-                                          fontWeight: FontWeight.bold,
-                                        ),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.primaryText,
+                                      fontSize: 16,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -126,12 +131,11 @@ class _DebugScreenState extends State<DebugScreen> {
                             children: [
                               Text(
                                 AppLocalizations.of(context)!.sendCommand,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.primaryText,
+                                  fontSize: 16,
+                                ),
                               ),
                               const SizedBox(height: 12),
                               Row(
@@ -189,12 +193,11 @@ class _DebugScreenState extends State<DebugScreen> {
                             children: [
                               Text(
                                 AppLocalizations.of(context)!.debugControls,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.primaryText,
+                                  fontSize: 16,
+                                ),
                               ),
                               const SizedBox(height: 16),
 
@@ -211,8 +214,8 @@ class _DebugScreenState extends State<DebugScreen> {
                                     label: Text(AppLocalizations.of(context)!
                                         .disconnect),
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.red,
-                                      foregroundColor: Colors.white,
+                                      backgroundColor: AppColors.error,
+                                      foregroundColor: AppColors.onButton,
                                     ),
                                   ),
                                   ElevatedButton.icon(
@@ -222,8 +225,8 @@ class _DebugScreenState extends State<DebugScreen> {
                                     label: Text(AppLocalizations.of(context)!
                                         .clearCachedDevice),
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.orange,
-                                      foregroundColor: Colors.white,
+                                      backgroundColor: AppColors.statusOrange,
+                                      foregroundColor: AppColors.onBright,
                                     ),
                                   ),
                                   ElevatedButton.icon(
@@ -233,8 +236,8 @@ class _DebugScreenState extends State<DebugScreen> {
                                     label: Text(AppLocalizations.of(context)!
                                         .clearFileCache),
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.orange,
-                                      foregroundColor: Colors.white,
+                                      backgroundColor: AppColors.statusOrange,
+                                      foregroundColor: AppColors.onBright,
                                     ),
                                   ),
                                   ElevatedButton.icon(
@@ -335,12 +338,11 @@ class _DebugScreenState extends State<DebugScreen> {
                             children: [
                               Text(
                                 AppLocalizations.of(context)!.cpuTempOffset,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.primaryText,
+                                  fontSize: 16,
+                                ),
                               ),
                               const SizedBox(height: 8),
                               Text(
@@ -349,7 +351,7 @@ class _DebugScreenState extends State<DebugScreen> {
                                     .textTheme
                                     .bodySmall
                                     ?.copyWith(
-                                      color: Colors.grey[700],
+                                      color: AppColors.greyDarker,
                                     ),
                               ),
                               const SizedBox(height: 12),
@@ -384,7 +386,7 @@ class _DebugScreenState extends State<DebugScreen> {
                                       .textTheme
                                       .bodySmall
                                       ?.copyWith(
-                                        color: Colors.grey[600],
+                                        color: AppColors.greyDark,
                                       ),
                                 ),
                             ],
@@ -403,12 +405,11 @@ class _DebugScreenState extends State<DebugScreen> {
                             children: [
                               Text(
                                 AppLocalizations.of(context)!.activityLogs,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.primaryText,
+                                  fontSize: 16,
+                                ),
                               ),
                               const SizedBox(height: 16),
                               const SizedBox(
@@ -434,12 +435,12 @@ class _DebugScreenState extends State<DebugScreen> {
     if (status.contains('permissions denied') ||
         status.contains('not granted') ||
         status.contains('error')) {
-      return Colors.red;
+      return AppColors.error;
     }
-    if (status.contains('Connected')) return Colors.green;
+    if (status.contains('Connected')) return AppColors.success;
     if (status.contains('Scanning') || status.contains('Connecting')) {
-      return Colors.blue;
+      return AppColors.statusBlue;
     }
-    return Colors.grey[600]!;
+    return AppColors.greyDark;
   }
 }

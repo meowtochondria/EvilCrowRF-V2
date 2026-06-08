@@ -15,16 +15,21 @@ class NrfTarget {
 
   NrfTarget({required this.type, required this.channel, required this.address});
 
-  String get addressHex =>
-      address.map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase()).join(':');
+  String get addressHex => address
+      .map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase())
+      .join(':');
 
   /// Convert device type code from firmware to human-readable string
   static String typeFromCode(int code) {
     switch (code) {
-      case 1:  return 'Microsoft';
-      case 2:  return 'MS Encrypted';
-      case 3:  return 'Logitech';
-      default: return 'Unknown';
+      case 1:
+        return 'Microsoft';
+      case 2:
+        return 'MS Encrypted';
+      case 3:
+        return 'Logitech';
+      default:
+        return 'Unknown';
     }
   }
 }
@@ -37,7 +42,8 @@ class NrfScreen extends StatefulWidget {
   State<NrfScreen> createState() => _NrfScreenState();
 }
 
-class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMixin {
+class _NrfScreenState extends State<NrfScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool _initializing = false;
   bool _initFailed = false;
@@ -53,8 +59,7 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
   int _hopStart = 0;
   int _hopStop = 80;
   int _hopStep = 2;
-  int _liveDwellMs = 0;          // Live dwell slider value (0=turbo)
-
+  int _liveDwellMs = 0; // Live dwell slider value (0=turbo)
 
   // MouseJack filter
   bool _hideUnknown = false;
@@ -135,7 +140,8 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
     if (_stringController.text.isEmpty) return;
     final bleProvider = Provider.of<BleProvider>(context, listen: false);
     final cmd = FirmwareBinaryProtocol.createNrfAttackStringCommand(
-      targetIndex, _stringController.text,
+      targetIndex,
+      _stringController.text,
     );
     await bleProvider.sendBinaryCommand(cmd);
     bleProvider.nrfAttacking = true;
@@ -146,7 +152,8 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
     if (_duckyPathController.text.isEmpty) return;
     final bleProvider = Provider.of<BleProvider>(context, listen: false);
     final cmd = FirmwareBinaryProtocol.createNrfAttackDuckyCommand(
-      targetIndex, _duckyPathController.text,
+      targetIndex,
+      _duckyPathController.text,
     );
     await bleProvider.sendBinaryCommand(cmd);
     bleProvider.nrfAttacking = true;
@@ -193,12 +200,12 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
     Uint8List cmd;
     if (_jamMode == 8) {
       // Single channel mode
-      cmd = FirmwareBinaryProtocol.createNrfJamStartCommand(
-          _jamMode, channel: _jamChannel);
+      cmd = FirmwareBinaryProtocol.createNrfJamStartCommand(_jamMode,
+          channel: _jamChannel);
     } else if (_jamMode == 9) {
       // Custom hopper mode
-      cmd = FirmwareBinaryProtocol.createNrfJamStartCommand(
-          _jamMode, hopStart: _hopStart, hopStop: _hopStop, hopStep: _hopStep);
+      cmd = FirmwareBinaryProtocol.createNrfJamStartCommand(_jamMode,
+          hopStart: _hopStart, hopStop: _hopStop, hopStep: _hopStep);
     } else {
       cmd = FirmwareBinaryProtocol.createNrfJamStartCommand(_jamMode);
     }
@@ -234,8 +241,8 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
     await bleProvider.sendBinaryCommand(cmd);
   }
 
-  Future<void> _setModeConfig(int mode, int pa, int dr, int dwell,
-      bool flooding, int bursts) async {
+  Future<void> _setModeConfig(
+      int mode, int pa, int dr, int dwell, bool flooding, int bursts) async {
     final bleProvider = Provider.of<BleProvider>(context, listen: false);
     final cmd = FirmwareBinaryProtocol.createNrfJamModeConfigSetCommand(
         mode, pa, dr, dwell, flooding, bursts);
@@ -279,7 +286,8 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.bluetooth_disabled, size: 64, color: AppColors.disabledText),
+          Icon(Icons.bluetooth_disabled,
+              size: 64, color: AppColors.disabledText),
           const SizedBox(height: 16),
           Text('Connect to device first',
               style: TextStyle(color: AppColors.secondaryText, fontSize: 16)),
@@ -404,7 +412,7 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
                               ? AppColors.error
                               : AppColors.primaryAccent,
                           foregroundColor: isScanning
-                              ? Colors.white
+                              ? AppColors.onButton
                               : AppColors.primaryBackground,
                         ),
                       ),
@@ -434,9 +442,11 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
                               _hideUnknown = v;
                               _selectedTargetIndex = -1;
                             }),
-                            activeTrackColor: AppColors.primaryAccent.withValues(alpha: 0.5),
+                            activeTrackColor:
+                                AppColors.primaryAccent.withValues(alpha: 0.5),
                             activeThumbColor: AppColors.primaryAccent,
-                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
                           ),
                         ),
                       ),
@@ -501,8 +511,9 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
     final typeName = NrfTarget.typeFromCode(t['deviceType'] ?? 0);
     final channel = t['channel'] ?? 0;
     final address = t['address'] as List? ?? [];
-    final addressHex = address.map((b) =>
-        (b as int).toRadixString(16).padLeft(2, '0').toUpperCase()).join(':');
+    final addressHex = address
+        .map((b) => (b as int).toRadixString(16).padLeft(2, '0').toUpperCase())
+        .join(':');
     final isSelected = _selectedTargetIndex == index;
     return GestureDetector(
       onTap: () => setState(() => _selectedTargetIndex = index),
@@ -514,7 +525,8 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
               ? AppColors.primaryAccent.withValues(alpha: 0.1)
               : AppColors.surfaceElevated,
           border: Border.all(
-            color: isSelected ? AppColors.primaryAccent : AppColors.borderDefault,
+            color:
+                isSelected ? AppColors.primaryAccent : AppColors.borderDefault,
           ),
           borderRadius: BorderRadius.circular(8),
         ),
@@ -651,7 +663,7 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
                 label: const Text('Stop Attack'),
                 style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.error,
-                    foregroundColor: Colors.white),
+                    foregroundColor: AppColors.onButton),
               ),
             ),
         ],
@@ -673,15 +685,14 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
               Expanded(
                 child: ElevatedButton.icon(
                   onPressed: spectrumRunning ? _stopSpectrum : _startSpectrum,
-                  icon: Icon(
-                      spectrumRunning ? Icons.stop : Icons.play_arrow),
+                  icon: Icon(spectrumRunning ? Icons.stop : Icons.play_arrow),
                   label: Text(spectrumRunning ? 'Stop' : 'Start Analyzer'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: spectrumRunning
                         ? AppColors.error
                         : AppColors.primaryAccent,
                     foregroundColor: spectrumRunning
-                        ? Colors.white
+                        ? AppColors.onButton
                         : AppColors.primaryBackground,
                   ),
                 ),
@@ -694,11 +705,14 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('2.400 GHz',
-                  style: TextStyle(color: AppColors.secondaryText, fontSize: 11)),
+                  style:
+                      TextStyle(color: AppColors.secondaryText, fontSize: 11)),
               Text('2.462 GHz',
-                  style: TextStyle(color: AppColors.secondaryText, fontSize: 11)),
+                  style:
+                      TextStyle(color: AppColors.secondaryText, fontSize: 11)),
               Text('2.525 GHz',
-                  style: TextStyle(color: AppColors.secondaryText, fontSize: 11)),
+                  style:
+                      TextStyle(color: AppColors.secondaryText, fontSize: 11)),
             ],
           ),
           const SizedBox(height: 4),
@@ -721,17 +735,23 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('CH 0',
-                  style: TextStyle(color: AppColors.disabledText, fontSize: 10)),
+                  style:
+                      TextStyle(color: AppColors.disabledText, fontSize: 10)),
               Text('CH 25',
-                  style: TextStyle(color: AppColors.disabledText, fontSize: 10)),
+                  style:
+                      TextStyle(color: AppColors.disabledText, fontSize: 10)),
               Text('CH 50',
-                  style: TextStyle(color: AppColors.disabledText, fontSize: 10)),
+                  style:
+                      TextStyle(color: AppColors.disabledText, fontSize: 10)),
               Text('CH 75',
-                  style: TextStyle(color: AppColors.disabledText, fontSize: 10)),
+                  style:
+                      TextStyle(color: AppColors.disabledText, fontSize: 10)),
               Text('CH 100',
-                  style: TextStyle(color: AppColors.disabledText, fontSize: 10)),
+                  style:
+                      TextStyle(color: AppColors.disabledText, fontSize: 10)),
               Text('CH 125',
-                  style: TextStyle(color: AppColors.disabledText, fontSize: 10)),
+                  style:
+                      TextStyle(color: AppColors.disabledText, fontSize: 10)),
             ],
           ),
         ],
@@ -776,8 +796,8 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
             icon: Icons.tune,
             child: Column(
               children: [
-                ...NrfJamModeUiData.allModes.map((m) =>
-                    _buildModeOption(m, bleProvider, jammerRunning)),
+                ...NrfJamModeUiData.allModes.map(
+                    (m) => _buildModeOption(m, bleProvider, jammerRunning)),
                 // Reset all configs button
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
@@ -792,25 +812,33 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
                                 builder: (ctx) => AlertDialog(
                                   backgroundColor: AppColors.surfaceElevated,
                                   title: Text('Reset Defaults',
-                                      style: TextStyle(color: AppColors.primaryText)),
+                                      style: TextStyle(
+                                          color: AppColors.primaryText)),
                                   content: Text(
                                       'Reset all per-mode configs to optimal firmware defaults?',
-                                      style: TextStyle(color: AppColors.secondaryText)),
+                                      style: TextStyle(
+                                          color: AppColors.secondaryText)),
                                   actions: [
                                     TextButton(
-                                        onPressed: () => Navigator.pop(ctx, false),
+                                        onPressed: () =>
+                                            Navigator.pop(ctx, false),
                                         child: Text('Cancel',
-                                            style: TextStyle(color: AppColors.secondaryText))),
+                                            style: TextStyle(
+                                                color:
+                                                    AppColors.secondaryText))),
                                     TextButton(
-                                        onPressed: () => Navigator.pop(ctx, true),
+                                        onPressed: () =>
+                                            Navigator.pop(ctx, true),
                                         child: Text('Reset',
-                                            style: TextStyle(color: AppColors.error))),
+                                            style: TextStyle(
+                                                color: AppColors.error))),
                                   ],
                                 ),
                               );
                               if (confirm == true) _resetAllConfigs();
                             },
-                      icon: Icon(Icons.restore, size: 16,
+                      icon: Icon(Icons.restore,
+                          size: 16,
                           color: jammerRunning
                               ? AppColors.disabledText
                               : AppColors.secondaryText),
@@ -843,8 +871,7 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
                     max: 124,
                     divisions: 124,
                     activeColor: AppColors.primaryAccent,
-                    onChanged: (v) =>
-                        setState(() => _jamChannel = v.round()),
+                    onChanged: (v) => setState(() => _jamChannel = v.round()),
                   ),
                 ],
               ),
@@ -857,14 +884,11 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
               icon: Icons.swap_horiz,
               child: Column(
                 children: [
-                  _buildSliderRow(
-                      'Start', _hopStart, 0, 124,
+                  _buildSliderRow('Start', _hopStart, 0, 124,
                       (v) => setState(() => _hopStart = v.round())),
-                  _buildSliderRow(
-                      'Stop', _hopStop, 0, 124,
+                  _buildSliderRow('Stop', _hopStop, 0, 124,
                       (v) => setState(() => _hopStop = v.round())),
-                  _buildSliderRow(
-                      'Step', _hopStep, 1, 10,
+                  _buildSliderRow('Step', _hopStep, 1, 10,
                       (v) => setState(() => _hopStep = v.round())),
                 ],
               ),
@@ -884,7 +908,8 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
                           fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
                   Text('Time spent on each channel hop (0 = turbo, max speed)',
-                      style: TextStyle(color: AppColors.secondaryText, fontSize: 11)),
+                      style: TextStyle(
+                          color: AppColors.secondaryText, fontSize: 11)),
                   Slider(
                     value: _liveDwellMs.toDouble(),
                     min: 0,
@@ -901,9 +926,15 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('0 (Turbo)', style: TextStyle(color: AppColors.disabledText, fontSize: 10)),
-                      Text('100 ms', style: TextStyle(color: AppColors.disabledText, fontSize: 10)),
-                      Text('200 ms', style: TextStyle(color: AppColors.disabledText, fontSize: 10)),
+                      Text('0 (Turbo)',
+                          style: TextStyle(
+                              color: AppColors.disabledText, fontSize: 10)),
+                      Text('100 ms',
+                          style: TextStyle(
+                              color: AppColors.disabledText, fontSize: 10)),
+                      Text('200 ms',
+                          style: TextStyle(
+                              color: AppColors.disabledText, fontSize: 10)),
                     ],
                   ),
                 ],
@@ -934,19 +965,32 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
   /// Icon for each jammer mode category
   IconData _modeIcon(int mode) {
     switch (mode) {
-      case 0:  return Icons.all_inclusive;        // Full Spectrum
-      case 1:  return Icons.wifi;                 // WiFi
-      case 2:  return Icons.bluetooth;            // BLE Data
-      case 3:  return Icons.bluetooth_searching;  // BLE Advertising
-      case 4:  return Icons.bluetooth_audio;      // Bluetooth
-      case 5:  return Icons.usb;                  // USB Wireless
-      case 6:  return Icons.videocam;             // Video
-      case 7:  return Icons.sports_esports;       // RC
-      case 8:  return Icons.radio;                // Single Channel
-      case 9:  return Icons.swap_horiz;           // Custom Hopper
-      case 10: return Icons.hub;                  // Zigbee
-      case 11: return Icons.flight;               // Drone
-      default: return Icons.wifi_tethering;
+      case 0:
+        return Icons.all_inclusive; // Full Spectrum
+      case 1:
+        return Icons.wifi; // WiFi
+      case 2:
+        return Icons.bluetooth; // BLE Data
+      case 3:
+        return Icons.bluetooth_searching; // BLE Advertising
+      case 4:
+        return Icons.bluetooth_audio; // Bluetooth
+      case 5:
+        return Icons.usb; // USB Wireless
+      case 6:
+        return Icons.videocam; // Video
+      case 7:
+        return Icons.sports_esports; // RC
+      case 8:
+        return Icons.radio; // Single Channel
+      case 9:
+        return Icons.swap_horiz; // Custom Hopper
+      case 10:
+        return Icons.hub; // Zigbee
+      case 11:
+        return Icons.flight; // Drone
+      default:
+        return Icons.wifi_tethering;
     }
   }
 
@@ -958,7 +1002,8 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
         setState(() => _jamMode = modeData.mode);
         if (jammerRunning) {
           // Send live mode change command (0x2C) to firmware
-          final cmd = FirmwareBinaryProtocol.createNrfJamSetModeCommand(modeData.mode);
+          final cmd =
+              FirmwareBinaryProtocol.createNrfJamSetModeCommand(modeData.mode);
           await bleProvider.sendBinaryCommand(cmd);
           // Update cached dwell for the live slider
           final cachedCfg = bleProvider.nrfJamModeConfigs[modeData.mode];
@@ -975,7 +1020,8 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
               ? AppColors.primaryAccent.withValues(alpha: 0.1)
               : Colors.transparent,
           border: Border.all(
-            color: isSelected ? AppColors.primaryAccent : AppColors.borderDefault,
+            color:
+                isSelected ? AppColors.primaryAccent : AppColors.borderDefault,
           ),
           borderRadius: BorderRadius.circular(6),
         ),
@@ -984,14 +1030,16 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
             // Mode icon
             Icon(
               _modeIcon(modeData.mode),
-              color: isSelected ? AppColors.primaryAccent : AppColors.disabledText,
+              color:
+                  isSelected ? AppColors.primaryAccent : AppColors.disabledText,
               size: 20,
             ),
             const SizedBox(width: 8),
             // Radio button
             Icon(
               isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
-              color: isSelected ? AppColors.primaryAccent : AppColors.disabledText,
+              color:
+                  isSelected ? AppColors.primaryAccent : AppColors.disabledText,
               size: 16,
             ),
             const SizedBox(width: 8),
@@ -1015,7 +1063,8 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
             _ModeActionButton(
               icon: Icons.settings,
               tooltip: 'Settings',
-              onPressed: () => _showModeSettingsDialog(modeData.mode, bleProvider),
+              onPressed: () =>
+                  _showModeSettingsDialog(modeData.mode, bleProvider),
             ),
             const SizedBox(width: 4),
             // Info icon
@@ -1032,7 +1081,8 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
 
   // ── Mode Settings Dialog (cmd 0x43) ──────────────────────────
 
-  Future<void> _showModeSettingsDialog(int mode, BleProvider bleProvider) async {
+  Future<void> _showModeSettingsDialog(
+      int mode, BleProvider bleProvider) async {
     // Request config from firmware first
     await _requestModeConfig(mode);
     // Wait briefly for the response notification
@@ -1057,11 +1107,13 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
               backgroundColor: AppColors.surfaceElevated,
               title: Row(
                 children: [
-                  Icon(_modeIcon(mode), color: AppColors.primaryAccent, size: 22),
+                  Icon(_modeIcon(mode),
+                      color: AppColors.primaryAccent, size: 22),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text('$modeLabel Settings',
-                        style: TextStyle(color: AppColors.primaryText, fontSize: 16)),
+                        style: TextStyle(
+                            color: AppColors.primaryText, fontSize: 16)),
                   ),
                 ],
               ),
@@ -1072,7 +1124,8 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
                   children: [
                     // PA Level
                     Text('PA Level (Transmit Power)',
-                        style: TextStyle(color: AppColors.secondaryText, fontSize: 12)),
+                        style: TextStyle(
+                            color: AppColors.secondaryText, fontSize: 12)),
                     const SizedBox(height: 4),
                     _buildDropdown<int>(
                       value: pa,
@@ -1088,7 +1141,8 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
 
                     // Data Rate
                     Text('Data Rate',
-                        style: TextStyle(color: AppColors.secondaryText, fontSize: 12)),
+                        style: TextStyle(
+                            color: AppColors.secondaryText, fontSize: 12)),
                     const SizedBox(height: 4),
                     _buildDropdown<int>(
                       value: dr,
@@ -1102,8 +1156,12 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
                     const SizedBox(height: 12),
 
                     // Dwell Time
-                    Text(dwell == 0 ? 'Dwell Time: TURBO (0 ms)' : 'Dwell Time: $dwell ms',
-                        style: TextStyle(color: AppColors.secondaryText, fontSize: 12)),
+                    Text(
+                        dwell == 0
+                            ? 'Dwell Time: TURBO (0 ms)'
+                            : 'Dwell Time: $dwell ms',
+                        style: TextStyle(
+                            color: AppColors.secondaryText, fontSize: 12)),
                     Slider(
                       value: dwell.toDouble(),
                       min: 0,
@@ -1119,10 +1177,12 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text('Data Flooding',
-                            style: TextStyle(color: AppColors.secondaryText, fontSize: 12)),
+                            style: TextStyle(
+                                color: AppColors.secondaryText, fontSize: 12)),
                         Switch(
                           value: flood,
-                          activeTrackColor: AppColors.primaryAccent.withValues(alpha: 0.5),
+                          activeTrackColor:
+                              AppColors.primaryAccent.withValues(alpha: 0.5),
                           activeThumbColor: AppColors.primaryAccent,
                           onChanged: (v) => setDialogState(() => flood = v),
                         ),
@@ -1132,21 +1192,24 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
                       flood
                           ? 'Flooding: sends burst packets (good for WiFi, BLE, Zigbee)'
                           : 'Constant Carrier (CW): holds carrier wave (good for FHSS, BT)',
-                      style: TextStyle(color: AppColors.disabledText, fontSize: 10),
+                      style: TextStyle(
+                          color: AppColors.disabledText, fontSize: 10),
                     ),
                     const SizedBox(height: 12),
 
                     // Flood bursts (only visible when flooding)
                     if (flood) ...[
                       Text('Flood Bursts per hop: $bursts',
-                          style: TextStyle(color: AppColors.secondaryText, fontSize: 12)),
+                          style: TextStyle(
+                              color: AppColors.secondaryText, fontSize: 12)),
                       Slider(
                         value: bursts.toDouble(),
                         min: 1,
                         max: 10,
                         divisions: 9,
                         activeColor: AppColors.primaryAccent,
-                        onChanged: (v) => setDialogState(() => bursts = v.round()),
+                        onChanged: (v) =>
+                            setDialogState(() => bursts = v.round()),
                       ),
                     ],
                   ],
@@ -1225,7 +1288,8 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text('Close', style: TextStyle(color: AppColors.primaryAccent)),
+            child:
+                Text('Close', style: TextStyle(color: AppColors.primaryAccent)),
           ),
         ],
       ),
@@ -1285,8 +1349,8 @@ class _NrfScreenState extends State<NrfScreen> with SingleTickerProviderStateMix
     );
   }
 
-  Widget _buildSliderRow(
-      String label, int value, int min, int max, ValueChanged<double> onChanged) {
+  Widget _buildSliderRow(String label, int value, int min, int max,
+      ValueChanged<double> onChanged) {
     return Row(
       children: [
         SizedBox(
