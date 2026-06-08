@@ -1725,7 +1725,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.statusOrange,
                   foregroundColor: AppColors.onBright,
-                  disabledBackgroundColor: AppColors.greyLight.withOpacity(0.3),
+                  disabledBackgroundColor:
+                      AppColors.greyLight.withValues(alpha: 0.3),
                 ),
               ),
             ),
@@ -1774,9 +1775,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppColors.warning.withOpacity(0.1),
+                color: AppColors.warning.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: AppColors.warning.withOpacity(0.3)),
+                border:
+                    Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
@@ -2428,6 +2430,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         onPickReplayFile: () async {
                           await _pickReplaySubFile(
                               context, settingsProvider, 1);
+                          if (!context.mounted) return;
                           _sendButtonConfig(
                               context, bleProvider, settingsProvider);
                         },
@@ -2449,6 +2452,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         onPickReplayFile: () async {
                           await _pickReplaySubFile(
                               context, settingsProvider, 2);
+                          if (!context.mounted) return;
                           _sendButtonConfig(
                               context, bleProvider, settingsProvider);
                         },
@@ -2749,38 +2753,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
             l10n.selectLanguage,
             style: const TextStyle(color: AppColors.primaryText),
           ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              RadioListTile<String>(
-                title: Text(
-                  l10n.english,
-                  style: const TextStyle(color: AppColors.primaryText),
+          content: RadioGroup<String>(
+            groupValue: currentLocale.languageCode,
+            onChanged: (value) {
+              if (value == null) return;
+              localeProvider.setLocale(Locale(value));
+              Navigator.of(dialogContext).pop();
+            },
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                RadioListTile<String>(
+                  title: Text(
+                    l10n.english,
+                    style: const TextStyle(color: AppColors.primaryText),
+                  ),
+                  value: 'en',
                 ),
-                value: 'en',
-                groupValue: currentLocale.languageCode,
-                onChanged: (value) {
-                  if (value != null) {
-                    localeProvider.setLocale(Locale(value));
-                    Navigator.of(dialogContext).pop();
-                  }
-                },
-              ),
-              RadioListTile<String>(
-                title: Text(
-                  l10n.russian,
-                  style: const TextStyle(color: AppColors.primaryText),
+                RadioListTile<String>(
+                  title: Text(
+                    l10n.russian,
+                    style: const TextStyle(color: AppColors.primaryText),
+                  ),
+                  value: 'ru',
                 ),
-                value: 'ru',
-                groupValue: currentLocale.languageCode,
-                onChanged: (value) {
-                  if (value != null) {
-                    localeProvider.setLocale(Locale(value));
-                    Navigator.of(dialogContext).pop();
-                  }
-                },
-              ),
-            ],
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -3852,7 +3850,7 @@ class _SubGhzCloneDialogState extends State<_SubGhzCloneDialog> {
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: _isDone ? 1.0 : (_progress > 0 ? _progress : null),
-              backgroundColor: AppColors.greyLight.withOpacity(0.2),
+              backgroundColor: AppColors.greyLight.withValues(alpha: 0.2),
               valueColor: AlwaysStoppedAnimation<Color>(
                 _hasError
                     ? AppColors.error
@@ -3884,7 +3882,7 @@ class _SubGhzCloneDialogState extends State<_SubGhzCloneDialog> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppColors.error.withOpacity(0.1),
+                color: AppColors.error.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
