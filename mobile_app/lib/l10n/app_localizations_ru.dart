@@ -832,13 +832,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get dontShowAgain => 'Больше не показывать';
 
   @override
-  String get resetTransmitConfirmation => 'Сбросить подтверждение передачи';
-
-  @override
-  String get transmitConfirmationReset =>
-      'Диалог подтверждения передачи сброшен.';
-
-  @override
   String get transmit => 'Передать';
 
   @override

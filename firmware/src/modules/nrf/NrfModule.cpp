@@ -9,7 +9,6 @@
 #include "NrfModule.h"
 #include "modules/CC1101_driver/CC1101_Module.h"
 #include "CC1101_Radio.h"  // For cc1101 global — setSidle() before NRF bus switch
-#include "esp_log.h"
 
 static const char* TAG = "NrfModule";
 

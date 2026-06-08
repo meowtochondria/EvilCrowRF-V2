@@ -10,7 +10,6 @@ import '../providers/ble_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/firmware_protocol.dart';
-import '../widgets/transmit_file_dialog.dart';
 import '../services/update_service.dart';
 import '../services/flipper_subdb_service.dart';
 import '../services/logger_service.dart';
@@ -2828,19 +2827,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       },
     );
-  }
-
-  void _resetTransmitConfirmation(BuildContext context) async {
-    final l10n = AppLocalizations.of(context)!;
-    await TransmitFileDialog.resetDontShowAgain();
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(l10n.transmitConfirmationReset),
-          backgroundColor: AppColors.success,
-        ),
-      );
-    }
   }
 }
 

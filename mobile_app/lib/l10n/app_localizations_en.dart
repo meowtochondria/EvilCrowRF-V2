@@ -827,13 +827,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dontShowAgain => 'Don\'t show this again';
 
   @override
-  String get resetTransmitConfirmation => 'Reset Transmit Confirmation';
-
-  @override
-  String get transmitConfirmationReset =>
-      'Transmit confirmation dialog has been reset.';
-
-  @override
   String get transmit => 'Transmit';
 
   @override

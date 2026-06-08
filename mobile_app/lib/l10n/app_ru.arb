@@ -1,19 +1,19 @@
 {
   "@@locale": "ru",
   "appTitle": "Tut RF",
-  
+
   "home": "Главная",
   "brute": "Брут",
   "record": "Запись",
   "files": "Файлы",
   "settings": "Настройки",
-  
+
   "connectionRequired": "Требуется подключение",
   "connectionRequiredMessage": "Пожалуйста, сначала подключитесь к устройству для доступа к этой функции.",
   "ok": "ОК",
-  
+
   "permissionError": "Ошибка разрешений",
-  
+
   "disconnected": "Отключено",
   "connected": "Подключено к {deviceName}",
   "@connected": {
@@ -90,7 +90,7 @@
       }
     }
   },
-  
+
   "disconnect": "Отключить",
   "connect": "Подключить",
   "scanForNewDevices": "Искать новые устройства",
@@ -106,7 +106,7 @@
   },
   "unknownDevice": "Неизвестное устройство",
   "noSupportedDevicesShowAll": "Устройства не распознаны. Выберите вручную:",
-  
+
   "notConnectedToDevice": "Не подключено к устройству",
   "connectToDeviceToManageFiles": "Подключитесь к устройству для управления файлами",
   "refresh": "Обновить",
@@ -119,7 +119,7 @@
   "enterDirectoryName": "Введите имя папки",
   "create": "Создать",
   "cancel": "Отмена",
-  
+
   "copyFile": "Копировать файл",
   "newFileName": "Новое имя файла",
   "destination": "Назначение: {path}",
@@ -131,12 +131,12 @@
     }
   },
   "copy": "Копировать",
-  
+
   "renameDirectory": "Переименовать папку",
   "renameFile": "Переименовать файл",
   "newDirectoryName": "Новое имя папки",
   "rename": "Переименовать",
-  
+
   "deleteDirectory": "Удалить папку",
   "deleteFile": "Удалить файл",
   "deleteConfirm": "Вы уверены, что хотите удалить \"{name}\"?",
@@ -167,17 +167,17 @@
   },
   "clearSelection": "Очистить выбор",
   "deleteSelected": "Удалить выбранное",
-  
+
   "moveDirectory": "Переместить папку",
   "moveFile": "Переместить файл",
   "move": "Переместить",
-  
+
   "records": "Записи",
   "signals": "Сигналы",
   "captured": "Захвачено",
   "presets": "Пресеты",
   "temp": "Временные",
-  
+
   "saveFileAs": "Сохранить файл как...",
   "fileSaved": "Файл сохранен: {path}",
   "@fileSaved": {
@@ -363,7 +363,7 @@
       }
     }
   },
-  
+
   "noLogsYet": "Логов пока нет",
   "commandsAndResponsesWillAppearHere": "Команды и ответы будут отображаться здесь",
   "logsCount": "Логи ({count})",
@@ -375,7 +375,7 @@
     }
   },
   "clearAllLogs": "Очистить все логи",
-  
+
   "loadingFilePreview": "Загрузка preview файла...",
   "previewError": "Ошибка предпросмотра",
   "retry": "Повторить",
@@ -388,27 +388,27 @@
     }
   },
   "previewTruncated": "Предпросмотр обрезан. Откройте файл, чтобы увидеть полное содержимое.",
-  
+
   "clearFileCache": "Очистить кеш файлов",
   "rebootDevice": "Перезагрузить устройство",
   "requestPermissions": "Запросить разрешения",
-  
+
   "sendCommand": "Отправить команду",
   "enterCommand": "Введите команду",
   "commandHint": "например, SCAN, RECORD, PLAY",
   "send": "Отправить",
-  
+
   "scanner": "Сканер",
   "clearList": "Очистить список",
   "stop": "Остановить",
   "start": "Запустить",
-  
+
   "language": "Язык",
   "selectLanguage": "Выберите язык",
   "english": "English",
   "russian": "Русский",
   "systemDefault": "По умолчанию системы",
-  
+
   "deviceStatus": "Статус устройства",
   "subGhzModule": "Sub-GHz Модуль {number}",
   "@subGhzModule": {
@@ -460,21 +460,21 @@
   "jammingSettings": "Настройки глушения",
   "transmitting": "Передача",
   "scanning": "Сканирование",
-  
+
   "statusIdle": "Бездействие",
   "statusRecording": "Запись",
   "statusScanning": "Сканирование",
   "statusTransmitting": "Отправка",
-  
+
   "kbps": "кбит/с",
   "hz": "Гц",
-  
+
   "modulationAskOok": "ASK/OOK (АМн-ВВ)",
   "modulation2Fsk": "2-FSK (ЧМн-2)",
   "modulation4Fsk": "4-FSK (ЧМн-4)",
   "modulationGfsk": "GFSK (ГЧМн)",
   "modulationMsk": "MSK (ММн)",
-  
+
   "startRecordingToCaptureSignals": "Начните запись для захвата сигналов",
   "frequencySearchStoppedForModule": "Поиск частоты остановлен для Модуля {number}",
   "@frequencySearchStoppedForModule": {
@@ -484,7 +484,7 @@
       }
     }
   },
-  
+
   "error": "Ошибка",
   "deviceNotConnected": "Устройство не подключено",
   "validationError": "Ошибка валидации",
@@ -606,7 +606,7 @@
     }
   },
   "recordScreenHelp": "Справка по экрану записи",
-  
+
   "fileDownloadedSuccessfully": "Файл \"{fileName}\" успешно загружен",
   "@fileDownloadedSuccessfully": {
     "placeholders": {
@@ -634,14 +634,12 @@
   "loadingFile": "Загрузка файла...",
   "notConnectedToDeviceFile": "Не подключено к устройству",
   "connectToDeviceToViewFiles": "Подключитесь к устройству для просмотра файлов",
-  
+
   "transmitSignal": "Передать сигнал",
   "transmitSignalConfirm": "Это передаст сигнал из этого файла.",
   "file": "Файл",
   "transmitWarning": "Используйте только в контролируемых условиях. Проверьте местные правила.",
   "dontShowAgain": "Больше не показывать",
-  "resetTransmitConfirmation": "Сбросить подтверждение передачи",
-  "transmitConfirmationReset": "Диалог подтверждения передачи сброшен.",
   "transmit": "Передать",
   "signalTransmissionStarted": "Передача сигнала начата: {fileName}",
   "@signalTransmissionStarted": {
@@ -665,13 +663,13 @@
   "loadingFiles": "Загрузка файлов...",
   "noRecordedFiles": "Нет записанных файлов",
   "noFilesFound": "Файлы не найдены",
-  
+
   "recordSettings": "Настройки записи",
   "mhz": "МГц",
   "khz": "кГц",
   "kbaud": "кБод",
   "bandwidth": "Полоса пропускания",
-  
+
   "signalSavedAs": "Сигнал сохранён как: {fileName}",
   "@signalSavedAs": {
     "placeholders": {
@@ -688,16 +686,16 @@
       }
     }
   },
-  
+
   "recordingShort": "Запись",
   "freqShort": "Част",
   "modShort": "Мод",
   "rateShort": "Скорость",
   "bwShort": "Полоса",
-  
+
   "clearDeviceCache": "Очистить кеш устройств",
   "clearDeviceCacheDescription": "Удалить сохранённую информацию об устройствах",
-  
+
   "filesLoadedCount": "Загружено файлов: {loaded} из {total}",
   "@filesLoadedCount": {
     "placeholders": {
@@ -1307,4 +1305,3 @@
   "ppError": "Ошибка ProtoPirate: {error}",
   "@ppError": { "placeholders": { "error": { "type": "String" } } }
 }
-

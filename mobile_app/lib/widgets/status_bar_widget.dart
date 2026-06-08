@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/ble_provider.dart';
 import '../providers/notification_provider.dart';
-import '../providers/settings_provider.dart';
 import '../services/logger_service.dart';
 import '../theme/app_colors.dart';
 import 'quick_connect_widget.dart';

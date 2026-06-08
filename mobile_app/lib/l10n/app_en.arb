@@ -4,13 +4,13 @@
   "@appTitle": {
     "description": "Application title"
   },
-  
+
   "home": "Home",
   "brute": "Brute",
   "record": "Record",
   "files": "Files",
   "settings": "Settings",
-  
+
   "connectionRequired": "Connection Required",
   "@connectionRequired": {
     "description": "Dialog title when connection is required"
@@ -20,12 +20,12 @@
     "description": "Dialog message when connection is required"
   },
   "ok": "OK",
-  
+
   "permissionError": "Permission Error",
   "@permissionError": {
     "description": "Permission error title"
   },
-  
+
   "disconnected": "Disconnected",
   "connected": "Connected to {deviceName}",
   "@connected": {
@@ -103,7 +103,7 @@
       }
     }
   },
-  
+
   "disconnect": "Disconnect",
   "connect": "Connect",
   "scanForNewDevices": "Scan for New Devices",
@@ -119,7 +119,7 @@
   },
   "unknownDevice": "Unknown Device",
   "noSupportedDevicesShowAll": "No supported devices found. Select your device manually:",
-  
+
   "notConnectedToDevice": "Not connected to device",
   "connectToDeviceToManageFiles": "Connect to a device to manage files",
   "refresh": "Refresh",
@@ -132,7 +132,7 @@
   "enterDirectoryName": "Enter directory name",
   "create": "Create",
   "cancel": "Cancel",
-  
+
   "copyFile": "Copy File",
   "newFileName": "New file name",
   "destination": "Destination: {path}",
@@ -144,12 +144,12 @@
     }
   },
   "copy": "Copy",
-  
+
   "renameDirectory": "Rename Directory",
   "renameFile": "Rename File",
   "newDirectoryName": "New directory name",
   "rename": "Rename",
-  
+
   "deleteDirectory": "Delete Directory",
   "deleteFile": "Delete File",
   "deleteConfirm": "Are you sure you want to delete \"{name}\"?",
@@ -180,17 +180,17 @@
   },
   "clearSelection": "Clear Selection",
   "deleteSelected": "Delete Selected",
-  
+
   "moveDirectory": "Move Directory",
   "moveFile": "Move File",
   "move": "Move",
-  
+
   "records": "Records",
   "signals": "Signals",
   "captured": "Captured",
   "presets": "Presets",
   "temp": "Temp",
-  
+
   "saveFileAs": "Save file as...",
   "fileSaved": "File saved to: {path}",
   "@fileSaved": {
@@ -376,7 +376,7 @@
       }
     }
   },
-  
+
   "noLogsYet": "No logs yet",
   "commandsAndResponsesWillAppearHere": "Commands and responses will appear here",
   "logsCount": "Logs ({count})",
@@ -388,7 +388,7 @@
     }
   },
   "clearAllLogs": "Clear all logs",
-  
+
   "loadingFilePreview": "Loading file preview...",
   "previewError": "Preview Error",
   "retry": "Retry",
@@ -401,27 +401,27 @@
     }
   },
   "previewTruncated": "Preview truncated. Open file to see full content.",
-  
+
   "clearFileCache": "Clear File Cache",
   "rebootDevice": "Reboot Device",
   "requestPermissions": "Request Permissions",
-  
+
   "sendCommand": "Send Command",
   "enterCommand": "Enter Command",
   "commandHint": "e.g., SCAN, RECORD, PLAY",
   "send": "Send",
-  
+
   "scanner": "Scanner",
   "clearList": "Clear list",
   "stop": "Stop",
   "start": "Start",
-  
+
   "language": "Language",
   "selectLanguage": "Select Language",
   "english": "English",
   "russian": "Russian",
   "systemDefault": "System Default",
-  
+
   "deviceStatus": "Device Status",
   "subGhzModule": "Sub-GHz Module {number}",
   "@subGhzModule": {
@@ -474,21 +474,21 @@
   "jammingSettings": "Jamming Settings",
   "transmitting": "Transmitting",
   "scanning": "Scanning",
-  
+
   "statusIdle": "Idle",
   "statusRecording": "Recording",
   "statusScanning": "Scanning",
   "statusTransmitting": "Transmitting",
-  
+
   "kbps": "kbps",
   "hz": "Hz",
-  
+
   "modulationAskOok": "ASK/OOK",
   "modulation2Fsk": "2-FSK",
   "modulation4Fsk": "4-FSK",
   "modulationGfsk": "GFSK",
   "modulationMsk": "MSK",
-  
+
   "startRecordingToCaptureSignals": "Start recording to capture signals",
   "frequencySearchStoppedForModule": "Frequency search stopped for Module {number}",
   "@frequencySearchStoppedForModule": {
@@ -498,7 +498,7 @@
       }
     }
   },
-  
+
   "error": "Error",
   "deviceNotConnected": "Device not connected",
   "moduleBusy": "Module Busy",
@@ -620,7 +620,7 @@
     }
   },
   "recordScreenHelp": "Record Screen Help",
-  
+
   "fileDownloadedSuccessfully": "File \"{fileName}\" downloaded successfully",
   "@fileDownloadedSuccessfully": {
     "placeholders": {
@@ -648,14 +648,12 @@
   "loadingFile": "Loading file...",
   "notConnectedToDeviceFile": "Not connected to device",
   "connectToDeviceToViewFiles": "Connect to a device to view files",
-  
+
   "transmitSignal": "Transmit Signal",
   "transmitSignalConfirm": "This will transmit the signal from this file.",
   "file": "File",
   "transmitWarning": "Only use in controlled environments. Check local regulations.",
   "dontShowAgain": "Don't show this again",
-  "resetTransmitConfirmation": "Reset Transmit Confirmation",
-  "transmitConfirmationReset": "Transmit confirmation dialog has been reset.",
   "transmit": "Transmit",
   "signalTransmissionStarted": "Signal transmission started: {fileName}",
   "@signalTransmissionStarted": {
@@ -679,13 +677,13 @@
   "loadingFiles": "Loading files...",
   "noRecordedFiles": "No recorded files",
   "noFilesFound": "No files found",
-  
+
   "recordSettings": "Record Settings",
   "mhz": "MHz",
   "khz": "kHz",
   "kbaud": "kBaud",
   "bandwidth": "Bandwidth",
-  
+
   "signalSavedAs": "Signal saved as: {fileName}",
   "@signalSavedAs": {
     "placeholders": {
@@ -702,16 +700,16 @@
       }
     }
   },
-  
+
   "recordingShort": "Recording",
   "freqShort": "Freq",
   "modShort": "Mod",
   "rateShort": "Rate",
   "bwShort": "BW",
-  
+
   "clearDeviceCache": "Clear Device Cache",
   "clearDeviceCacheDescription": "Remove saved device information",
-  
+
   "filesLoadedCount": "Files loaded: {loaded} of {total}",
   "@filesLoadedCount": {
     "placeholders": {
@@ -1321,4 +1319,3 @@
   "ppError": "ProtoPirate error: {error}",
   "@ppError": { "placeholders": { "error": { "type": "String" } } }
 }
-

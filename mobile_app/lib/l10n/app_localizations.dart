@@ -1490,18 +1490,6 @@ abstract class AppLocalizations {
   /// **'Don\'t show this again'**
   String get dontShowAgain;
 
-  /// No description provided for @resetTransmitConfirmation.
-  ///
-  /// In en, this message translates to:
-  /// **'Reset Transmit Confirmation'**
-  String get resetTransmitConfirmation;
-
-  /// No description provided for @transmitConfirmationReset.
-  ///
-  /// In en, this message translates to:
-  /// **'Transmit confirmation dialog has been reset.'**
-  String get transmitConfirmationReset;
-
   /// No description provided for @transmit.
   ///
   /// In en, this message translates to:

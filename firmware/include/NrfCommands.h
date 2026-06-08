@@ -42,7 +42,6 @@
 #include "modules/nrf/NrfSpectrum.h"
 #include "modules/nrf/NrfJammer.h"
 #include "ConfigManager.h"
-#include "esp_log.h"
 
 class NrfCommands {
 public:
