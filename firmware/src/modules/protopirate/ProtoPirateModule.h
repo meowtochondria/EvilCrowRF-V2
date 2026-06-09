@@ -20,12 +20,6 @@
 #include "config.h"
 #include "ProtoPirateHistory.h"
 #include "protocols/PPProtocol.h"
-#include "protocols/PPAllProtocols.h"
-#include "modules/CC1101_driver/CC1101_Module.h"
-#include "modules/CC1101_driver/CC1101_Worker.h"
-#include "core/ClientsManager.h"
-#include "BinaryMessages.h"
-#include "esp_log.h"
 
 /**
  * @brief ProtoPirate module state.

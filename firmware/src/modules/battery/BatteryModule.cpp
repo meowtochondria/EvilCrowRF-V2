@@ -7,6 +7,9 @@
  */
 
 #include "BatteryModule.h"
+#include "BinaryMessages.h"
+#include "core/ClientsManager.h"
+#include "esp_log.h"
 
 #if BATTERY_MODULE_ENABLED
 

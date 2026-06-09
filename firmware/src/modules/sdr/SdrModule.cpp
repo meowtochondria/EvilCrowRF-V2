@@ -13,6 +13,9 @@
  */
 
 #include "SdrModule.h"
+#include "BinaryMessages.h"
+#include "core/ClientsManager.h"
+#include "esp_log.h"
 
 #if SDR_MODULE_ENABLED
 
