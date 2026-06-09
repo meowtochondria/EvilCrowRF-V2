@@ -195,28 +195,51 @@ ESP32 supports ESP-TOUCH (SmartConfig), where the app broadcasts SSID/password o
 5. If connection fails after N retries, device reverts to SoftAP + SmartConfig mode.
 
 **Fallback: SoftAP + Captive Portal**
-- Device creates `EvilCrowRF-Config` SSID (open).
+- Device creates `EvilCrowRF-Config` SSID (open or WPA2 if hardware supports it).
 - User connects phone to this network.
 - DNS captures all HTTP requests → redirect to config page at `192.168.4.1`.
 - User enters WiFi credentials on a web form.
 - Device reboots in STA mode.
 
+**Supported provisioning flow (in order of attempt):**
+1. **SmartConfig / ESP-TOUCH** — App broadcasts credentials over 2.4 GHz 802.11. Requires the phone to already be on a 2.4 GHz network. Most reliable on open/unencrypted networks.
+2. **SoftAP + Captive Portal** — Device creates its own AP. User enters credentials in the captive portal. Works on any router, including 5 GHz and enterprise networks.
+3. **Manual IP entry** — If mDNS is blocked or the above methods fail, the app settings screen provides a text field for direct IP address entry.
+
+If the device has a display, show a QR code containing `WIFI:T:WPA;S:<ssid>;P:<password>;;` that the user can scan with their phone's camera to join the SoftAP network without typing credentials.
+
 ### 3.3 Data Transport — WebSocket
 
 **Primary transport: WebSocket (binary frames)**
 
-The existing binary protocol (`0xAA` magic, chunked, CRC) maps directly to WebSocket opcode `0x02` (binary frame). All existing `FirmwareBinaryProtocol.createXxxCommand()` methods work unchanged. All existing `BinaryMessages.h` response structs work unchanged.
+The existing binary protocol maps to WebSocket opcode `0x02` (binary frame). All existing `FirmwareBinaryProtocol.createXxxCommand()` methods work unchanged. All existing `BinaryMessages.h` response structs work unchanged.
 
 **Why WebSocket over pure REST:**
 - The protocol is bidirectional and event-driven. REST would require polling for device-initiated messages (signal detected, bruter progress, battery updates).
-- OTA firmware upload over WebSocket is simpler than chunked HTTP upload.
 - WebSocket maps 1:1 to BLE GATT notify/write semantics.
+- OTA (including progress notifications) runs entirely over WebSocket — no separate HTTP endpoint needed.
 
 **WebSocket advantage over BLE:** WebSocket MTU is typically 65,535 bytes (vs BLE's 509 bytes). `MAX_CHUNK_SIZE` can be raised to ~16,000 bytes for much better throughput on file operations.
 
+**Message formats:**
+
+*Single-chunk messages* (all commands, most responses — fits in one WebSocket frame):
+
+```
+[1 byte: magic 0xAA] [1 byte: msg_type] [2 bytes: data_len (LE)] [N bytes: data] [1 byte: xor_checksum]
+```
+
+*Multi-chunk messages* (file uploads, firmware downloads — only when payload exceeds one frame):
+
+```
+[1 byte: magic 0xAA] [1 byte: type 0x01] [1 byte: chunk_id] [1 byte: chunk_num] [1 byte: total_chunks] [2 bytes: data_len (LE)] [N bytes: data] [1 byte: xor_checksum]
+```
+
+The chunked format is **only** for multi-chunk transfers. Most command/response paths use the single-chunk format, reducing per-message overhead from 7+ bytes to 5 bytes.
+
 ### 3.4 REST API Endpoints
 
-Even with WebSocket as the primary transport, these REST endpoints provide out-of-band operations:
+REST endpoints handle out-of-band operations that don't need the binary protocol's bidirectional channel:
 
 | Method | Path | Purpose |
 |--------|------|---------|
@@ -224,20 +247,18 @@ Even with WebSocket as the primary transport, these REST endpoints provide out-o
 | `GET` | `/api/status` | Current state (same as BinaryStatus struct) |
 | `GET` | `/api/files/*` | Download files (SD/LittleFS) |
 | `POST` | `/api/files/*` | Upload files (multipart) |
-| `POST` | `/api/ota/begin` | Start OTA session |
-| `POST` | `/api/ota/chunk` | Write OTA chunk |
-| `POST` | `/api/ota/end` | Finalize OTA |
-| `POST` | `/api/ota/abort` | Cancel OTA |
-| `POST` | `/api/ota/reboot` | Reboot into new firmware |
 | `GET` | `/scan` | SoftAP captive portal landing page |
+
+**OTA over WebSocket:** All OTA operations run over the binary protocol WebSocket channel using command IDs `0x30`–`0x35`. The device sends `OTA_PROGRESS` notification messages back via WebSocket as chunks are received. No separate HTTP OTA endpoints are needed.
 
 ### 3.5 Ports
 
 | Port | Protocol | Service |
 |------|----------|---------|
-| 80 | TCP/HTTP | REST API + WebSocket upgrade |
-| 81 | TCP/WebSocket | Binary protocol data channel |
+| 80 | TCP/HTTP + WebSocket | REST API + WebSocket upgrade at `/api/ws` |
 | 5353 | UDP | mDNS (`_evilcrow._tcp`) |
+
+A single WebSocket endpoint handles all binary protocol traffic. REST and binary traffic share port 80 with path-based routing.
 
 ### 3.6 mDNS Identifier (Configurable, Not Hardcoded)
 
@@ -301,15 +322,15 @@ The app discovers devices by browsing for `_evilcrow._tcp.local` and reads the `
 
 | Package | Purpose | Already in pubspec? |
 |---------|---------|---------------------|
-| `http` | REST API calls | ✅ Yes (`^1.2.1`) |
-| `web_socket_channel` | WebSocket client | ⬜ New (`^3.0.0`) |
-| `network_info_plus` | Get phone's WiFi SSID for auto-config | ⬜ New (`^6.0.0`) |
+| `http` | REST API calls | ✅ Yes (`^1.6.0`) |
+| `web_socket_channel` | WebSocket client | ⬜ New (`^3.0.3`) |
+| `network_info_plus` | Get phone's WiFi SSID for auto-config | ⬜ New (`^8.1.0`) |
 
 **Add to `pubspec.yaml`:**
 ```yaml
 dependencies:
-  web_socket_channel: ^3.0.0
-  network_info_plus: ^6.0.0
+  web_socket_channel: ^3.0.3
+  network_info_plus: ^8.1.0
 ```
 
 ---
@@ -375,8 +396,8 @@ board_build.flash_mode = qio
 board_build.f_cpu = 240000000L
 
 lib_deps =
-    https://github.com/ESP32Async/AsyncTCP.git
-    https://github.com/ESP32Async/ESPAsyncWebServer.git
+    https://github.com/ESP32Async/AsyncTCP.git#3.4.10
+    https://github.com/ESP32Async/ESPAsyncWebServer.git#3.11.1
 
 build_flags =
     ${common.build_flags}
@@ -447,13 +468,33 @@ make deploy-wifi-wifi # build wifi + deploy over WiFi ADB
 
 The `WifiWebSocketHandler` processes incoming binary frames identically to `BleAdapter::processBinaryData()`, delegating to the shared `BinaryProtocolHandler`.
 
-### Phase 3: Firmware — OTA over HTTP
+### Phase 3: Firmware — OTA over WebSocket
 
-OTA currently uses BLE chunked writes. WiFi OTA uses the same `Update` class:
-- `POST /api/ota/begin` — returns session token
-- `POST /api/ota/chunk` — raw body
-- `POST /api/ota/end` — verify MD5, apply update
-- `POST /api/ota/reboot` — reboot into new firmware
+OTA uses the existing binary protocol channel (commands `0x30`–`0x35`) over WebSocket instead of BLE chunked writes. No separate HTTP OTA endpoints are used.
+
+**OTA command sequence over WebSocket:**
+- `0x30 OTA_BEGIN` — Initialize OTA session, validate there is enough space in `app1`
+- `0x31 OTA_DATA` — Stream firmware chunks as binary WebSocket frames (single-chunk or multi-chunk format as appropriate for size)
+- `0x32 OTA_END` — Finalize, verify MD5, mark boot partition
+- `0x33 OTA_ABORT` — Cancel session, clean up
+- `0x34 OTA_REBOOT` — Reboot into new firmware
+- `0x35 OTA_PROGRESS` — Device-initiated notification sent back to app as chunks are received
+
+Progress is reported back to the app via device-initiated `OTA_PROGRESS` messages, so the app receives real-time feedback without polling.
+
+**Partition table (`partitions.csv`):**
+```csv
+# Name,   Type, SubType, Offset,  Size, Flags
+nvs,      data, nvs,     0x9000,  0x5000,
+spiffs,   data, spiffs,  0xe000,  0x20000,
+otadata,  data, ota,     0x110000,0x2000,
+app0,     app,  ota_0,   0x120000,0x1C0000,
+app1,     app,  ota_1,   0x3E0000,0x1C0000,
+coredump, data, coredump,0x5A0000,0x10000,
+littlefs, data, littlefs,0x5B0000,0x50000,
+```
+- `app0`/`app1`: 1.8 MB each — accommodates firmware + WiFi stack with headroom for OTA
+- Total flash: 6 MB (standard ESP32-WROOM module)
 
 ### Phase 3.5: Mobile App — Linux Build & Desktop Testing
 
@@ -527,11 +568,13 @@ the generated `.desktop` file or the AppStream metainfo:
   <metadata_license>MIT</metadata_license>
   <project_license>MIT</project_license>
   <requires>
-    <!-- Network access for WebSocket + mDNS -->
+    <!-- Minimum screen width for usable UI -->
     <display_length compare="ge">800</display_length>
   </requires>
 </component>
 ```
+
+**Note:** `<display_length>` restricts the display width, not network access. Network access is implicitly granted by the `linux` platform in Flutter. No explicit D-Bus or AppStream network permission is needed.
 
 **mDNS on Linux:**
 
@@ -595,10 +638,20 @@ static void my_application_activate(GApplication* application) {
 
 ### Phase 5: Mobile App — Build-Time Mode Switch
 
+**Build-time approach (default):**
 - `main.dart` checks `--dart-define=TRANSPORT_MODE`:
   - `bt` → inject `BleProvider`
   - `wifi` → inject `WifiProvider`
 - All screens remain unchanged — they consume via `Provider.of<DeviceProvider>()` using a shared abstract interface.
+
+**Alternative: Runtime mode (single binary)**
+Instead of two separate builds, compile both `BleProvider` and `WifiProvider` into the same binary. At runtime, detect available hardware or let the user choose from a settings screen. Use a `DeviceTransport` enum:
+
+```dart
+enum DeviceTransport { auto, bluetooth, wifi }
+```
+
+This allows a single APK to support both BLE and WiFi devices, which is useful for developers who work with both transport types. The `lib_ignore` pattern in `platformio.ini` still applies to the firmware builds, but the mobile app can ship as a single binary with runtime selection. The downside is a modestly larger APK (~500 KB from including both provider implementations).
 
 ### Phase 6: Test & Validation
 
@@ -618,12 +671,20 @@ static void my_application_activate(GApplication* application) {
 
 | Concern | Mitigation |
 |---------|------------|
-| Local network access | Device binds to `0.0.0.0`. For v1, match BLE's model (no auth — any client on the LAN can connect). |
-| Unauthorized commands | Future: token exchange on WebSocket connect (device sends challenge, app signs with PSK derived from WiFi password). |
+| Local network access | Device binds to `0.0.0.0`. Any client on the LAN can connect — appropriate for a lab device, but differs from BLE's physical-proximity requirement. |
+| Unauthorized commands | **v1:** Device generates a random 8-character alphanumeric **device key** on first boot, stored in NVS and displayed on the device's screen (or accessible via `GET /api/info`). The app prompts the user to enter this key on first connection. Subsequent connections from the same app instance are trusted. **Future v2:** Token exchange on WebSocket connect. |
 | OTA hijacking | MD5 verification (already implemented in BLE OTA) reused as-is. |
 | SoftAP snooping | WPA2 on config SoftAP where possible; sensitive operations disabled in AP mode. |
+| No TLS on LAN | Acceptable for v1 since the device is intended for controlled testing environments. TLS/WSS can be added later when internet-connected features are introduced. |
 
-For v1, since the device is intended for controlled testing environments, **omit authentication** (same as current BLE model).
+**Device key flow:** On first boot, the device generates a random key (e.g., `A3F7K9X2`). This key is:
+- Written to NVS
+- Returned in the `GET /api/info` response as `"device_key": "A3F7K9X2"`
+- Shown on the device display (if available) or accessible via the captive portal
+- Entered once by the user in the app when connecting to a new device
+- Stored in the app's `shared_preferences` and sent with every WebSocket connection (header field or first message)
+
+This provides protection against accidental (not adversarial) network access without the complexity of a full PKI.
 
 ---
 
@@ -631,12 +692,14 @@ For v1, since the device is intended for controlled testing environments, **omit
 
 | Risk | Mitigation |
 |------|------------|
-| SmartConfig unreliable on some routers (5 GHz band, enterprise networks) | Fallback to SoftAP captive portal with QR code |
-| WebSocket reconnection on network change | Exponential backoff + mDNS re-discovery every 5 s |
-| OTA large firmware (1.8 MB) over WiFi slow | WebSocket binary streaming at ~500 KB/s → ~3.6 s total |
-| mDNS blocked on some networks | Allow manual IP entry in app settings |
-| AsyncWebServer + CC1101 ISR conflicts | WebServer on Core 0, CC1101 worker on Core 1 (already the architecture) |
-| AsyncTCP static buffer threading | Share `sendChunkMutex` pattern from `BleAdapter` |
+| SmartConfig unreliable on some routers (5 GHz band, enterprise networks) | Fallback to SoftAP captive portal with QR code (documented in Section 3.2). |
+| WebSocket reconnection on network change | Reconnection state machine with exponential backoff: **1 s → 2 s → 4 s → 8 s → 16 s → 30 s (max)**. On each retry, re-discover device via mDNS. After successful reconnect, replay any pending command that was in-flight when the connection dropped. |
+| OTA large firmware (1.8 MB) over WiFi | WebSocket binary streaming at ~1–2 MB/s at close range (estimate ~1–2 s for 1.8 MB). App shows real-time progress via `OTA_PROGRESS` notifications. |
+| mDNS blocked on some networks | Manual IP entry field in app settings. On first manual connection, attempt mDNS alongside IP entry for resilience. |
+| AsyncWebServer + CC1101 ISR conflicts | WebServer on Core 0, CC1101 worker on Core 1 (already the architecture). Ensure no shared data access without mutex. |
+| AsyncTCP static buffer threading | Share `sendChunkMutex` pattern from `BleAdapter`. Ensure WebSocket sends are serialized. |
+| DHCP lease renewal changes device IP | mDNS handles name resolution — app always resolves `device.local` rather than caching IP. |
+| Device key leaked | Key is low-security (lab environment device). An attacker on the same LAN can already send commands. Key prevents accidental cross-device confusion, not adversarial access. |
 
 ---
 
