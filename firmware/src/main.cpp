@@ -2,7 +2,7 @@
 #include <freertos/event_groups.h>
 #include <freertos/semphr.h>
 // #include <sstream>  // Removed — unused, saves ~2-4KB rodata
-#include "core/ble/CommandHandler.h"
+#include "core/CommandHandler.h"
 #include "FileCommands.h"
 #include "TransmitterCommands.h"
 #include "RecorderCommands.h"
@@ -17,7 +17,7 @@
 #include "modules/protopirate/ProtoPirateModule.h"
 #endif
 #include "modules/bruter/bruter_main.h"
-#include "core/ble/ClientsManager.h"
+#include "core/ClientsManager.h"
 #include "ConfigManager.h"
 #include "core/device_controls/DeviceControls.h"
 #include <LittleFS.h>

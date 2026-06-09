@@ -32,7 +32,7 @@
 #if SDR_MODULE_ENABLED
 
 #include "BinaryMessages.h"
-#include "core/ble/ClientsManager.h"
+#include "core/ClientsManager.h"
 #include "modules/CC1101_driver/CC1101_Module.h"
 #include "esp_log.h"
 

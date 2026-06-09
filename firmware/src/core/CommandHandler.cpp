@@ -2,5 +2,3 @@
 
 // Global instance of CommandHandler
 CommandHandler commandHandler;
-
-

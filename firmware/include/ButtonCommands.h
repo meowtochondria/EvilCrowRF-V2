@@ -24,8 +24,8 @@
 
 #include <Arduino.h>
 #include "config.h"
-#include "core/ble/CommandHandler.h"
-#include "core/ble/ClientsManager.h"
+#include "core/CommandHandler.h"
+#include "core/ClientsManager.h"
 #include "BinaryMessages.h"
 #include "ConfigManager.h"
 #include "core/device_controls/DeviceControls.h"

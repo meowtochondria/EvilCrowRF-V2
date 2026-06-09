@@ -3,13 +3,13 @@
 
 #include <Arduino.h>
 #include "config.h"
-#include "ControllerAdapter.h"
+#include "core/ControllerAdapter.h"
 #include <string>
 // #include <sstream>  // Removed — unused in BleAdapter
 #include <map>
 #include <stdint.h>
 #include <atomic>
-#include "CommandHandler.h"
+#include "core/CommandHandler.h"
 
 // NimBLE — lightweight BLE stack (replaces Bluedroid, saves ~30-40 KB RAM)
 #include <NimBLEDevice.h>

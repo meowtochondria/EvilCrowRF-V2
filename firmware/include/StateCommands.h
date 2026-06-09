@@ -1,15 +1,20 @@
 #ifndef StateCommands_h
 #define StateCommands_h
 
-#include "core/ble/CommandHandler.h"
+#include "core/CommandHandler.h"
 #include "DeviceTasks.h"
-#include "core/ble/ControllerAdapter.h"
-#include "core/ble/Request.h"
+#include "core/ControllerAdapter.h"
 #include "config.h"
 #include "ConfigManager.h"
 #include "BinaryMessages.h"
-#include "core/ble/ClientsManager.h"
+#include "core/ClientsManager.h"
 #include <SD.h>
+
+// RequestScan struct for scan command payload
+struct RequestScan {
+    uint8_t module;    // 1 byte for module
+    int8_t minRssi;   // 1 byte for minimum RSSI value
+};
 
 #if NRF_MODULE_ENABLED
 #include "modules/nrf/NrfModule.h"

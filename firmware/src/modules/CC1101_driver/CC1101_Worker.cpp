@@ -1,19 +1,17 @@
 #include "CC1101_Worker.h"
 #include <sstream>  // Moved here from CC1101_Worker.h — only used in this .cpp
 #include <LittleFS.h>  // For pathType 4 (internal flash) transmit support
-#include "FlipperSubFile.h"
 #include "modules/subghz_function/StreamingSubFileParser.h"
 #include "StreamingPulsePayload.h"
-#include "core/ble/ClientsManager.h"
+#include "core/ClientsManager.h"
 #include "BinaryMessages.h"
 #include "modules/subghz_function/ProtocolDecoder.h"
 #include "modules/subghz_function/FrequencyAnalyzer.h"
 #include "StringHelpers.h"
 #include "SubFileParser.h"  // For preset byte arrays
-#include "core/ble/CommandHandler.h"
+#include "core/CommandHandler.h"
 #include "DeviceTasks.h"
 #include "ConfigManager.h"
-#include "esp_log.h"
 
 static const char* TAG = "CC1101Worker";
 
@@ -64,18 +62,18 @@ ReceivedSamples CC1101Worker::receivedSamples[CC1101_NUM_MODULES];
 void CC1101Worker::init(SignalDetectedCallback detectedCb, SignalRecordedCallback recordedCb) {
     signalDetectedCallback = detectedCb;
     signalRecordedCallback = recordedCb;
-    
+
     // Initialize samples mutexes (moved from Recorder::init)
     for (int i = 0; i < CC1101_NUM_MODULES; ++i) {
         samplesMuxes[i] = portMUX_INITIALIZER_UNLOCKED;
     }
-    
+
     // Create queue for CC1101 tasks
     taskQueue = xQueueCreate(10, sizeof(CC1101Task*));
     if (taskQueue == nullptr) {
         ESP_LOGE(TAG, "Failed to create task queue");
     }
-    
+
     // Create SD card mutex for concurrent file operations
     sdMutex = xSemaphoreCreateMutex();
     if (sdMutex == nullptr) {
@@ -84,13 +82,13 @@ void CC1101Worker::init(SignalDetectedCallback detectedCb, SignalRecordedCallbac
 }
 
 // ISR and interrupt management functions (moved from Recorder.cpp)
-void IRAM_ATTR CC1101Worker::receiver(void* arg)
+void CC1101Worker::receiver(void* arg)
 {
     int module = reinterpret_cast<int>(arg);
     receiveSample(module);
 }
 
-void IRAM_ATTR CC1101Worker::receiveSample(int module)
+void CC1101Worker::receiveSample(int module)
 {
     const unsigned long time = micros();
     portENTER_CRITICAL_ISR(&CC1101Worker::samplesMuxes[module]);
@@ -176,7 +174,7 @@ void CC1101Worker::start() {
     // Total: ~4KB used, increased to 6KB for safety margin
     static StackType_t workerStack[6144 / sizeof(StackType_t)];
     static StaticTask_t workerBuffer;
-    
+
     workerTaskHandle = xTaskCreateStatic(
         workerTask,
         "CC1101Worker",
@@ -186,7 +184,7 @@ void CC1101Worker::start() {
         workerStack,
         &workerBuffer
     );
-    
+
     if (workerTaskHandle == nullptr) {
         ESP_LOGE(TAG, "Failed to create worker task");
     } else {
@@ -196,20 +194,20 @@ void CC1101Worker::start() {
 
 void CC1101Worker::workerTask(void* parameter) {
     ESP_LOGI(TAG, "CC1101Worker task running");
-    
+
     CC1101Task* taskPtr;
     TickType_t lastWakeTime = xTaskGetTickCount();
     TickType_t lastHeartbeat = xTaskGetTickCount();
-    
+
     while (true) {
         // Monitor stack usage periodically
         static int iterationCount = 0;
         if (++iterationCount % 1000 == 0) {
             UBaseType_t stackHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
-            ESP_LOGI(TAG, "Stack usage: %d bytes used, %d bytes remaining", 
+            ESP_LOGI(TAG, "Stack usage: %d bytes used, %d bytes remaining",
                      6144 - stackHighWaterMark * sizeof(StackType_t),
                      stackHighWaterMark * sizeof(StackType_t));
-            
+
             if (stackHighWaterMark < 1024) {
                 ESP_LOGW(TAG, "Low stack: %d bytes remaining", stackHighWaterMark * sizeof(StackType_t));
             }
@@ -233,7 +231,7 @@ void CC1101Worker::workerTask(void* parameter) {
                 ESP_LOGW(TAG, "High heap fragmentation: %.1f%%", frag);
             }
         }
-        
+
         // Send periodic heartbeat for widget updates (every 30 seconds)
         // Skip if a command is currently executing to avoid interference
         TickType_t now = xTaskGetTickCount();
@@ -243,7 +241,7 @@ void CC1101Worker::workerTask(void* parameter) {
             }
             lastHeartbeat = now;
         }
-        
+
         // Check for new commands (non-blocking)
         if (xQueueReceive(taskQueue, &taskPtr, 0) == pdTRUE) {
             if (taskPtr != nullptr) {
@@ -251,26 +249,26 @@ void CC1101Worker::workerTask(void* parameter) {
                 delete taskPtr;
             }
         }
-        
+
         // Process ongoing operations for both modules
         for (int module = 0; module < CC1101_NUM_MODULES; module++) {
             switch (moduleStates[module]) {
                 case CC1101State::Detecting:
                     processDetecting(module);
                     break;
-                    
+
                 case CC1101State::Recording:
                     processRecording(module);
                     break;
-                    
+
                 case CC1101State::Analyzing:
                     processAnalyzing(module);
                     break;
-                    
+
                 case CC1101State::Jamming:
                     processJamming(module);
                     break;
-                    
+
                 case CC1101State::ProtoPirate:
                     // Handled by ProtoPirateModule's own task — do NOT touch samples
                     break;
@@ -282,7 +280,7 @@ void CC1101Worker::workerTask(void* parameter) {
                     break;
             }
         }
-        
+
         // Small delay to prevent busy-waiting
         vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(10));
     }
@@ -290,48 +288,48 @@ void CC1101Worker::workerTask(void* parameter) {
 
 void CC1101Worker::processTask(const CC1101Task& task) {
     ESP_LOGD(TAG, "Processing command %d for module %d", (int)task.command, task.module);
-    
+
     switch (task.command) {
         case CC1101Command::StartDetect:
             handleStartDetect(task.module, task.minRssi, task.isBackground);
             break;
-            
+
         case CC1101Command::StopDetect:
             handleStopDetect(task.module);
             break;
-            
+
         case CC1101Command::StartRecord:
             handleStartRecord(task.module, task);
             break;
-            
+
         case CC1101Command::StopRecord:
             handleStopRecord(task.module);
             break;
-            
+
         case CC1101Command::Transmit:
             handleTransmit(task.module, task.filename, task.repeat, task.pathType);
             break;
-            
+
         case CC1101Command::StartAnalyzer:
             // frequency=startFreq, rxBandwidth=endFreq, deviation=step, dataRate=dwellTime
-            handleStartAnalyzer(task.module, task.frequency, task.rxBandwidth, task.deviation, 
+            handleStartAnalyzer(task.module, task.frequency, task.rxBandwidth, task.deviation,
                                static_cast<uint32_t>(task.dataRate));
             break;
-            
+
         case CC1101Command::StopAnalyzer:
             handleStopAnalyzer(task.module);
             break;
-            
+
         case CC1101Command::GoIdle:
             handleGoIdle(task.module);
             break;
-            
+
         case CC1101Command::StartJam:
             handleStartJam(task.module, task.frequency, task.power,
                           task.patternType, task.customPatternData, task.hasCustomPattern,
                           task.maxDurationMs, task.cooldownMs);
             break;
-            
+
         default:
             ESP_LOGW(TAG, "Unknown command: %d", (int)task.command);
             break;
@@ -339,57 +337,57 @@ void CC1101Worker::processTask(const CC1101Task& task) {
 }
 
 void CC1101Worker::handleStartDetect(int module, int minRssi, bool isBackground) {
-    ESP_LOGI(TAG, "Starting detection on module %d (minRssi=%d, background=%d)", 
+    ESP_LOGI(TAG, "Starting detection on module %d (minRssi=%d, background=%d)",
              module, minRssi, isBackground);
-    
+
     // Stop any ongoing operation first
     handleGoIdle(module);
-    
+
     // Configure CC1101 for detection
     moduleCC1101State[module].setReceiveConfig(
         signalDetectionFrequencies[SIGNAL_DETECTION_FREQUENCIES_LENGTH - 1],
-        false, 
-        MODULATION_ASK_OOK, 
-        256, 
-        0, 
+        false,
+        MODULATION_ASK_OOK,
+        256,
+        0,
         512
     ).initConfig();
-    
+
     // Send mode switch notification BEFORE state update for accurate previousMode
     sendModeNotification(module, CC1101State::Detecting);
-    
+
     // Update state after notification
     moduleStates[module] = CC1101State::Detecting;
     detectionMinRssi[module] = minRssi;
     detectionIsBackground[module] = isBackground;
-    
+
     ESP_LOGI(TAG, "Detection started on module %d", module);
 }
 
 void CC1101Worker::handleStopDetect(int module) {
     ESP_LOGI(TAG, "Stopping detection on module %d", module);
-    
+
     moduleCC1101State[module].setSidle();
     moduleCC1101State[module].unlock();
-    
+
     // Send notification BEFORE changing state for accurate previousMode
     sendModeNotification(module, CC1101State::Idle);
     moduleStates[module] = CC1101State::Idle;
 }
 
 void CC1101Worker::handleStartRecord(int module, const CC1101Task& config) {
-    ESP_LOGI(TAG, "Starting recording on module %d (freq=%.2f, mod=%d, preset=%s)", 
+    ESP_LOGI(TAG, "Starting recording on module %d (freq=%.2f, mod=%d, preset=%s)",
              module, config.frequency, config.modulation, config.preset.c_str());
-    
+
     // Log other module state for debugging concurrent operations
     int otherModule = (module == 0) ? 1 : 0;
-    ESP_LOGI(TAG, "Module %d state before start: %d, Module %d state: %d", 
+    ESP_LOGI(TAG, "Module %d state before start: %d, Module %d state: %d",
              module, static_cast<int>(moduleStates[module]),
              otherModule, static_cast<int>(moduleStates[otherModule]));
-    
+
     // Stop any ongoing operation first (ONLY on this module!)
     handleGoIdle(module);
-    
+
     // Save recording config
     recordingConfigs[module].frequency = config.frequency;
     recordingConfigs[module].modulation = config.modulation;
@@ -397,16 +395,16 @@ void CC1101Worker::handleStartRecord(int module, const CC1101Task& config) {
     recordingConfigs[module].rxBandwidth = config.rxBandwidth;
     recordingConfigs[module].dataRate = config.dataRate;
     recordingConfigs[module].preset = config.preset;
-    
+
     // Update state FIRST (before starting actual recording)
     // Send mode switch notification BEFORE changing state for accurate previousMode
     sendModeNotification(module, CC1101State::Recording);
     moduleStates[module] = CC1101State::Recording;
-    
+
     // Verify other module state unchanged
-    ESP_LOGI(TAG, "After start - Module %d: Recording, Module %d: %d (should be unchanged!)", 
+    ESP_LOGI(TAG, "After start - Module %d: Recording, Module %d: %d (should be unchanged!)",
              module, otherModule, static_cast<int>(moduleStates[otherModule]));
-    
+
     // Configure CC1101
     moduleCC1101State[module].setReceiveConfig(
         config.frequency,
@@ -416,30 +414,30 @@ void CC1101Worker::handleStartRecord(int module, const CC1101Task& config) {
         config.deviation,
         config.dataRate
     ).initConfig();
-    
+
     // Clear any previous samples and start ISR
     clearReceivedSamples(module);
-    
+
     // Get GDO0 pin for this module
     int gdo0Pin = moduleCC1101State[module].getInputPin();
-    ESP_LOGI(TAG, "Setting up ISR for module %d on pin %d (frequency=%.2f, modulation=%d, deviation=%.2f)", 
+    ESP_LOGI(TAG, "Setting up ISR for module %d on pin %d (frequency=%.2f, modulation=%d, deviation=%.2f)",
              module, gdo0Pin, config.frequency, config.modulation, config.deviation);
-    
+
     addModuleReceiver(module);
-    
+
     // Verify interrupt was attached
     if (digitalPinToInterrupt(gdo0Pin) != NOT_AN_INTERRUPT) {
         ESP_LOGI(TAG, "ISR successfully attached for module %d on pin %d", module, gdo0Pin);
     } else {
         ESP_LOGE(TAG, "Failed to attach ISR for module %d on pin %d!", module, gdo0Pin);
     }
-    
+
     ESP_LOGI(TAG, "Recording started on module %d", module);
 }
 
 void CC1101Worker::handleStopRecord(int module) {
     ESP_LOGI(TAG, "Stopping recording on module %d", module);
-    
+
     removeModuleReceiver(module);
     moduleCC1101State[module].setSidle();
     moduleCC1101State[module].unlock();
@@ -506,38 +504,38 @@ void CC1101Worker::stopProtoPirateRX(int module) {
 
 void CC1101Worker::handleTransmit(int module, const std::string& filename, int repeat, int pathType) {
     ESP_LOGI(TAG, "Transmitting on module %d: %s (repeat=%d)", module, filename.c_str(), repeat);
-    
+
     // Remember previous state for proper restoration
     CC1101State previousState = moduleStates[module];
     ESP_LOGI(TAG, "Module %d previous state: %d", module, static_cast<int>(previousState));
-    
+
     // Stop any ongoing operation first
     handleGoIdle(module);
-    
+
     // IMPORTANT: Give more time after stopping operation to ensure notification is sent
     vTaskDelay(pdMS_TO_TICKS(100));
-    
+
     // Update state
     moduleStates[module] = CC1101State::Transmitting;
-    
+
     // Send mode switch notification
     sendModeNotification(module, CC1101State::Transmitting);
-    
+
     // CRITICAL: Give BLE time to send notification before blocking transmission
     vTaskDelay(pdMS_TO_TICKS(100));
-    
+
     // Perform transmission (this is blocking)
     std::string error = transmitSub(filename, module, repeat, pathType);
-    
+
     // Back to idle
     moduleStates[module] = CC1101State::Idle;
-    
+
     // Send mode switch notification
     sendModeNotification(module, CC1101State::Idle);
-    
+
     // CRITICAL: Give BLE time to send notification
     vTaskDelay(pdMS_TO_TICKS(100));
-    
+
     if (error.empty()) {
         ESP_LOGI(TAG, "Transmission completed successfully on module %d", module);
     } else {
@@ -546,39 +544,39 @@ void CC1101Worker::handleTransmit(int module, const std::string& filename, int r
 }
 
 void CC1101Worker::handleStartAnalyzer(int module, float startFreq, float endFreq, float step, uint32_t dwellTime) {
-    ESP_LOGI(TAG, "Starting analyzer on module %d (%.2f - %.2f MHz, step=%.2f, dwell=%u ms)", 
+    ESP_LOGI(TAG, "Starting analyzer on module %d (%.2f - %.2f MHz, step=%.2f, dwell=%u ms)",
              module, startFreq, endFreq, step, dwellTime);
-    
+
     // Stop any ongoing operation first
     handleGoIdle(module);
-    
+
     // Validate and set defaults
     if (step <= 0 || step > 1.0f) {
         step = 0.1f;  // Default step 0.1 MHz
     }
-    
+
     if (dwellTime == 0) {
         dwellTime = 50;  // 50ms default dwell time
     }
-    
+
     frequencyAnalyzer.startScan(module, startFreq, endFreq, step, dwellTime);
     moduleStates[module] = CC1101State::Analyzing;
-    
+
     sendModeNotification(module, CC1101State::Analyzing);
 }
 
 void CC1101Worker::handleStopAnalyzer(int module) {
     ESP_LOGI(TAG, "Stopping analyzer on module %d", module);
-    
+
     frequencyAnalyzer.stopScan();
     moduleStates[module] = CC1101State::Idle;
-    
+
     sendModeNotification(module, CC1101State::Idle);
 }
 
 void CC1101Worker::processAnalyzing(int module) {
     frequencyAnalyzer.process();
-    
+
     // Check if analyzer finished
     if (!frequencyAnalyzer.isActive() && moduleStates[module] == CC1101State::Analyzing) {
         handleStopAnalyzer(module);
@@ -587,20 +585,20 @@ void CC1101Worker::processAnalyzing(int module) {
 
 void CC1101Worker::handleGoIdle(int module) {
     ESP_LOGD(TAG, "Setting module %d to idle", module);
-    
+
     switch (moduleStates[module]) {
         case CC1101State::Detecting:
             handleStopDetect(module);
             break;
-            
+
         case CC1101State::Recording:
             handleStopRecord(module);
             break;
-            
+
         case CC1101State::Analyzing:
             handleStopAnalyzer(module);
             break;
-            
+
         case CC1101State::Jamming:
             handleStopJam(module);
             break;
@@ -608,7 +606,7 @@ void CC1101Worker::handleGoIdle(int module) {
         case CC1101State::ProtoPirate:
             stopProtoPirateRX(module);
             break;
-            
+
         case CC1101State::Transmitting:
         case CC1101State::Idle:
         default:
@@ -622,14 +620,14 @@ void CC1101Worker::handleGoIdle(int module) {
 void CC1101Worker::processDetecting(int module) {
     // Scan all frequencies and report every signal above threshold
     detectSignal(module, detectionMinRssi[module], detectionIsBackground[module]);
-    
+
     // Small cooldown between full sweeps to avoid flooding BLE
     vTaskDelay(pdMS_TO_TICKS(50));
 }
 
 bool CC1101Worker::detectSignal(int module, int minRssi, bool isBackground) {
     bool anyFound = false;
-    
+
     // Scan ALL frequencies and report each one above threshold individually.
     // This turns the scanner into a real-time frequency activity monitor.
     for (int i = 0; i < SIGNAL_DETECTION_FREQUENCIES_LENGTH; i++) {
@@ -637,7 +635,7 @@ bool CC1101Worker::detectSignal(int module, int minRssi, bool isBackground) {
         moduleCC1101State[module].changeFrequency(fMhz);
         vTaskDelay(pdMS_TO_TICKS(1));
         int rssi = moduleCC1101State[module].getRssi();
-        
+
         if (rssi >= minRssi) {
             CC1101DetectedSignal signal;
             signal.rssi = rssi;
@@ -645,17 +643,17 @@ bool CC1101Worker::detectSignal(int module, int minRssi, bool isBackground) {
             signal.frequency = fMhz;
             signal.module = module;
             signal.isBackgroundScanner = isBackground;
-            
-            ESP_LOGD(TAG, "Signal: freq=%.2f rssi=%d module=%d", 
+
+            ESP_LOGD(TAG, "Signal: freq=%.2f rssi=%d module=%d",
                      fMhz, rssi, module);
-            
+
             if (signalDetectedCallback) {
                 signalDetectedCallback(signal);
             }
             anyFound = true;
         }
     }
-    
+
     return anyFound;
 }
 
@@ -671,74 +669,74 @@ void CC1101Worker::checkAndSaveRecording(int module) {
     size_t sampleCount = data.samples.size();
     unsigned long lastReceiveTime = data.lastReceiveTime;
     portEXIT_CRITICAL(&samplesMuxes[module]);
-    
+
     if (sampleCount < MIN_SAMPLE) {
         return;  // Not enough samples yet
     }
-    
+
     unsigned long timeSinceLast = micros() - lastReceiveTime;
     if (timeSinceLast <= MAX_SIGNAL_DURATION) {
         return;  // Signal still coming in
     }
-    
+
     ESP_LOGI(TAG, "Signal complete on module %d: %zu samples", module, sampleCount);
-    
+
     // Stop recording
     removeModuleReceiver(module);
-    
+
     // Limit samples
     if (sampleCount > 10000) {
         sampleCount = 10000;
     }
-    
+
     // Try to decode protocol in real-time
     ProtocolDecoder::DecodedSignal decoded;
     bool decodedSuccess = false;
-    
+
     // Get samples copy for decoding (must be done outside critical section)
     std::vector<unsigned long> samplesCopy;
     samplesCopy.reserve(sampleCount);
-    
+
     portENTER_CRITICAL(&samplesMuxes[module]);
     samplesCopy.assign(data.samples.begin(), data.samples.begin() + sampleCount);
     portEXIT_CRITICAL(&samplesMuxes[module]);
-    
+
     // Read RSSI outside critical section to avoid deadlock
     // (getRssi acquires rwSemaphore internally, which is forbidden inside portENTER_CRITICAL)
     int currentRssi = moduleCC1101State[module].getRssi();
-    
+
     // Attempt decoding
-    decodedSuccess = ProtocolDecoder::decode(samplesCopy, 
+    decodedSuccess = ProtocolDecoder::decode(samplesCopy,
                                             recordingConfigs[module].frequency,
                                             currentRssi,
                                             decoded);
-    
+
     if (decodedSuccess && decoded.isValid() && decoded.protocol != "RAW") {
         ESP_LOGI(TAG, "Signal decoded as %s protocol", decoded.protocol.c_str());
     } else {
         ESP_LOGD(TAG, "Signal could not be decoded to specific protocol, saving as RAW");
     }
-    
+
     // Generate filename (include protocol if decoded)
     RecordingConfig& config = recordingConfigs[module];
     char filenameBuffer[100];
     if (decodedSuccess && decoded.isValid() && decoded.protocol != "RAW") {
-        sprintf(filenameBuffer, "m%d_%s_%d_%s.sub", 
-                module, 
+        sprintf(filenameBuffer, "m%d_%s_%d_%s.sub",
+                module,
                 decoded.protocol.c_str(),
                 static_cast<int>(config.frequency * 100),
                 helpers::string::generateRandomString(8).c_str());
     } else {
-        sprintf(filenameBuffer, "m%d_%d_%s_%d_%s.sub", 
-                module, 
-                static_cast<int>(config.frequency * 100), 
+        sprintf(filenameBuffer, "m%d_%d_%s_%d_%s.sub",
+                module,
+                static_cast<int>(config.frequency * 100),
                 config.modulation == MODULATION_ASK_OOK ? "AM" : "FM",
                 static_cast<int>(config.rxBandwidth),
                 helpers::string::generateRandomString(8).c_str());
     }
     std::string filename = filenameBuffer;
     std::string fullPath = "/DATA/SIGNALS/" + filename;
-    
+
     // Prepare custom preset data if needed
     std::vector<byte> customPresetData;
     if (config.preset == "Custom") {
@@ -751,11 +749,11 @@ void CC1101Worker::checkAndSaveRecording(int module) {
             CC1101_FREND0,  m.getRegisterValue(CC1101_FREND0),
             0x00, 0x00
         });
-        
+
         std::array<byte, 8> paTable = m.getPATableValues();
         customPresetData.insert(customPresetData.end(), paTable.begin(), paTable.end());
     }
-    
+
     // CRITICAL OPTIMIZATION: Write chunks directly to file
     // CRITICAL: Lock SD mutex for concurrent file operations from multiple modules
     if (xSemaphoreTake(sdMutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
@@ -767,12 +765,12 @@ void CC1101Worker::checkAndSaveRecording(int module) {
         addModuleReceiver(module);
         return;
     }
-    
+
     // Create directory if needed
     if (!SD.exists("/DATA/SIGNALS")) {
         SD.mkdir("/DATA/SIGNALS");
     }
-    
+
     File file = SD.open(fullPath.c_str(), FILE_WRITE);
     if (!file) {
         ESP_LOGE(TAG, "Failed to open file: %s", fullPath.c_str());
@@ -784,14 +782,14 @@ void CC1101Worker::checkAndSaveRecording(int module) {
         addModuleReceiver(module);  // Restart recording
         return;
     }
-    
+
     // Write header and preset info
     file.println("Filetype: Flipper SubGhz RAW File");
     file.println("Version: 1");
     file.print("Frequency: ");
     file.print(config.frequency * 1e6, 0);
     file.println();
-    
+
     // Write preset
     file.print("Preset: ");
     std::string presetName = config.preset.empty() ? "Custom" : config.preset;
@@ -802,7 +800,7 @@ void CC1101Worker::checkAndSaveRecording(int module) {
     else if (presetName == "MSK") file.println("FuriHalSubGhzPresetMSK99_97KbAsync");
     else if (presetName == "GFSK") file.println("FuriHalSubGhzPresetGFSK9_99KbAsync");
     else file.println("FuriHalSubGhzPresetCustom");
-    
+
     if (presetName == "Custom" && !customPresetData.empty()) {
         file.println("Custom_preset_module: CC1101");
         file.print("Custom_preset_data: ");
@@ -814,12 +812,12 @@ void CC1101Worker::checkAndSaveRecording(int module) {
         }
         file.println();
     }
-    
+
     // Write protocol (decoded if available, otherwise RAW)
     file.print("Protocol: ");
     if (decodedSuccess && decoded.isValid() && decoded.protocol != "RAW") {
         file.println(decoded.protocol.c_str());
-        
+
         // Write protocol-specific data
         if (decoded.protocol == "Princeton") {
             if (!decoded.key.empty()) {
@@ -839,7 +837,7 @@ void CC1101Worker::checkAndSaveRecording(int module) {
                 file.println(decoded.repeat);
             }
         }
-        
+
         // Also save RAW data as fallback
         file.println("RAW_Data: ");
         file.print("RAW_Data: ");
@@ -847,22 +845,22 @@ void CC1101Worker::checkAndSaveRecording(int module) {
         file.println("RAW");
         file.print("RAW_Data: ");
     }
-    
+
     // Write samples in chunks directly from ISR buffer
     const size_t CHUNK_SIZE = 256;
     unsigned long chunk[CHUNK_SIZE];
     size_t offset = 0;
-    
+
     while (offset < sampleCount) {
         size_t chunkSize = min(CHUNK_SIZE, sampleCount - offset);
-        
+
         // Copy chunk from ISR buffer
         portENTER_CRITICAL(&samplesMuxes[module]);
         for (size_t i = 0; i < chunkSize; i++) {
             chunk[i] = data.samples[offset + i];
         }
         portEXIT_CRITICAL(&samplesMuxes[module]);
-        
+
         // Write chunk to file
         for (size_t i = 0; i < chunkSize; i++) {
             if (offset + i > 0) {
@@ -870,33 +868,33 @@ void CC1101Worker::checkAndSaveRecording(int module) {
             }
             file.print(chunk[i]);
         }
-        
+
         offset += chunkSize;
-        
+
         // Line breaks every 512 numbers
         if (offset % 512 == 0 && offset < sampleCount) {
             file.println();
             file.print("RAW_Data: ");
         }
     }
-    
+
     file.println();
     file.close();
-    
+
     // NOTE: File time setting is disabled here to avoid stack overflow
     // Time will be set when file is saved to Records directory via saveFileToSignalsWithName
     // which has more stack space available
-    
+
     // CRITICAL: Release SD mutex after file operations
     xSemaphoreGive(sdMutex);
-    
+
     ESP_LOGI(TAG, "Signal saved: %s (%zu samples)", filename.c_str(), sampleCount);
-    
+
     // Callback
     if (signalRecordedCallback) {
         signalRecordedCallback(true, filename);
     }
-    
+
     // Clear samples and restart recording
     clearReceivedSamples(module);
     addModuleReceiver(module);
@@ -1019,36 +1017,36 @@ std::string CC1101Worker::transmitSub(const std::string& filename, int module, i
         ESP_LOGE(TAG, "%s", msg.c_str());
         return msg;
     }
-    
+
     // OPTIMIZED: Use StreamingSubFileParser (minimal RAM usage!)
     StreamingSubFileParser streamParser;
     StreamingSubFileParser::SubFileHeader header;
-    
+
     ESP_LOGD(TAG, "Parsing header (pass 1)...");
     if (!streamParser.parseHeader(fullPath.c_str(), header)) {
         std::string msg = "Failed to parse header from .sub: " + fullPath;
         ESP_LOGE(TAG, "%s", msg.c_str());
         return msg;
     }
-    
+
     // Check if it's a supported protocol (RAW only for now)
     if (header.protocol != "RAW") {
         std::string msg = "Unsupported protocol (only RAW supported in streaming mode): " + header.protocol;
         ESP_LOGE(TAG, "%s", msg.c_str());
         return msg;
     }
-    
+
     ESP_LOGD(TAG, "Header parsed, frequency: %.2f MHz", header.frequency / 1000000.0);
-    
+
     // Configure CC1101 with proper order:
     // CRITICAL: Preset must be applied AFTER Init but BEFORE entering TX mode
     // Order: 1) Idle, 2) Init (reset registers), 3) Set frequency, 4) Apply preset, 5) Set TX
     ESP_LOGD(TAG, "Configuring CC1101 module %d", module);
-    
+
     // Get preset bytes
     const uint8_t* presetBytes = nullptr;
     int presetLength = 0;
-    
+
     if (!header.preset.empty()) {
         presetBytes = getPresetByteArray(header.preset);
         if (presetBytes != nullptr) {
@@ -1056,13 +1054,13 @@ std::string CC1101Worker::transmitSub(const std::string& filename, int module, i
             ESP_LOGI(TAG, "Using standard preset: %s", header.preset.c_str());
         }
     }
-    
+
     if (presetBytes == nullptr && header.customPresetDataSize > 0) {
         presetBytes = header.customPresetData;
         presetLength = header.customPresetDataSize;
         ESP_LOGI(TAG, "Using custom preset (%zu bytes)", header.customPresetDataSize);
     }
-    
+
     if (presetBytes == nullptr) {
         ESP_LOGW(TAG, "No preset available - using default CC1101 configuration");
         // Use regular setTx without preset
@@ -1071,25 +1069,25 @@ std::string CC1101Worker::transmitSub(const std::string& filename, int module, i
         // Use setTxWithPreset which applies preset in correct order
         moduleCC1101State[module].setTxWithPreset(header.frequency / 1000000.0, presetBytes, presetLength);
     }
-    
+
     delay(10);
-    
+
     // ULTRA-OPTIMIZED: Use StreamingPulsePayload (reads from file on-demand!)
     // RAM usage: ~100 bytes instead of ~2KB for vector!
     ESP_LOGD(TAG, "Initializing streaming transmission (repeat: %d)", repeat);
-    
+
     StreamingPulsePayload streamingPayload;
     if (!streamingPayload.init(fullPath.c_str(), repeat)) {
         std::string msg = "Failed to initialize streaming payload: " + fullPath;
         ESP_LOGE(TAG, "%s", msg.c_str());
         return msg;
     }
-    
+
     // Transmit directly from file
     ESP_LOGD(TAG, "Starting streaming transmission...");
     bool signalTransmitted = transmitData(streamingPayload, module);
     ESP_LOGD(TAG, "Transmission result: %s", signalTransmitted ? "SUCCESS" : "FAILED");
-    
+
     streamingPayload.close();
     moduleCC1101State[module].restoreConfig().setSidle();
     ESP_LOGI(TAG, "Transmission %s for %s", signalTransmitted ? "SUCCESS" : "FAILED", fullPath.c_str());
@@ -1145,41 +1143,41 @@ bool CC1101Worker::startDetect(int module, int minRssi, bool isBackground) {
         ESP_LOGE(TAG, "Task queue not initialized");
         return false;
     }
-    
+
     CC1101Task* task = new CC1101Task();
     task->command = CC1101Command::StartDetect;
     task->module = module;
     task->minRssi = minRssi;
     task->isBackground = isBackground;
-    
+
     if (xQueueSend(taskQueue, &task, pdMS_TO_TICKS(100)) != pdTRUE) {
         delete task;
         ESP_LOGE(TAG, "Failed to enqueue task");
         return false;
     }
-    
+
     return true;
 }
 
 bool CC1101Worker::stopDetect(int module) {
     if (taskQueue == nullptr) return false;
-    
+
     CC1101Task* task = new CC1101Task();
     task->command = CC1101Command::StopDetect;
     task->module = module;
-    
+
     if (xQueueSend(taskQueue, &task, pdMS_TO_TICKS(100)) != pdTRUE) {
         delete task;
         return false;
     }
-    
+
     return true;
 }
 
 bool CC1101Worker::startRecord(int module, float frequency, int modulation, float deviation,
                                 float rxBandwidth, float dataRate, const std::string& preset) {
     if (taskQueue == nullptr) return false;
-    
+
     CC1101Task* task = new CC1101Task();
     task->command = CC1101Command::StartRecord;
     task->module = module;
@@ -1189,66 +1187,66 @@ bool CC1101Worker::startRecord(int module, float frequency, int modulation, floa
     task->rxBandwidth = rxBandwidth;
     task->dataRate = dataRate;
     task->preset = preset;
-    
+
     if (xQueueSend(taskQueue, &task, pdMS_TO_TICKS(100)) != pdTRUE) {
         delete task;
         return false;
     }
-    
+
     return true;
 }
 
 bool CC1101Worker::stopRecord(int module) {
     if (taskQueue == nullptr) return false;
-    
+
     CC1101Task* task = new CC1101Task();
     task->command = CC1101Command::StopRecord;
     task->module = module;
-    
+
     if (xQueueSend(taskQueue, &task, pdMS_TO_TICKS(100)) != pdTRUE) {
         delete task;
         return false;
     }
-    
+
     return true;
 }
 
 bool CC1101Worker::transmit(int module, const std::string& filename, int repeat, int pathType) {
     if (taskQueue == nullptr) return false;
-    
+
     CC1101Task* task = new CC1101Task();
     task->command = CC1101Command::Transmit;
     task->module = module;
     task->filename = filename;
     task->repeat = repeat;
     task->pathType = pathType;
-    
+
     if (xQueueSend(taskQueue, &task, pdMS_TO_TICKS(100)) != pdTRUE) {
         delete task;
         return false;
     }
-    
+
     return true;
 }
 
 bool CC1101Worker::goIdle(int module) {
     if (taskQueue == nullptr) return false;
-    
+
     CC1101Task* task = new CC1101Task();
     task->command = CC1101Command::GoIdle;
     task->module = module;
-    
+
     if (xQueueSend(taskQueue, &task, pdMS_TO_TICKS(100)) != pdTRUE) {
         delete task;
         return false;
     }
-    
+
     return true;
 }
 
 bool CC1101Worker::startAnalyzer(int module, float startFreq, float endFreq, float step, uint32_t dwellTime) {
     if (taskQueue == nullptr) return false;
-    
+
     CC1101Task* task = new CC1101Task();
     task->command = CC1101Command::StartAnalyzer;
     task->module = module;
@@ -1256,27 +1254,27 @@ bool CC1101Worker::startAnalyzer(int module, float startFreq, float endFreq, flo
     task->rxBandwidth = endFreq;      // Use rxBandwidth field for endFreq
     task->deviation = step;           // Use deviation field for step
     task->dataRate = dwellTime;       // Use dataRate field for dwellTime
-    
+
     if (xQueueSend(taskQueue, &task, pdMS_TO_TICKS(100)) != pdTRUE) {
         delete task;
         return false;
     }
-    
+
     return true;
 }
 
 bool CC1101Worker::stopAnalyzer(int module) {
     if (taskQueue == nullptr) return false;
-    
+
     CC1101Task* task = new CC1101Task();
     task->command = CC1101Command::StopAnalyzer;
     task->module = module;
-    
+
     if (xQueueSend(taskQueue, &task, pdMS_TO_TICKS(100)) != pdTRUE) {
         delete task;
         return false;
     }
-    
+
     return true;
 }
 
@@ -1295,11 +1293,11 @@ void CC1101Worker::sendModeNotification(int module, CC1101State newState) {
     msg.module = static_cast<uint8_t>(module);
     msg.currentMode = static_cast<uint8_t>(newState);
     msg.previousMode = static_cast<uint8_t>(moduleStates[module]);
-    
+
     // Send as binary data
     clients.notifyAllBinary(NotificationType::ModeSwitch, reinterpret_cast<const uint8_t*>(&msg), sizeof(BinaryModeSwitch));
-    
-    ESP_LOGI(TAG, "[NOTIFY] Module=%d: %d → %d", 
+
+    ESP_LOGI(TAG, "[NOTIFY] Module=%d: %d → %d",
              module, static_cast<int>(msg.previousMode), static_cast<int>(newState));
 }
 
@@ -1310,10 +1308,10 @@ void CC1101Worker::sendHeartbeat() {
     if (clients.getConnectedCount() == 0) {
         return;  // No connected clients, skip heartbeat
     }
-    
+
     // Send full device status for widget updates (same as GetState)
     const byte numRegs = 0x2E;
-    
+
     BinaryStatus status;
     status.messageType = MSG_STATUS;
     status.module0Mode = static_cast<uint8_t>(moduleStates[0]);
@@ -1324,19 +1322,19 @@ void CC1101Worker::sendHeartbeat() {
         + ConfigManager::settings.cpuTempOffsetDeciC;
     status.core0Mhz = static_cast<uint16_t>(ESP.getCpuFreqMHz());
     status.core1Mhz = static_cast<uint16_t>(ESP.getCpuFreqMHz());
-    
+
     // Read all CC1101 registers for both modules
     moduleCC1101State[0].readAllConfigRegisters(status.module0Registers, numRegs);
     moduleCC1101State[1].readAllConfigRegisters(status.module1Registers, numRegs);
-    
+
     // Send binary status
-    clients.notifyAllBinary(NotificationType::State, 
-                           reinterpret_cast<const uint8_t*>(&status), 
+    clients.notifyAllBinary(NotificationType::State,
+                           reinterpret_cast<const uint8_t*>(&status),
                            sizeof(BinaryStatus));
-    
-    ESP_LOGD(TAG, "Heartbeat sent: Module0=%d, Module1=%d, FreeHeap=%u", 
-             static_cast<int>(moduleStates[0]), 
-             static_cast<int>(moduleStates[1]), 
+
+    ESP_LOGD(TAG, "Heartbeat sent: Module0=%d, Module1=%d, FreeHeap=%u",
+             static_cast<int>(moduleStates[0]),
+             static_cast<int>(moduleStates[1]),
              status.freeHeap);
 }
 
@@ -1351,7 +1349,7 @@ bool CC1101Worker::startJam(int module, float frequency, int power,
         ESP_LOGE(TAG, "Invalid module for jam: %d", module);
         return false;
     }
-    
+
     CC1101Task* task = new CC1101Task();
     task->command = CC1101Command::StartJam;
     task->module = module;
@@ -1368,13 +1366,13 @@ bool CC1101Worker::startJam(int module, float frequency, int power,
     }
     task->maxDurationMs = maxDurationMs;
     task->cooldownMs = cooldownMs;
-    
+
     if (xQueueSend(taskQueue, &task, pdMS_TO_TICKS(1000)) != pdTRUE) {
         ESP_LOGE(TAG, "Failed to queue jam task for module %d", module);
         delete task;
         return false;
     }
-    
+
     return true;
 }
 
@@ -1383,7 +1381,7 @@ bool CC1101Worker::stopJam(int module) {
         ESP_LOGE(TAG, "Invalid module for stopJam: %d", module);
         return false;
     }
-    
+
     // Call handleStopJam directly since this is called from main task processor
     // which already handles synchronization
     handleStopJam(module);
@@ -1394,7 +1392,7 @@ void CC1101Worker::handleStartJam(int module, float frequency, int power,
                                   Device::JamPatternType patternType, const std::vector<uint8_t>& customPatternData,
                                   bool hasCustomPattern, uint32_t maxDurationMs, uint32_t cooldownMs) {
     ESP_LOGI(TAG, "=== Starting jam on module %d ===", module);
-    
+
     // Convert pattern type to string for logging
     const char* patternName = "Unknown";
     switch (patternType) {
@@ -1403,10 +1401,10 @@ void CC1101Worker::handleStartJam(int module, float frequency, int power,
         case Device::JamPatternType::Continuous: patternName = "Continuous"; break;
         case Device::JamPatternType::Custom: patternName = "Custom"; break;
     }
-    
+
     ESP_LOGI(TAG, "Input parameters: freq=%.2f MHz, power=%d, pattern=%s (%d), maxDur=%lu ms, cooldown=%lu ms",
              frequency, power, patternName, static_cast<int>(patternType), maxDurationMs, cooldownMs);
-    
+
     // Stop any ongoing operation first
     handleGoIdle(module);
     vTaskDelay(pdMS_TO_TICKS(100));
@@ -1415,12 +1413,12 @@ void CC1101Worker::handleStartJam(int module, float frequency, int power,
         ESP_LOGW(TAG, "Invalid power %d, clamping to 7", power);
         power = 7;
     }
-    
+
     // Configure module for transmission - same logic as in transmitSub
     // Use setTxWithPreset() like transmitSub does with preset
     ModuleCc1101& m = moduleCC1101State[module];
     m.backupConfig();
-    
+
     // Store jamming configuration (needed for pattern generation and time management)
     JammingConfig& config = jammingConfigs[module];
     config.frequency = frequency;
@@ -1437,24 +1435,24 @@ void CC1101Worker::handleStartJam(int module, float frequency, int power,
     config.gdo0Pin = m.getOutputPin();  // GDO0 pin (inputPin is actually GDO0)
     config.pinInitialized = false;      // Reset initialization flags
     config.fifoInitialized = false;
-    
+
     if (patternType == Device::JamPatternType::Custom && hasCustomPattern) {
         config.customPattern = customPatternData;  // Copy from owned data (safe)
     } else {
         config.customPattern.clear();
     }
-    
+
     // Use Ook650 preset as base (ASK/OOK with wide bandwidth - good for jamming)
     const uint8_t* basePreset = subghz_device_cc1101_preset_ook_650khz_async_regs;
-    
+
     // Create preset bytes with power-specific PA table
     static uint8_t jamPresetBytes[44];
     memcpy(jamPresetBytes, basePreset, 44);
-    
+
     // Use setTxWithPreset() - same as transmitSub
     m.setTxWithPreset(frequency, jamPresetBytes, 44);
     delay(20);  // Initial delay after preset application
-    
+
     // Perform explicit calibration and wait for completion
     // Split_MDMCFG2() is called inside calibrate() to update modulation from register
     // This ensures optimal frequency accuracy and reduces spurious emissions
@@ -1466,7 +1464,7 @@ void CC1101Worker::handleStartJam(int module, float frequency, int power,
         ESP_LOGI(TAG, "[JAM] Calibration completed successfully");
     }
     delay(20);  // Additional delay after calibration for stabilization
-    
+
     // Set power using CC1101's setPA function
     // Convert power level (0-7) to dBm for setPA
     // 0=-30, 1=-20, 2=-15, 3=-10, 4=0, 5=5, 6=7, 7=10 dBm
@@ -1478,38 +1476,38 @@ void CC1101Worker::handleStartJam(int module, float frequency, int power,
     else if (power == 5) powerDbm = 5;
     else if (power == 6) powerDbm = 7;
     else if (power >= 7) powerDbm = 10;
-    
+
     // setPA() will automatically:
     // 1. Select correct PA table based on frequency (MHz[currentModule] is set by setMHZ in setTxWithPreset)
     // 2. Read modulation from MDMCFG2 register (using Split_MDMCFG2)
     // 3. Set PA_TABLE correctly based on modulation type
     m.setPA(powerDbm);
     delay(20);  // Delay for PA stabilization after power setting
-    
+
     // Additional delay to ensure CC1101 is fully ready for transmission
     delay(10);
-    
+
     // Log key CC1101 registers
     byte freq2 = m.getRegisterValue(0x0D);  // FREQ2
     byte freq1 = m.getRegisterValue(0x0E);  // FREQ1
     byte freq0 = m.getRegisterValue(0x0F);  // FREQ0
-    
-    ESP_LOGI(TAG, "CC1101 FREQ: 0x%02X%02X%02X (%.2f MHz), power=%d", 
+
+    ESP_LOGI(TAG, "CC1101 FREQ: 0x%02X%02X%02X (%.2f MHz), power=%d",
              freq2, freq1, freq0, frequency, power);
-    
+
     // Update state
     moduleStates[module] = CC1101State::Jamming;
     sendModeNotification(module, CC1101State::Jamming);
-    
+
     ESP_LOGI(TAG, "=== Jam started on module %d ===", module);
 }
 
 void CC1101Worker::handleStopJam(int module) {
     ESP_LOGI(TAG, "Stopping jam on module %d", module);
-    
+
     ModuleCc1101& m = moduleCC1101State[module];
     JammingConfig& config = jammingConfigs[module];
-    
+
     // Reset GDO0 pin to LOW and initialization flags
     if (config.useDirectPinControl && config.pinInitialized) {
         digitalWrite(config.gdo0Pin, LOW);
@@ -1517,20 +1515,20 @@ void CC1101Worker::handleStopJam(int module) {
         ESP_LOGI(TAG, "[JAM] GDO0 pin %d set to LOW", config.gdo0Pin);
     }
     config.fifoInitialized = false;
-    
+
     m.setSidle();
     m.restoreConfig();
     m.unlock();
-    
+
     moduleStates[module] = CC1101State::Idle;
     sendModeNotification(module, CC1101State::Idle);
-    
+
     ESP_LOGI(TAG, "Jam stopped on module %d", module);
 }
 
 uint8_t CC1101Worker::generateJamPatternByte(int module, size_t index) {
     JammingConfig& config = jammingConfigs[module];
-    
+
     switch (config.patternType) {
         case Device::JamPatternType::Random:
             // Generate pseudo-random byte based on index and time
@@ -1545,21 +1543,21 @@ uint8_t CC1101Worker::generateJamPatternByte(int module, size_t index) {
                 lfsr[module] = l;
                 return static_cast<uint8_t>(l ^ seed);
             }
-            
+
         case Device::JamPatternType::Alternating:
             // Alternating pattern: 0xAA, 0x55
             return (index % 2 == 0) ? 0xAA : 0x55;
-            
+
         case Device::JamPatternType::Continuous:
             // Continuous transmission
             return 0xFF;
-            
+
         case Device::JamPatternType::Custom:
             if (!config.customPattern.empty()) {
                 return config.customPattern[index % config.customPattern.size()];
             }
             return 0xFF; // Fallback
-            
+
         default:
             return 0xFF;
     }
@@ -1574,7 +1572,7 @@ void CC1101Worker::generateJamPattern(int module, uint8_t* buffer, size_t length
 void CC1101Worker::processJamming(int module) {
     JammingConfig& config = jammingConfigs[module];
     uint32_t currentTime = millis();
-    
+
     // FIRST check cooldown mode (to avoid re-entrancy)
     if (config.isCooldown) {
         uint32_t cooldownElapsed = currentTime - config.cooldownStartTimeMs;
@@ -1582,24 +1580,24 @@ void CC1101Worker::processJamming(int module) {
             ESP_LOGI(TAG, "Module %d cooldown complete (%lu ms), resuming jam", module, cooldownElapsed);
             config.isCooldown = false;
             config.startTimeMs = currentTime; // Reset timer for new cycle
-            
+
             // Resume transmission — MUST use setTxWithPreset() to re-apply the
             // full preset (Ook650) including FREND0=0x11. Plain setTx() calls Init()
             // which resets ALL registers to POR defaults; FREND0 reverts to 0x10.
             // With ASK/OOK PA_TABLE {0x00, power, 0...}, FREND0[2:0]=0 selects
             // PA_TABLE[0]=0x00 → ZERO RF output after cooldown.
             ModuleCc1101& m = moduleCC1101State[module];
-            
+
             const uint8_t* basePreset = subghz_device_cc1101_preset_ook_650khz_async_regs;
             static uint8_t resumePresetBytes[44];
             memcpy(resumePresetBytes, basePreset, 44);
             m.setTxWithPreset(config.frequency, resumePresetBytes, 44);
             delay(20);
-            
+
             // Re-calibrate and re-apply power after preset
             m.calibrate();
             m.waitForCalibration(100);
-            
+
             int powerDbm = -30;
             if (config.power == 1) powerDbm = -20;
             else if (config.power == 2) powerDbm = -15;
@@ -1610,7 +1608,7 @@ void CC1101Worker::processJamming(int module) {
             else if (config.power >= 7) powerDbm = 10;
             m.setPA(powerDbm);
             delay(10);
-            
+
             // Force re-initialization of GDO0 pin drive on next processJamming() call
             config.pinInitialized = false;
             config.fifoInitialized = false;
@@ -1619,29 +1617,29 @@ void CC1101Worker::processJamming(int module) {
             return;
         }
     }
-    
+
     // Now check overheat protection (only if NOT in cooldown)
     uint32_t elapsed = currentTime - config.startTimeMs;
     if (config.maxDurationMs > 0 && elapsed >= config.maxDurationMs) {
-        ESP_LOGI(TAG, "Module %d jam max duration reached (%lu ms), entering cooldown for %lu ms", 
+        ESP_LOGI(TAG, "Module %d jam max duration reached (%lu ms), entering cooldown for %lu ms",
                  module, elapsed, config.cooldownMs);
         config.isCooldown = true;
         config.cooldownStartTimeMs = currentTime;
-        
+
         // Stop transmission
         ModuleCc1101& m = moduleCC1101State[module];
         m.setSidle();
-        
+
         return;
     }
-    
+
     // Generate and transmit pattern via CC1101
     // Use non-blocking approach: SendData with delay instead of waiting for GDO0
     // This works as jamming - constant data transmission overloads the air
-    
+
     ModuleCc1101& m = moduleCC1101State[module];
     JammingConfig& jamConfig = jammingConfigs[module];
-    
+
     // Log parameters periodically (every 100 calls = ~1 second at 10ms cycle)
     static int logCounter[CC1101_NUM_MODULES] = {0, 0};
     if (++logCounter[module] % 100 == 0) {
@@ -1653,20 +1651,20 @@ void CC1101Worker::processJamming(int module) {
             case Device::JamPatternType::Continuous: patternName = "Continuous"; break;
             case Device::JamPatternType::Custom: patternName = "Custom"; break;
         }
-        
+
         ESP_LOGI(TAG, "[JAM] Module %d: freq=%.2f MHz, mod=%d, dev=%.2f kHz, power=%d, pattern=%s (%d), elapsed=%lu ms",
                  module, jamConfig.frequency, jamConfig.modulation, jamConfig.deviation,
                  jamConfig.power, patternName, static_cast<int>(jamConfig.patternType), millis() - jamConfig.startTimeMs);
-        
+
         // Log current frequency register
         byte freq2 = m.getRegisterValue(0x0D);
         byte freq1 = m.getRegisterValue(0x0E);
         byte freq0 = m.getRegisterValue(0x0F);
         ESP_LOGI(TAG, "[JAM] Module %d FREQ registers: 0x%02X%02X%02X", module, freq2, freq1, freq0);
     }
-    
+
     // m.setTx(config.frequency);
-    
+
     // Choose jamming method: direct pin control or via sendData
     if (jamConfig.useDirectPinControl) {
         // Direct control of GDO0 pin for continuous jamming
@@ -1674,7 +1672,7 @@ void CC1101Worker::processJamming(int module) {
         // For effective jamming keep the pin CONSTANTLY HIGH (no toggling)
         // This will create a continuous signal without gaps
         byte gdo0Pin = jamConfig.gdo0Pin;
-        
+
         // Set the pin to HIGH once on the first call
         // Important: do this after a short delay following CC1101 initialization for stability
         if (!jamConfig.pinInitialized) {
@@ -1684,14 +1682,14 @@ void CC1101Worker::processJamming(int module) {
             jamConfig.pinInitialized = true;
             ESP_LOGI(TAG, "[JAM] Direct pin control initialized: GDO0 pin=%d, state=HIGH (continuous)", gdo0Pin);
         }
-        
+
         // Pin already set to HIGH, do nothing - just yield control
         // This ensures continuous transmission without gaps
     } else {
         // Method via continuous FIFO transmission
         // Generate a pattern to transmit (64 bytes - maximum FIFO size)
         static uint8_t pattern[64];
-        
+
         if (!jamConfig.fifoInitialized) {
             // Initialization: fill the FIFO and start continuous transmission
             generateJamPattern(module, pattern, 64);
@@ -1702,17 +1700,17 @@ void CC1101Worker::processJamming(int module) {
             // Start transmission (already in TX mode after setTxWithPreset)
             // In asynchronous mode data will be transmitted continuously
             jamConfig.fifoInitialized = true;
-            
+
             ESP_LOGI(TAG, "[JAM] FIFO continuous TX initialized: pattern size=64 bytes");
             ESP_LOGI(TAG, "[JAM] Module %d pattern (first 8 bytes): %02X %02X %02X %02X %02X %02X %02X %02X",
                      module, pattern[0], pattern[1], pattern[2], pattern[3], pattern[4], pattern[5], pattern[6], pattern[7]);
         }
-        
+
         // Periodically refill FIFO if it becomes empty
         // But in asynchronous mode this is not required - data is transmitted directly via GDO0
         // This code is kept for compatibility but is effectively unused
     }
-    
+
     // Yield control to other tasks
     taskYIELD();
 }

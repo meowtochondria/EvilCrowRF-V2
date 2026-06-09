@@ -34,11 +34,10 @@
 
 #if SDR_MODULE_ENABLED
 
-#include "core/ble/CommandHandler.h"
-#include "core/ble/ClientsManager.h"
+#include "core/CommandHandler.h"
+#include "core/ClientsManager.h"
 #include "BinaryMessages.h"
 #include "modules/sdr/SdrModule.h"
-#include "esp_log.h"
 
 class SdrCommands {
 public:

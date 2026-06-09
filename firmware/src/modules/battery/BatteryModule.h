@@ -21,7 +21,7 @@
 
 #if BATTERY_MODULE_ENABLED
 
-#include "core/ble/ClientsManager.h"
+#include "core/ClientsManager.h"
 #include <esp32-hal-adc.h>
 #include "esp_log.h"
 

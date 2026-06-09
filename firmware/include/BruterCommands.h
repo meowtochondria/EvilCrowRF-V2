@@ -1,12 +1,9 @@
 #ifndef BruterCommands_h
 #define BruterCommands_h
 
-#include "StringBuffer.h"
-#include "core/ble/CommandHandler.h"
-#include "core/ble/ControllerAdapter.h"
-#include "DeviceTasks.h"
-#include "StringHelpers.h"
-#include "core/ble/ClientsManager.h"
+#include "core/CommandHandler.h"
+#include "core/ClientsManager.h"
+#include "BinaryMessages.h"
 #include "config.h"
 #include "modules/bruter/bruter_main.h"
 #include "cstring"

@@ -23,7 +23,7 @@
 #include "protocols/PPAllProtocols.h"
 #include "modules/CC1101_driver/CC1101_Module.h"
 #include "modules/CC1101_driver/CC1101_Worker.h"
-#include "core/ble/ClientsManager.h"
+#include "core/ClientsManager.h"
 #include "BinaryMessages.h"
 #include "esp_log.h"
 

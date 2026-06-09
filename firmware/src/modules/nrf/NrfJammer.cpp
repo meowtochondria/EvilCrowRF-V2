@@ -37,12 +37,9 @@
 
 #include "NrfJammer.h"
 #include "NrfModule.h"
-#include "core/ble/ClientsManager.h"
+#include "core/ClientsManager.h"
 #include "BinaryMessages.h"
-#include "core/device_controls/DeviceControls.h"
-#include "ConfigManager.h"
 #include <LittleFS.h>
-#include "esp_log.h"
 
 static const char* TAG = "NrfJammer";
 

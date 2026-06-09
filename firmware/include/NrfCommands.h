@@ -34,8 +34,8 @@
 #define NRF_COMMANDS_H
 
 #include <Arduino.h>
-#include "core/ble/CommandHandler.h"
-#include "core/ble/ClientsManager.h"
+#include "core/CommandHandler.h"
+#include "core/ClientsManager.h"
 #include "BinaryMessages.h"
 #include "modules/nrf/NrfModule.h"
 #include "modules/nrf/MouseJack.h"

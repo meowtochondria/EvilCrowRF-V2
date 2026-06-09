@@ -3,7 +3,7 @@
 #include "../../lib/CC1101_RadioLib/CC1101_Radio.h"
 #include "../../src/modules/CC1101_driver/CC1101_Module.h"
 #include "../../src/core/device_controls/DeviceControls.h"
-#include "../../src/core/ble/ClientsManager.h"
+#include "core/ClientsManager.h"
 #include "../../include/BinaryMessages.h"
 #include "../../include/BruterState.h"
 #include <SPI.h>

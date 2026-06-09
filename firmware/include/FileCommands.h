@@ -2,8 +2,8 @@
 #define FileCommands_h
 
 #include "StringBuffer.h"
-#include "core/ble/CommandHandler.h"
-#include "core/ble/ClientsManager.h"
+#include "core/CommandHandler.h"
+#include "core/ClientsManager.h"
 #include "BinaryMessages.h"
 #include "core/ble/BleAdapter.h"
 #include "SD.h"

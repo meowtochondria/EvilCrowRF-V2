@@ -22,14 +22,12 @@
  *   0x0B = List saved      (no params — lists /DATA/PROTOPIRATE/)
  */
 
-#include "core/ble/CommandHandler.h"
-#include "core/ble/ClientsManager.h"
+#include "core/CommandHandler.h"
+#include "core/ClientsManager.h"
 #include "BinaryMessages.h"
 #include "config.h"
 #include "modules/protopirate/ProtoPirateModule.h"
-#include "esp_log.h"
 #include <cstring>
-#include "SD.h"
 #include "ff.h"  // FATFS low-level API for fast directory listing
 
 class ProtoPirateCommands {

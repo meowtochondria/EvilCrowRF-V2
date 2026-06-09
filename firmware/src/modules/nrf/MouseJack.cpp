@@ -9,10 +9,9 @@
 #include "MouseJack.h"
 #include "NrfModule.h"
 #include "HidPayloads.h"
-#include "core/ble/ClientsManager.h"
+#include "core/ClientsManager.h"
 #include "BinaryMessages.h"
 #include "SD.h"
-#include "esp_log.h"
 
 static const char* TAG = "MouseJack";
 

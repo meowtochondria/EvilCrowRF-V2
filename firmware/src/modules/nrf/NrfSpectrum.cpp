@@ -9,9 +9,8 @@
 
 #include "NrfSpectrum.h"
 #include "NrfModule.h"
-#include "core/ble/ClientsManager.h"
+#include "core/ClientsManager.h"
 #include "BinaryMessages.h"
-#include "esp_log.h"
 
 static const char* TAG = "NrfSpectrum";
 
