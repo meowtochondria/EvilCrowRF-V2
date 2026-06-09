@@ -50,9 +50,9 @@ The current EvilCrowRF V2 uses **BLE (Bluetooth Low Energy)** as its sole wirele
 
 **Key files:**
 - `firmware/src/core/ble/BleAdapter.{h,cpp}` — BLE GATT server, chunked send/receive, file upload streaming
-- `firmware/src/core/ble/CommandHandler.h` — Command dispatch map (uint8_t → callback)
-- `firmware/src/core/ble/ClientsManager.h` — Fan-out notifications to all adapters
-- `firmware/src/core/ble/ControllerAdapter.h` — Abstract base + task queue
+- `firmware/src/core/CommandHandler.h` — Command dispatch map (uint8_t → callback)
+- `firmware/src/core/ClientsManager.h` — Fan-out notifications to all adapters
+- `firmware/src/core/ControllerAdapter.h` — Abstract base + task queue
 - `firmware/include/BinaryMessages.h` — All response message structs (0x80–0xFF)
 - `firmware/include/*Commands.h` — Command handler implementations (~15 files)
 - `firmware/src/main.cpp` — `setup()` registers all commands, initializes BLE
@@ -456,6 +456,8 @@ make deploy-wifi-wifi # build wifi + deploy over WiFi ADB
 **Modifications:**
 - `firmware/src/main.cpp`: Add `#ifdef EVILCROW_WIFI_MODE` to init `WifiAdapter` instead of `BleAdapter`
 - `firmware/src/core/ble/BinaryProtocolHandler.h/.cpp` — **NEW** shared class extracted from `BleAdapter` containing `processBinaryData()`, `handleSingleCommand()`, `sendSingleChunk()`, reused by both adapters
+- The generalized abstractions (`ControllerAdapter`, `ClientsManager`, `CommandHandler`) live in `firmware/src/core/`, not under `ble/`. Both `BleAdapter` (BLE) and the planned `WifiAdapter` (WiFi) inherit from `ControllerAdapter` and register with `ClientsManager`.
+- `Request.h` / `Request.cpp` (previously in `core/ble/`) were removed — their only used struct `RequestScan` was inlined into `StateCommands.h`, and `calculateCRC32`, `RequestRecord`, `TransmitFromFileRequest` were unused.
 
 **WifiAdapter responsibilities:**
 - `begin()`: Start config portal or connect to saved WiFi, start mDNS, start WebSocket server
@@ -723,9 +725,11 @@ This provides protection against accidental (not adversarial) network access wit
 | `src/main.cpp` | Add `#ifdef EVILCROW_WIFI_MODE` init path |
 | `src/core/ble/BinaryProtocolHandler.h/.cpp` | **NEW** — shared protocol logic from BleAdapter |
 | `src/core/ble/BleAdapter.h/.cpp` | Extract shared logic into BinaryProtocolHandler |
-| `src/core/wifi/WifiAdapter.h/.cpp` | **NEW** — ControllerAdapter, WebSocket server, mDNS |
+| `src/core/ControllerAdapter.h` | Reference at `core/` (was `core/ble/`) — abstract base for both BleAdapter and WifiAdapter |
+| `src/core/ClientsManager.h` | Reference at `core/` (was `core/ble/`) — fan-out to all adapters |
+| `src/core/CommandHandler.h` | Reference at `core/` (was `core/ble/`) — command dispatch |
+| `src/core/wifi/WifiAdapter.h/.cpp` | **NEW** — ControllerAdapter subclass, WebSocket server, mDNS |
 | `src/core/wifi/WifiConfigManager.h/.cpp` | **NEW** — SmartConfig + SoftAP portal |
-| `CMakeLists.txt` | Add new source files |
 
 ### Mobile App (Flutter/Dart)
 
