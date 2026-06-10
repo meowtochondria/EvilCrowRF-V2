@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component>
+  <id>io.evilcrow.evilcrowrf</id>
+  <name>EvilCrow RF</name>
+  <summary>RF device controller</summary>
+  <url type="homepage">https://github.com/EvilCrowRF/EvilCrowRF-V2</url>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <requires>
+    <!-- Minimum screen width for usable UI -->
+    <display_length compare="ge">800</display_length>
+  </requires>
+</component>

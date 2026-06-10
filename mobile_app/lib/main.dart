@@ -49,10 +49,12 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (context) => LocaleProvider()),
-        // Conditionally inject BleProvider or WifiProvider based on TRANSPORT_MODE
-        // dart-define=TRANSPORT_MODE=bt  → BleProvider (default)
-        // dart-define=TRANSPORT_MODE=wifi → WifiProvider
-        _buildTransportProvider(),
+        // Always register both transport providers so the app supports
+        // BLE and WiFi simultaneously. Each screen chooses which to use.
+        // BleProvider handles BLE connections; on platforms without BLE
+        // (e.g. Linux desktop) its init gracefully degrades.
+        ChangeNotifierProvider(create: (context) => BleProvider()),
+        ChangeNotifierProvider(create: (context) => WifiProvider()),
         ChangeNotifierProvider(create: (context) => LogProvider()),
         ChangeNotifierProvider(create: (context) => NotificationProvider()),
         ChangeNotifierProvider(create: (context) => SettingsProvider()),
@@ -80,17 +82,6 @@ class MyApp extends StatelessWidget {
         },
       ),
     );
-  }
-
-  /// Build the transport provider based on the TRANSPORT_MODE define.
-  /// Defaults to BleProvider if no define is set.
-  static ChangeNotifierProvider _buildTransportProvider() {
-    const transportMode =
-        String.fromEnvironment('TRANSPORT_MODE', defaultValue: 'bt');
-    if (transportMode == 'wifi') {
-      return ChangeNotifierProvider(create: (context) => WifiProvider());
-    }
-    return ChangeNotifierProvider(create: (context) => BleProvider());
   }
 
   ThemeData _buildDarkTheme() {

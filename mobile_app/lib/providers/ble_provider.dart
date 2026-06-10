@@ -336,28 +336,47 @@ class BleProvider extends ChangeNotifier {
   }
 
   BleProvider() {
-    _initializeBle();
+    // Wrap BLE init in try-catch so the provider is safe to construct
+    // on platforms where flutter_blue_plus is not natively available (e.g. Linux desktop).
+    try {
+      _initializeBle();
+    } catch (e) {
+      statusMessage = 'BLE not available on this platform';
+      AppLogger.debug(
+          'BleProvider: BLE init failed (platform may not support BLE): $e');
+    }
     _loadKnownDevice();
     _loadTempOffsetPref();
   }
 
   Future<void> _initializeBle() async {
-    // Request permissions
-    await requestPermissions();
+    // Request permissions (wrapped in try-catch for platforms without
+    // permission_handler native implementation, e.g. Linux desktop).
+    try {
+      await requestPermissions();
+    } catch (e) {
+      AppLogger.debug(
+          'BleProvider: requestPermissions failed (${e.runtimeType}): $e');
+    }
 
     // Listen to Bluetooth state changes
     _adapterStateSubscription?.cancel();
-    _adapterStateSubscription = FlutterBluePlus.adapterState.listen((state) {
-      if (state == BluetoothAdapterState.on) {
-        // Don't show "Bluetooth enabled" message
-        statusMessage = '';
-      } else {
-        statusMessage = 'Bluetooth disabled';
-        isConnected = false;
-        connectedDevice = null;
-      }
-      notifyListeners();
-    });
+    try {
+      _adapterStateSubscription = FlutterBluePlus.adapterState.listen((state) {
+        if (state == BluetoothAdapterState.on) {
+          // Don't show "Bluetooth enabled" message
+          statusMessage = '';
+        } else {
+          statusMessage = 'Bluetooth disabled';
+          isConnected = false;
+          connectedDevice = null;
+        }
+        notifyListeners();
+      });
+    } catch (e) {
+      AppLogger.debug('BleProvider: FlutterBluePlus not available ($e)');
+      statusMessage = 'BLE not available on this platform';
+    }
   }
 
   Future<void> _loadKnownDevice() async {

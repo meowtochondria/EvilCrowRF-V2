@@ -7,6 +7,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/ble_provider.dart';
+import '../providers/wifi_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/firmware_protocol.dart';
@@ -357,7 +358,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                       const SizedBox(height: 12),
 
-                      // ===== Device Management (name change, factory reset) =====
+                      // ===== Device Management (name change, factory reset, WiFi) =====
                       _buildDeviceManagementSection(context, bleProvider),
                     ],
                   ),
@@ -2063,12 +2064,224 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             color: AppColors.secondaryText, fontSize: 11),
                       ),
                     ),
+
+                  // ── WiFi Connection (separator) ──
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Divider(color: AppColors.divider, height: 1),
+                  ),
+                  _buildWifiConnectionContent(context),
                 ],
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  /// Build the WiFi connection controls inside Device Management.
+  Widget _buildWifiConnectionContent(BuildContext context) {
+    return Consumer<WifiProvider>(
+      builder: (context, wifiProvider, child) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Section header
+            Row(
+              children: [
+                const Icon(Icons.wifi,
+                    color: AppColors.primaryAccent, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'WiFi Connection',
+                  style: const TextStyle(
+                    color: AppColors.primaryText,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                if (wifiProvider.isConnected)
+                  Container(
+                    margin: const EdgeInsets.only(left: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.success.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'Connected',
+                      style: TextStyle(
+                        color: AppColors.success,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // mDNS hostname field
+            const Text(
+              'mDNS Hostname',
+              style: TextStyle(
+                color: AppColors.primaryText,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    decoration: InputDecoration(
+                      hintText: 'e.g. evilcrow',
+                      prefixIcon: const Icon(Icons.devices, size: 20),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      isDense: true,
+                    ),
+                    style: Theme.of(context).textTheme.bodyMedium,
+                    enabled:
+                        !wifiProvider.isConnected && !wifiProvider.isConnecting,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: wifiProvider.isConnected || wifiProvider.isScanning
+                      ? null
+                      : () => wifiProvider.startDiscovery(),
+                  child: wifiProvider.isScanning
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Search'),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 16),
+
+            // IP/FQDN field
+            const Text(
+              'IP Address / FQDN',
+              style: TextStyle(
+                color: AppColors.primaryText,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    decoration: InputDecoration(
+                      hintText: '192.168.1.100 or evilcrow.local',
+                      prefixIcon: const Icon(Icons.language, size: 20),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      isDense: true,
+                    ),
+                    style: Theme.of(context).textTheme.bodyMedium,
+                    enabled:
+                        !wifiProvider.isConnected && !wifiProvider.isConnecting,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (wifiProvider.isConnected)
+                  ElevatedButton(
+                    onPressed: () => wifiProvider.disconnect(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.error,
+                      foregroundColor: AppColors.primaryBackground,
+                    ),
+                    child: const Text('Disconnect'),
+                  ),
+              ],
+            ),
+
+            const SizedBox(height: 16),
+
+            // Discovered devices
+            if (wifiProvider.discoveredDevices.isNotEmpty) ...[
+              const Text(
+                'Discovered Devices',
+                style: TextStyle(
+                  color: AppColors.primaryText,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ...wifiProvider.discoveredDevices.map(
+                (device) => Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: AppColors.borderDefault),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.wifi, color: AppColors.info, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              device.name,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(fontWeight: FontWeight.w500),
+                            ),
+                            Text(
+                              device.host,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(color: AppColors.secondaryText),
+                            ),
+                          ],
+                        ),
+                      ),
+                      ElevatedButton(
+                        onPressed: wifiProvider.isConnected
+                            ? null
+                            : () => wifiProvider.connect(device.host),
+                        child: const Text('Connect'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+
+            // Error message
+            if (wifiProvider.lastError != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                wifiProvider.lastError!,
+                style: const TextStyle(color: AppColors.error, fontSize: 12),
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
 
