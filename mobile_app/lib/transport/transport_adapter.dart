@@ -11,13 +11,17 @@ class TransportAdapter {
   int _successfulCommands = 0;
   int _failedCommands = 0;
 
+  // Host for WiFi WebSocket transport
+  String? _wifiHost;
+
   // Initialization
-  Future<bool> initialize(int transportType) async {
+  Future<bool> initialize(int transportType, {String? host}) async {
     AppLogger.debug('Initializing transport adapter with type: $transportType');
+    _wifiHost = host;
 
     try {
       // Create transport layer
-      _transport = TransportFactory.createTransport(transportType);
+      _transport = TransportFactory.createTransport(transportType, host: host);
 
       // Initialize transport
       if (!await _transport!.initialize()) {
@@ -88,7 +92,7 @@ class TransportAdapter {
   bool get isConnected => _transport?.isConnected ?? false;
 
   // Switch protocol
-  Future<bool> switchProtocol(int newType) async {
+  Future<bool> switchProtocol(int newType, {String? host}) async {
     AppLogger.debug('Switching protocol to type: $newType');
 
     if (_transport == null) {
@@ -103,7 +107,8 @@ class TransportAdapter {
       _transport = null;
 
       // Create new transport
-      _transport = TransportFactory.createTransport(newType);
+      _transport =
+          TransportFactory.createTransport(newType, host: host ?? _wifiHost);
 
       // Initialize new transport
       if (!await _transport!.initialize()) {

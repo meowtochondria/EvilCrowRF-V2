@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'l10n/app_localizations.dart';
 import 'screens/home_screen.dart';
 import 'providers/ble_provider.dart';
+import 'providers/wifi_provider.dart';
 import 'providers/log_provider.dart';
 import 'providers/notification_provider.dart';
 import 'providers/locale_provider.dart';
@@ -48,7 +49,10 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (context) => LocaleProvider()),
-        ChangeNotifierProvider(create: (context) => BleProvider()),
+        // Conditionally inject BleProvider or WifiProvider based on TRANSPORT_MODE
+        // dart-define=TRANSPORT_MODE=bt  → BleProvider (default)
+        // dart-define=TRANSPORT_MODE=wifi → WifiProvider
+        _buildTransportProvider(),
         ChangeNotifierProvider(create: (context) => LogProvider()),
         ChangeNotifierProvider(create: (context) => NotificationProvider()),
         ChangeNotifierProvider(create: (context) => SettingsProvider()),
@@ -76,6 +80,17 @@ class MyApp extends StatelessWidget {
         },
       ),
     );
+  }
+
+  /// Build the transport provider based on the TRANSPORT_MODE define.
+  /// Defaults to BleProvider if no define is set.
+  static ChangeNotifierProvider _buildTransportProvider() {
+    const transportMode =
+        String.fromEnvironment('TRANSPORT_MODE', defaultValue: 'bt');
+    if (transportMode == 'wifi') {
+      return ChangeNotifierProvider(create: (context) => WifiProvider());
+    }
+    return ChangeNotifierProvider(create: (context) => BleProvider());
   }
 
   ThemeData _buildDarkTheme() {

@@ -23,7 +23,13 @@
 #include <LittleFS.h>
 #include "SD.h"
 #include "SPI.h"
+#if EVILCROW_WIFI_MODE
+#include "core/wifi/WifiAdapter.h"
+#include "core/wifi/WifiConfigManager.h"
+#endif
+#if EVILCROW_BT_MODE
 #include "core/ble/BleAdapter.h"
+#endif
 #include "config.h"
 #include "esp_log.h"
 #include "modules/CC1101_driver/CC1101_Module.h"
@@ -58,8 +64,14 @@ static void setupCc1101Pins()
 }
 
 // Global variables
+#ifdef EVILCROW_BT_MODE
 bool bleAdapterStarted = false;
 BleAdapter bleAdapter;
+#endif
+#if EVILCROW_WIFI_MODE
+bool wifiAdapterStarted = false;
+WifiAdapter wifiAdapter;
+#endif
 
 // Device time (Unix timestamp in seconds, updated by time sync task)
 uint32_t deviceTime = 0;
@@ -78,21 +90,21 @@ void logHeapStats(const char* context) {
     size_t freeHeap = ESP.getFreeHeap();
     size_t largestBlock = heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT);
     size_t minFreeHeap = ESP.getMinFreeHeap();
-    
+
     // Calculate fragmentation percentage
     float fragmentation = 0.0f;
     if (freeHeap > 0) {
         fragmentation = 100.0f * (1.0f - (float)largestBlock / (float)freeHeap);
     }
-    
+
     ESP_LOGI("Heap", "[%s] Free: %d, Largest: %d, MinFree: %d, Frag: %.1f%%",
              context, freeHeap, largestBlock, minFreeHeap, fragmentation);
-    
+
     // Warning if fragmentation is high
     if (fragmentation > 30.0f) {
         ESP_LOGW("Heap", "High fragmentation detected: %.1f%%", fragmentation);
     }
-    
+
     // Warning if largest block is smaller than task stack sizes
     if (largestBlock < 4096) {
         ESP_LOGW("Heap", "Largest block (%d) < RecordTask stack (4096) - would fail with dynamic allocation!", largestBlock);
@@ -132,11 +144,11 @@ void signalRecordedHandler(bool saved, const std::string& filename)
         BinarySignalRecorded msg;
         msg.module = 0; // Default
         msg.filenameLength = (uint8_t)std::min((size_t)255, filename.length());
-        
+
         static uint8_t buffer[260];
         memcpy(buffer, &msg, sizeof(BinarySignalRecorded));
         memcpy(buffer + sizeof(BinarySignalRecorded), filename.c_str(), msg.filenameLength);
-        
+
         clients.notifyAllBinary(NotificationType::SignalRecorded, buffer, sizeof(BinarySignalRecorded) + msg.filenameLength);
     } else {
         // Send as binary error
@@ -153,15 +165,15 @@ void signalRecordedHandler(bool saved, const std::string& filename)
 // Adapter for CC1101Worker detected signal callback
 void cc1101WorkerSignalDetectedHandler(const CC1101DetectedSignal& signal)
 {
-    ESP_LOGI("Main", "Signal detected: rssi=%d, freq=%.2f, module=%d", 
+    ESP_LOGI("Main", "Signal detected: rssi=%d, freq=%.2f, module=%d",
              signal.rssi, signal.frequency, signal.module);
-    
+
     BinarySignalDetected msg;
     msg.module = signal.module;
     msg.frequency = (uint32_t)(signal.frequency * 1000000); // MHz to Hz
     msg.rssi = signal.rssi;
     msg.samples = 0;
-    
+
     clients.notifyAllBinary(NotificationType::SignalDetected, reinterpret_cast<const uint8_t*>(&msg), sizeof(BinarySignalDetected));
 }
 
@@ -194,7 +206,7 @@ void taskProcessor(void* pvParameters)
                 case Device::TaskType::Transmission: {
                     Device::TaskTransmission& task = item->transmissionTask;
                     ESP_LOGI(TAG, "Processing transmission task for module %d", task.module);
-                    
+
                     if (task.filename) {
                         // Send command to CC1101Worker
                         int repeat = task.repeat ? *task.repeat : 1;
@@ -202,7 +214,7 @@ void taskProcessor(void* pvParameters)
                             BinarySignalSent msg;
                             msg.module = task.module;
                             msg.filenameLength = (uint8_t)std::min((size_t)255, task.filename->length());
-                            
+
                             static uint8_t buffer[260];
                             memcpy(buffer, &msg, sizeof(BinarySignalSent));
                             memcpy(buffer + sizeof(BinarySignalSent), task.filename->c_str(), msg.filenameLength);
@@ -212,7 +224,7 @@ void taskProcessor(void* pvParameters)
                             msg.module = task.module;
                             msg.errorCode = 1; // Failed to queue
                             msg.filenameLength = (uint8_t)std::min((size_t)255, task.filename->length());
-                            
+
                             static uint8_t buffer[260];
                             memcpy(buffer, &msg, sizeof(BinarySignalSendError));
                             memcpy(buffer + sizeof(BinarySignalSendError), task.filename->c_str(), msg.filenameLength);
@@ -223,27 +235,27 @@ void taskProcessor(void* pvParameters)
                         ESP_LOGI(TAG, "Raw transmission not implemented yet");
                     }
                 } break;
-                
+
                 case Device::TaskType::Record: {
                     Device::TaskRecord& task = item->recordTask;
                     ESP_LOGI(TAG, "Processing record task for module %d", task.module ? *task.module : 0);
-                    
+
                     if (task.module) {
                         int module = *task.module;
                         std::string errorMessage;
-                        
+
                         float frequency = task.config.frequency;
                         int modulation = MODULATION_ASK_OOK;
                         float deviation = 2.380371;
                         float bandwidth = 650;
                         float dataRate = 3.79372;
                         std::string preset = "Ook650";
-                        
+
                         // Check if preset is provided
                         if (task.config.preset) {
                             preset = *task.config.preset;
                             ESP_LOGI(TAG, "Applying preset: '%s' (length=%zu)", preset.c_str(), preset.length());
-                            
+
                             // Match presets exactly as sent from Flutter app
                             // Expected values: "Ook270", "Ook650", "2FSKDev238", "2FSKDev476"
                             if (preset == "Ook270") {
@@ -278,7 +290,7 @@ void taskProcessor(void* pvParameters)
                             dataRate = task.config.dataRate ? *task.config.dataRate : 4.79794;
                             preset = "Custom";
                         }
-                        
+
                         if (errorMessage.empty()) {
                             // Send command to CC1101Worker
                             if (CC1101Worker::startRecord(module, frequency, modulation, deviation, bandwidth, dataRate, preset)) {
@@ -299,15 +311,15 @@ void taskProcessor(void* pvParameters)
                         }
                     }
                 } break;
-                
+
                 case Device::TaskType::DetectSignal: {
                     Device::TaskDetectSignal& task = item->detectSignalTask;
-                    
+
                     if (task.module && task.minRssi) {
                         int minRssi = *task.minRssi;
                         int module = *task.module;
                         bool isBackground = task.background ? *task.background : false;
-                        
+
                         // Send command to CC1101Worker
                         if (CC1101Worker::startDetect(module, minRssi, isBackground)) {
                             ESP_LOGI(TAG, "Detection started on module %d", module);
@@ -316,11 +328,11 @@ void taskProcessor(void* pvParameters)
                         }
                     }
                 } break;
-                
+
                 case Device::TaskType::GetState: {
                     Device::TaskGetState& task = item->getStateTask;
                     ESP_LOGI(TAG, "Processing get state task");
-                    
+
                     // Create BinaryStatus structure with CC1101 registers
                     BinaryStatus status;
                     status.messageType = MSG_STATUS;
@@ -332,35 +344,35 @@ void taskProcessor(void* pvParameters)
                         + ConfigManager::settings.cpuTempOffsetDeciC;
                     status.core0Mhz = static_cast<uint16_t>(ESP.getCpuFreqMHz());
                     status.core1Mhz = static_cast<uint16_t>(ESP.getCpuFreqMHz());
-                    
+
                     // Clear registers (skip SPI reads for initial state)
                     memset(status.module0Registers, 0, sizeof(status.module0Registers));
                     memset(status.module1Registers, 0, sizeof(status.module1Registers));
-                    
+
                     // Send binary status
                     clients.notifyAllBinary(NotificationType::State, reinterpret_cast<const uint8_t*>(&status), sizeof(BinaryStatus));
                 } break;
-                
+
                 case Device::TaskType::Jam: {
                     Device::TaskJam& task = item->jamTask;
                     ESP_LOGI(TAG, "Processing jam task for module %d", task.module);
-                    
+
                     const std::vector<uint8_t>* customPatternPtr = task.customPattern ? task.customPattern.get() : nullptr;
-                    
+
                     // Send command to CC1101Worker (power is already 0-7, no conversion needed)
-                    if (CC1101Worker::startJam(task.module, task.frequency, task.power, 
-                                               task.patternType, customPatternPtr, 
+                    if (CC1101Worker::startJam(task.module, task.frequency, task.power,
+                                               task.patternType, customPatternPtr,
                                                task.maxDurationMs, task.cooldownMs)) {
                         ESP_LOGI(TAG, "Jam started on module %d", task.module);
                     } else {
                         ESP_LOGE(TAG, "Failed to start jam on module %d", task.module);
                     }
                 } break;
-                
+
                 case Device::TaskType::Idle: {
                     Device::TaskIdle& task = item->idleTask;
                     ESP_LOGI(TAG, "Processing idle task for module %d", task.module);
-                    
+
                     // Send command to CC1101Worker (it will handle jamming state internally)
                     if (CC1101Worker::goIdle(task.module)) {
                         ESP_LOGI(TAG, "Module %d set to idle", task.module);
@@ -371,7 +383,7 @@ void taskProcessor(void* pvParameters)
                 default:
                     break;
             }
-            
+
             // CRITICAL: Delete the QueueItem after processing to prevent memory leak
             delete item;
         }
@@ -383,7 +395,7 @@ void taskProcessor(void* pvParameters)
 void serialCommandTask(void* pvParameters) {
     static uint8_t buffer[512]; // Buffer for incoming data
     static size_t bufferIndex = 0;
-    
+
     while (true) {
         if (Serial.available()) {
             uint8_t byte = Serial.read();
@@ -535,7 +547,7 @@ void serialCommandTask(void* pvParameters) {
                 bufferIndex = remaining;
                 continue;
             }
-            
+
             // Check if we have a complete packet (minimum 8 bytes: header + checksum)
             if (bufferIndex >= 8) {
                 // Check for magic byte at start
@@ -543,12 +555,19 @@ void serialCommandTask(void* pvParameters) {
                     // Extract data length (little-endian, bytes 5-6)
                     uint16_t dataLen = buffer[5] | (buffer[6] << 8);
                     uint16_t expectedLen = 7 + dataLen + 1; // header + data + checksum
-                    
+
                     if (bufferIndex >= expectedLen) {
                         // Process the complete packet
+#if EVILCROW_BT_MODE
+
                         bleAdapter.setSerialCommand(true);
                         bleAdapter.processBinaryData(buffer, expectedLen);
-                        
+                        #endif
+#if EVILCROW_WIFI_MODE
+                        wifiAdapter.setSerialCommand(true);
+                        wifiAdapter.processBinaryData(buffer, expectedLen);
+#endif
+
                         // Shift remaining data to start of buffer
                         size_t remaining = bufferIndex - expectedLen;
                         if (remaining > 0) {
@@ -561,7 +580,7 @@ void serialCommandTask(void* pvParameters) {
                     bufferIndex = 0;
                 }
             }
-            
+
             // Prevent buffer overflow
             if (bufferIndex >= sizeof(buffer)) {
                 bufferIndex = 0;
@@ -678,10 +697,10 @@ void setup()
     ClientsManager& clients = ClientsManager::getInstance();
     clients.initializeQueue(NOTIFICATIONS_QUEUE);
     ESP_LOGD(TAG, "ClientsManager initialized.");
-    
+
     // Initialize CommandHandler and register commands
     ESP_LOGI(TAG, "Initializing CommandHandler...");
-    
+
     // Register all commands
     StateCommands::registerCommands(commandHandler);
     FileCommands::registerCommands(commandHandler);
@@ -697,7 +716,7 @@ void setup()
 #if SDR_MODULE_ENABLED
     SdrCommands::registerCommands(commandHandler);
 #endif
-    
+
     ESP_LOGI(TAG, "CommandHandler initialized with %zu commands", commandHandler.getCommandCount());
 
     // Initialize bruter module
@@ -750,21 +769,30 @@ void setup()
     // Notification sender on Core 0 (near BLE stack for lower latency)
     xTaskCreatePinnedToCore(ClientsManager::processMessageQueue, "SendNotifications", 6144, NULL, 1, NULL, 0); // 6KB on Core 0
     ESP_LOGD(TAG, "SendNotifications task created.");
-    
+
     // Create time synchronization task (updates deviceTime every second)
     xTaskCreatePinnedToCore(timeSyncTask, "TimeSync", 1024, NULL, 1, NULL, 0); // 1KB on Core 0 (minimal)
     ESP_LOGD(TAG, "TimeSync task created.");
-    
+
     // Create serial command processing task on Core 1
     xTaskCreatePinnedToCore(serialCommandTask, "SerialCmd", 3072, NULL, 1, NULL, 1); // 3KB on Core 1
     ESP_LOGD(TAG, "SerialCmd task created.");
-    
-    // Initialize BLE adapter instead of WiFi
+
+    // Initialize transport adapter (BLE or WiFi based on build mode)
+#if EVILCROW_WIFI_MODE
+    wifiAdapter.begin();
+    wifiAdapter.setCommandHandler(&commandHandler);
+    clients.addAdapter(&wifiAdapter);
+    wifiAdapterStarted = true;
+    ESP_LOGD(TAG, "WiFi adapter initialized and added to clients.");
+#endif
+#if EVILCROW_BT_MODE
     bleAdapter.begin();
-    bleAdapter.setCommandHandler(&commandHandler);  // Set CommandHandler
+    bleAdapter.setCommandHandler(&commandHandler);
     clients.addAdapter(&bleAdapter);
     bleAdapterStarted = true;
     ESP_LOGD(TAG, "BLE adapter initialized and added to clients.");
+#endif
 
     // Log initial heap state - baseline for comparison
     ESP_LOGI(TAG, "===== INITIAL HEAP STATE (using static task allocation) =====");
@@ -781,10 +809,10 @@ void setup()
 // Time synchronization task - updates deviceTime every second
 void timeSyncTask(void* pvParameters) {
     const TickType_t delay = pdMS_TO_TICKS(1000); // 1 second
-    
+
     while (true) {
         vTaskDelay(delay);
-        
+
         // Only increment if time has been set (deviceTime > 0)
         if (deviceTime > 0) {
             deviceTime++;
@@ -794,6 +822,11 @@ void timeSyncTask(void* pvParameters) {
 
 void loop()
 {
+#if EVILCROW_WIFI_MODE
+    // Process WiFi provisioning (SmartConfig / SoftAP captive portal)
+    WifiConfigManager::process();
+#endif
+
     // Poll hardware buttons for configured actions
     ButtonCommands::checkButtons();
 

@@ -3,3 +3,7 @@ CompileFlags:
     - -fno-tree-switch-conversion
     - -mlongcalls
     - -fstrict-volatile-bitfields
+  Add:
+    - -I.pio/libdeps/evilcrow-wifi/AsyncTCP/src
+    - -I.pio/libdeps/evilcrow-wifi/ESPAsyncWebServer/src
+    - -I.pio/libdeps/evilcrow-bt/NimBLE-Arduino/src

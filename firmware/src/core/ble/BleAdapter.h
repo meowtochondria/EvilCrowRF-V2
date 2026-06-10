@@ -1,12 +1,10 @@
+#if EVILCROW_BT_MODE
 #ifndef BleAdapter_h
 #define BleAdapter_h
 
 #include <Arduino.h>
 #include "config.h"
 #include "core/ControllerAdapter.h"
-#include <string>
-// #include <sstream>  // Removed — unused in BleAdapter
-#include <map>
 #include <stdint.h>
 #include <atomic>
 #include "core/CommandHandler.h"
@@ -16,7 +14,9 @@
 #include <NimBLEConnInfo.h>
 #include "FS.h"
 
-class BleAdapter : public ControllerAdapter {
+#include "core/BinaryProtocolHandler.h"
+
+class BleAdapter : public ControllerAdapter, public BinaryProtocolHandler {
 public:
     BleAdapter();
     ~BleAdapter();
@@ -26,7 +26,7 @@ public:
     bool isConnected() const override { return deviceConnected; }
 
     // Set CommandHandler
-    void setCommandHandler(CommandHandler* handler) { commandHandler_ = handler; }
+    void setCommandHandler(CommandHandler* handler) override { commandHandler_ = handler; }
 
     // File streaming method (public for FileCommands access)
     void streamFileData(const uint8_t* header, size_t headerSize, File& file, size_t fileSize);
@@ -76,44 +76,13 @@ private:
     static const char* CHARACTERISTIC_UUID_TX;
     static const char* CHARACTERISTIC_UUID_RX;
 
-    // Binary protocol constants
-    static const uint8_t MAGIC_BYTE = 0xAA;
-    static const uint16_t MAX_CHUNK_SIZE = 500; // Safe maximum: BLE notify limit is 509 bytes, so 509 - 7 (header) - 1 (checksum) - 1 (safety) = 500
-    static const uint8_t PACKET_HEADER_SIZE = 7; // Increased from 6: dataLen is now 2 bytes
+    // ── BinaryProtocolHandler overrides ────────────────────────────
+protected:
+    void sendFrame(const uint8_t* data, size_t len) override;
+    bool isTransportConnected() const override { return deviceConnected; }
+    const char* transportName() const override { return "BleAdapter"; }
 
-    // File upload structure (minimal memory usage - writes chunks directly to file)
-    struct FileUploadState {
-        File file;
-        uint8_t totalChunks;
-        uint8_t receivedChunks;
-        uint32_t timestamp;
-        bool isActive;
-        char filePath[256];  // Static buffer for path
-    };
-
-    std::map<uint8_t, FileUploadState> fileUploads;
-
-    // CommandHandler for executing commands
-    CommandHandler* commandHandler_ = nullptr;
-
-    // Flag to indicate if current command is from serial (atomic for cross-core safety)
-    std::atomic<bool> isSerialCommand{false};
-
-    // Command execution is delegated to CommandHandler via handleSingleCommand()
-
-    // Binary protocol methods
-    void handleSingleCommand(uint8_t *payload, size_t payloadLength);
-    void handleChunkedCommand(uint8_t chunkId, uint8_t chunkNum, uint8_t totalChunks, uint8_t *payload, size_t payloadLength);
-    void sendBinaryResponse(const String& data);
-    void sendChunkedResponse(const String& data);
-    void sendSingleChunk(uint8_t chunkId, uint8_t chunkNum, uint8_t totalChunks, const char* chunkData, uint16_t dataLen);
-    uint8_t calculateChecksum(const uint8_t *data, size_t len);
-
-    // Utility methods
-    bool moduleExists(uint8_t module);
-    void notifyError(const char *errorMsg);
-    void cleanupOldUploads();
-    bool handleUploadChunk(uint8_t chunkId, uint8_t chunkNum, uint8_t totalChunks, uint8_t *payload, size_t payloadLength);
+private:
 
     // Heartbeat / keepalive
     static TimerHandle_t heartbeatTimer;
@@ -127,3 +96,4 @@ private:
 };
 
 #endif // BleAdapter_h
+#endif // EVILCROW_BT_MODE

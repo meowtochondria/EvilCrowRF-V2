@@ -1,4 +1,7 @@
-.PHONY: help setup setup-esptoolpy build clean flash test monitor flash-monitor show-device-mac
+.PHONY: help setup setup-esptoolpy build build-bt build-wifi \
+        clean flash flash-bt flash-wifi \
+        monitor flash-monitor flash-monitor-bt flash-monitor-wifi \
+        show-device-mac test update
 
 PYTHON := python
 ENV_DIR := .venv
@@ -8,15 +11,21 @@ help:
 	@echo "EvilCrowRF-V2 Firmware Build System"
 	@echo ""
 	@echo "Available targets:"
-	@echo "  setup    - Create virtual environment and install dependencies"
-	@echo "  build    - Build ESP32 firmware (production mode)"
-	@echo "  clean    - Clean build artifacts"
-	@echo "  flash         - Flash firmware to ESP32"
-	@echo "  monitor       - Open serial monitor"
-	@echo "  flash-monitor - Flash then open serial monitor"
+	@echo "  setup        - Create virtual environment and install dependencies"
+	@echo "  build        - Build ESP32 firmware (BT mode, default)"
+	@echo "  build-bt     - Build ESP32 firmware (BT mode)"
+	@echo "  build-wifi   - Build ESP32 firmware (WiFi mode)"
+	@echo "  clean        - Clean build artifacts"
+	@echo "  flash        - Flash BT firmware to ESP32"
+	@echo "  flash-bt     - Flash BT firmware to ESP32"
+	@echo "  flash-wifi   - Flash WiFi firmware to ESP32"
+	@echo "  monitor      - Open serial monitor"
+	@echo "  flash-monitor     - Flash BT then open serial monitor"
+	@echo "  flash-monitor-bt  - Flash BT then open serial monitor"
+	@echo "  flash-monitor-wifi - Flash WiFi then open serial monitor"
 	@echo "  show-device-mac - Read ESP32 MAC address via esptool"
-	@echo "  test     - Run tests"
-	@echo "  update   - Update PlatformIO and dependencies"
+	@echo "  test         - Run tests"
+	@echo "  update       - Update PlatformIO and dependencies"
 
 setup:
 	@uv sync
@@ -50,23 +59,43 @@ setup-esptoolpy:
 setup-with-clangd: setup
 	@uv run platformio run --target compiledb
 
-build: setup
-	@echo "Building ESP32 firmware (production)..."
-	@uv run platformio run --environment esp32dev
+build: build-bt
+
+build-bt: setup
+	@echo "Building ESP32 firmware (BT mode)..."
+	@uv run platformio run --environment evilcrow-bt
 	@echo ""
-	@echo "Firmware built successfully!"
-	@echo "Firmware: .pio/build/esp32dev/firmware.bin"
+	@echo "BT firmware built successfully!"
+	@echo "Firmware: .pio/build/evilcrow-bt/firmware.bin"
+
+build-wifi: setup
+	@echo "Building ESP32 firmware (WiFi mode)..."
+	@uv run platformio run --environment evilcrow-wifi
+	@echo ""
+	@echo "WiFi firmware built successfully!"
+	@echo "Firmware: .pio/build/evilcrow-wifi/firmware.bin"
 
 clean:
 	@uv run platformio run --verbose --target clean
 	@rm -rf .pio
 
-flash: build
-	@echo "Flashing firmware to ESP32..."
-	@uv run platformio run --verbose --target upload --environment esp32dev
+flash: flash-bt
 
-flash-monitor:
-	@uv run platformio run --target upload --target monitor --environment esp32dev
+flash-bt: build-bt
+	@echo "Flashing BT firmware to ESP32..."
+	@uv run platformio run --verbose --target upload --environment evilcrow-bt
+
+flash-wifi: build-wifi
+	@echo "Flashing WiFi firmware to ESP32..."
+	@uv run platformio run --verbose --target upload --environment evilcrow-wifi
+
+flash-monitor: flash-monitor-bt
+
+flash-monitor-bt:
+	@uv run platformio run --target upload --target monitor --environment evilcrow-bt
+
+flash-monitor-wifi:
+	@uv run platformio run --target upload --target monitor --environment evilcrow-wifi
 
 update:
 	@uv sync
