@@ -42,7 +42,14 @@ endef
 
 # ── Phony targets ──────────────────────────────────────────────────────
 .PHONY: all setup check-java check-flutter check-sdk install-sdk install-deps \
-        accept-licenses write-local-properties apk linux linux-deps clean help install
+        accept-licenses write-local-properties apk linux linux-deps clean help install-usb \
+        install-wifi
+
+# ── WiFi deployment config ─────────────────────────────────────────────
+# Set this to your phone's IP for WiFi ADB deployment:
+#   make deploy-wifi DEVICE_IP=192.168.1.100
+DEVICE_IP ?=
+ADB_WIFI_PORT ?= 5555
 
 # ── Default ────────────────────────────────────────────────────────────
 help: ## Show this help
@@ -61,7 +68,7 @@ all: setup apk ## Setup environment + build release APK
 #  Setup targets
 # ═══════════════════════════════════════════════════════════════════════
 setup: check-java check-flutter check-sdk install-sdk accept-licenses \
-       write-local-properties install-deps ## One-time development environment setup
+       write-local-properties deps ## One-time development environment setup
 
 check-java: ## Verify Java 11+ is available
 	$(call banner,Check Java)
@@ -122,7 +129,7 @@ write-local-properties: ## Write android/local.properties with sdk.dir
 	fi
 	@echo "$(GREEN)Wrote android/local.properties$(RESET)"
 
-install-deps: ## Run flutter pub get
+deps: ## Run flutter pub get
 	$(call banner,Install Flutter dependencies)
 	@flutter pub get
 	@echo "$(GREEN)Dependencies installed.$(RESET)"
@@ -130,7 +137,7 @@ install-deps: ## Run flutter pub get
 # ═══════════════════════════════════════════════════════════════════════
 #  Build targets
 # ═══════════════════════════════════════════════════════════════════════
-apk: accept-licenses write-local-properties install-deps ## Build release APK
+apk: accept-licenses write-local-properties deps ## Build release APK
 	$(call banner,Build APK)
 	@export ANDROID_HOME="$(ANDROID_HOME)"; \
 		flutter build apk --release
@@ -199,3 +206,22 @@ install: apk ## Build + install over USB
 	$(call banner,Install via USB)
 	@$(ADB) install -r "$(APK_OUTPUT)" || (echo "$(RED)Install failed. Is the device connected via USB with USB debugging enabled?$(RESET)"; exit 1)
 	@echo "$(GREEN)Installed successfully!$(RESET)"
+
+install-wifi: apk ## Build + install over WiFi (usage: make deploy-wifi DEVICE_IP=192.168.1.100)
+	$(call banner,Deploy over WiFi)
+	@if [ -z "$(DEVICE_IP)" ]; then \
+		echo "$(RED)Usage: make deploy-wifi DEVICE_IP=192.168.1.100$(RESET)"; \
+		echo "$(RED)Your phone and dev machine must be on the same WiFi network.$(RESET)"; \
+		exit 1; \
+	fi
+	@echo "Connecting to $(DEVICE_IP):$(ADB_WIFI_PORT)..."
+	@$(ADB) connect "$(DEVICE_IP):$(ADB_WIFI_PORT)"
+	@echo "Installing APK..."
+	@$(ADB) -s "$(DEVICE_IP):$(ADB_WIFI_PORT)" install -r "$(APK_OUTPUT)" || { \
+		echo "$(RED)Install failed. Disconnect and reconnect:$(RESET)"; \
+		echo "  adb disconnect $(DEVICE_IP):$(ADB_WIFI_PORT)"; \
+		echo "  adb connect $(DEVICE_IP):$(ADB_WIFI_PORT)"; \
+		exit 1; \
+	}
+	@$(ADB) disconnect "$(DEVICE_IP):$(ADB_WIFI_PORT)"
+	@echo "$(GREEN)Deployed successfully!$(RESET)"
