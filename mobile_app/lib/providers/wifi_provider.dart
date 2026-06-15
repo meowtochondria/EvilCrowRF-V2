@@ -216,8 +216,16 @@ class WifiProvider extends ChangeNotifier {
   Future<void> disconnect() async {
     _wsSubscription?.cancel();
     _wsSubscription = null;
-    _channel?.sink.close(ws_status.goingAway);
-    _channel = null;
+    if (_channel != null) {
+      try {
+        // Use normalClosure (1000) — goingAway (1001) is reserved for the
+        // server-side protocol; client code must use 1000 or 3000-4999.
+        _channel!.sink.close(ws_status.normalClosure);
+      } catch (e) {
+        AppLogger.debug('Error closing WebSocket: $e');
+      }
+      _channel = null;
+    }
     _isConnected = false;
     _deviceHost = null;
     notifyListeners();
@@ -323,6 +331,26 @@ class WifiProvider extends ChangeNotifier {
       }
     } catch (e) {
       AppLogger.debug('Failed to parse JSON frame: $e');
+    }
+  }
+
+  // ═════════════════════════════════════════════════════════════════
+  //  WiFi Apply (provisioning)
+  // ═════════════════════════════════════════════════════════════════
+
+  /// Send WiFi credentials and ask the device to connect to the given network.
+  /// The device will save the credentials and attempt to connect.
+  /// If successful, the device switches networks and this app connection may drop.
+  Future<bool> applyWifiConfig(String ssid, String password) async {
+    if (!_isConnected || _channel == null) return false;
+    try {
+      final cmd = FirmwareBinaryProtocol.createApplyWifiCommand(ssid, password);
+      _channel!.sink.add(cmd);
+      AppLogger.debug('ApplyWifi: sent credentials for SSID=$ssid');
+      return true;
+    } catch (e) {
+      AppLogger.debug('ApplyWifi failed: $e');
+      return false;
     }
   }
 

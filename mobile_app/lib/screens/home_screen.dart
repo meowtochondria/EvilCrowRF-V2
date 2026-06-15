@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/ble_provider.dart';
+import '../providers/wifi_provider.dart';
 import '../providers/log_provider.dart';
 import '../providers/notification_provider.dart';
 import '../widgets/quick_connect_widget.dart';
@@ -144,10 +145,14 @@ class _HomeScreenState extends State<HomeScreen> {
         currentIndex: _currentIndex,
         onTap: (index) {
           final bleProvider = Provider.of<BleProvider>(context, listen: false);
+          final wifiProvider =
+              Provider.of<WifiProvider>(context, listen: false);
+          final isConnected =
+              bleProvider.isConnected || wifiProvider.isConnected;
 
           // Allow Home (index 0) and Settings (index 4) without connection
           // Block Sub-GHz (1), NRF (2) and Files (3) if not connected
-          if (!bleProvider.isConnected && index != 0 && index != 4) {
+          if (!isConnected && index != 0 && index != 4) {
             // Show connection required dialog
             final l10n = AppLocalizations.of(context)!;
             showDialog(
@@ -240,10 +245,11 @@ class HomeTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<BleProvider>(
-      builder: (context, bleProvider, child) {
+    return Consumer2<BleProvider, WifiProvider>(
+      builder: (context, bleProvider, wifiProvider, child) {
+        final isConnected = bleProvider.isConnected || wifiProvider.isConnected;
         // When connected, show scanner as main home content
-        if (bleProvider.isConnected) {
+        if (isConnected) {
           return Column(
             children: [
               // Compact connection status bar

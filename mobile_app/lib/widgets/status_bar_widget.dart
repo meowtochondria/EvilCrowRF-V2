@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/ble_provider.dart';
+import '../providers/wifi_provider.dart';
 import '../providers/notification_provider.dart';
 import '../services/logger_service.dart';
 import '../theme/app_colors.dart';
@@ -157,27 +158,41 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
   }
 
   Widget _buildStatusIcons(BuildContext context) {
-    return Consumer<BleProvider>(
-      builder: (context, bleProvider, _) {
+    return Consumer2<BleProvider, WifiProvider>(
+      builder: (context, bleProvider, wifiProvider, _) {
+        final bleConnected = bleProvider.isConnected;
+        final wifiConnected = wifiProvider.isConnected;
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // 1. BLE Connection Status
+              // 1. WiFi Connection Status
               _StatusIcon(
-                icon: bleProvider.isConnected
+                icon: Icons.wifi,
+                color: wifiConnected
+                    ? AppColors.success
+                    : const Color(0xFFEF5350).withOpacity(0.5),
+                tooltip: wifiConnected
+                    ? 'WiFi: Connected to ${wifiProvider.deviceHost ?? "device"}'
+                    : 'WiFi: Not connected',
+              ),
+
+              const SizedBox(width: 6),
+
+              // 2. BLE Connection Status
+              _StatusIcon(
+                icon: bleConnected
                     ? Icons.bluetooth_connected
                     : Icons.bluetooth_disabled,
-                color: bleProvider.isConnected
-                    ? const Color(0xFF42A5F5) // Blue for connected
-                    : const Color(0xFFEF5350)
-                        .withOpacity(0.5), // Dim red for disconnected
-                tooltip: bleProvider.isConnected
+                color: bleConnected
+                    ? const Color(0xFF42A5F5)
+                    : const Color(0xFFEF5350).withOpacity(0.5),
+                tooltip: bleConnected
                     ? AppLocalizations.of(context)!.connectedToDevice(
                         bleProvider.connectedDevice?.platformName ??
                             AppLocalizations.of(context)!.unknown)
-                    : AppLocalizations.of(context)!.notConnected,
+                    : 'BLE: Not connected',
               ),
 
               const SizedBox(width: 6),

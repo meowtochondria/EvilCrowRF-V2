@@ -79,6 +79,9 @@ enum BinaryMessageType : uint8_t {
     // nRF24 module status (sent on GetState)
     MSG_NRF_STATUS    = 0xCA, // [present:1][initialized:1][activeState:1]
 
+    // WiFi AP config (sent on GetState + set by app)
+    MSG_WIFI_AP_CONFIG = 0xCB, // [nameLen:1][name...][passLen:1][pass...]
+
     // ProtoPirate (automotive key fob decoder)
     MSG_PP_DECODE_RESULT = 0xB5,  // Decoded signal: [nameLen:1][name...][data:8][data2:8][serial:4][btn:1][cnt:4][bits:1][enc:1][crc:1]
     MSG_PP_HISTORY_ENTRY = 0xB6,  // History entry: [idx:1][ts:4][nameLen:1][name...][data fields...]

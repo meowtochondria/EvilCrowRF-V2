@@ -82,6 +82,13 @@ class FirmwareBinaryProtocol {
   static const int MSG_SETTINGS_UPDATE = 0xC1;
   static const int MSG_VERSION_INFO = 0xC2;
 
+  // WiFi AP config
+  static const int MSG_SET_WIFI_AP_CONFIG = 0x19;
+  static const int MSG_WIFI_AP_CONFIG = 0xCB;
+
+  // Apply WiFi credentials — tell device to connect to given SSID/password
+  static const int MSG_APPLY_WIFI = 0x1A;
+
   // ── NRF24 Commands (0x20-0x2E) ──────────────────────────────
   static const int MSG_NRF_INIT = 0x20;
   static const int MSG_NRF_SCAN_START = 0x21;
@@ -1213,6 +1220,42 @@ class FirmwareBinaryProtocol {
   static Uint8List createFormatSDCommand() {
     final payload = Uint8List.fromList([0x46, 0x53]); // 'F', 'S'
     return _createEnhancedCommand(MSG_FORMAT_SD, payload);
+  }
+
+  /// Apply WiFi credentials — tell device to connect to given network (0x1A)
+  /// Payload: [ssidLen:1][ssid...][passLen:1][pass...]
+  /// The device will attempt to connect; if successful, app may lose connection.
+  static Uint8List createApplyWifiCommand(String ssid, String password) {
+    final ssidBytes = utf8.encode(ssid);
+    final passBytes = utf8.encode(password);
+    final payload = Uint8List(1 + ssidBytes.length + 1 + passBytes.length);
+    payload[0] = ssidBytes.length;
+    payload.setRange(1, 1 + ssidBytes.length, ssidBytes);
+    payload[1 + ssidBytes.length] = passBytes.length;
+    payload.setRange(
+      2 + ssidBytes.length,
+      2 + ssidBytes.length + passBytes.length,
+      passBytes,
+    );
+    return _createEnhancedCommand(MSG_APPLY_WIFI, payload);
+  }
+
+  /// Set WiFi AP credentials (0x19)
+  /// Payload: [nameLen:1][name...][passLen:1][pass...]
+  static Uint8List createSetWifiApConfigCommand(
+      String apName, String apPassword) {
+    final nameBytes = utf8.encode(apName);
+    final passBytes = utf8.encode(apPassword);
+    final payload = Uint8List(1 + nameBytes.length + 1 + passBytes.length);
+    payload[0] = nameBytes.length;
+    payload.setRange(1, 1 + nameBytes.length, nameBytes);
+    payload[1 + nameBytes.length] = passBytes.length;
+    payload.setRange(
+      2 + nameBytes.length,
+      2 + nameBytes.length + passBytes.length,
+      passBytes,
+    );
+    return _createEnhancedCommand(MSG_SET_WIFI_AP_CONFIG, payload);
   }
 
   // ═══════════════════════════════════════════════════════════

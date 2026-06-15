@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
@@ -16,9 +17,67 @@ class QuickConnectWidget extends StatefulWidget {
 class _QuickConnectWidgetState extends State<QuickConnectWidget> {
   final _wifiHostController = TextEditingController();
   final _wifiIpController = TextEditingController();
+  bool _ipFieldValid = false;
+  String _ipFieldError = '';
+
+  @override
+  void initState() {
+    super.initState();
+    // Listen for IP text changes so Connect button updates reactively
+    _wifiIpController.addListener(_onIpTextChanged);
+  }
+
+  /// Validate the IP/FQDN field value.
+  /// Returns true if the text is a valid IPv4/IPv6 address or hostname.
+  ///
+  /// Uses standard Dart library:
+  /// - `InternetAddress.tryParse()` from dart:io for IP addresses
+  /// - `Uri.tryParse()` from dart:core for hostname/FQDN validation
+  bool _isValidHost(String text) {
+    if (text.isEmpty) {
+      _ipFieldError = '';
+      return false;
+    }
+
+    // ── IP address (IPv4 or IPv6) via dart:io ─────────────────
+    if (InternetAddress.tryParse(text) != null) {
+      _ipFieldError = '';
+      return true;
+    }
+
+    // ── Hostname / FQDN via Uri ───────────────────────────────
+    // Construct a dummy URI and check that the host part is valid
+    // and matches the original text (no scheme/port injection).
+    try {
+      final uri = Uri.tryParse('http://$text');
+      if (uri != null &&
+          uri.host.isNotEmpty &&
+          uri.host == text &&
+          uri.path.isEmpty &&
+          !text.startsWith('.') &&
+          !text.endsWith('.') &&
+          !text.contains('..') &&
+          text.length <= 253) {
+        _ipFieldError = '';
+        return true;
+      }
+    } catch (_) {}
+
+    _ipFieldError = 'Enter a valid IP address or hostname';
+    return false;
+  }
+
+  void _onIpTextChanged() {
+    final text = _wifiIpController.text.trim();
+    _isValidHost(text); // Updates _ipFieldError
+    _ipFieldValid = text.isNotEmpty && _ipFieldError.isEmpty;
+    // Trigger rebuild when IP text changes so Connect button updates
+    if (mounted) setState(() {});
+  }
 
   @override
   void dispose() {
+    _wifiIpController.removeListener(_onIpTextChanged);
     _wifiHostController.dispose();
     _wifiIpController.dispose();
     super.dispose();
@@ -439,6 +498,7 @@ class _QuickConnectWidgetState extends State<QuickConnectWidget> {
                 hintText: 'IP or FQDN — 192.168.1.100 or evilcrow.local',
                 prefixIcon: const Icon(Icons.language, size: 20),
                 labelText: 'IP Address / FQDN',
+                errorText: _ipFieldError.isNotEmpty ? _ipFieldError : null,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(6),
                 ),
@@ -458,8 +518,7 @@ class _QuickConnectWidgetState extends State<QuickConnectWidget> {
                   child: ElevatedButton.icon(
                     onPressed: wifiProvider.isConnected
                         ? () => wifiProvider.disconnect()
-                        : (_wifiIpController.text.isNotEmpty &&
-                                !wifiProvider.isConnecting)
+                        : (_ipFieldValid && !wifiProvider.isConnecting)
                             ? () => _connectWifi(wifiProvider)
                             : null,
                     icon: wifiProvider.isConnecting

@@ -22,4 +22,4 @@ CompileFlags:
     - -I/usr/include/dbus-1.0
     - -I/usr/lib/x86_64-linux-gnu/dbus-1.0/include
     # Flutter Linux embedder headers
-    - -Iflutter/ephemeral/flutter_linux
+    - -I/home/dev/src/EvilCrowRF-V2/mobile_app/linux/flutter/ephemeral

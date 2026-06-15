@@ -33,9 +33,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// Debounce timer for nRF slider auto-send.
   Timer? _nrfDebounceTimer;
 
+  /// Controllers for AP name/password fields.
+  final _apNameController = TextEditingController();
+  final _apPasswordController = TextEditingController();
+
+  /// Sync controllers from device state when AP config arrives on connect.
+  /// Only populates if controllers are currently empty (user has not typed yet).
+  void _syncApControllersFromDevice(BleProvider bleProvider) {
+    if (_apNameController.text.isEmpty && bleProvider.wifiApName.isNotEmpty) {
+      _apNameController.text = bleProvider.wifiApName;
+    }
+    if (_apPasswordController.text.isEmpty &&
+        bleProvider.wifiApPassword.isNotEmpty) {
+      _apPasswordController.text = bleProvider.wifiApPassword;
+    }
+  }
+
   @override
   void dispose() {
     _nrfDebounceTimer?.cancel();
+    _apNameController.dispose();
+    _apPasswordController.dispose();
     super.dispose();
   }
 
@@ -318,6 +336,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Expanded(
             child: Consumer<BleProvider>(
               builder: (context, bleProvider, child) {
+                // Sync AP fields from device when config arrives on connect
+                _syncApControllersFromDevice(bleProvider);
                 return SingleChildScrollView(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
@@ -353,12 +373,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                       const SizedBox(height: 12),
 
+                      // ===== Connection (WiFi + Bluetooth) =====
+                      _buildConnectionSection(context, bleProvider),
+
+                      const SizedBox(height: 12),
+
                       // ===== Others (Expandable, collapsed) =====
                       _buildOthersSection(context, bleProvider),
 
                       const SizedBox(height: 12),
 
-                      // ===== Device Management (name change, factory reset, WiFi) =====
+                      // ===== Device Management (factory reset, format SD) =====
                       _buildDeviceManagementSection(context, bleProvider),
                     ],
                   ),
@@ -1851,16 +1876,334 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  /// Build Device Management section (Device Name, Factory Reset).
-  Widget _buildDeviceManagementSection(
+  /// Build the Connection section with WiFi and Bluetooth sub-sections.
+  Widget _buildConnectionSection(
       BuildContext context, BleProvider bleProvider) {
+    return Column(
+      children: [
+        // ── WiFi expandable section ──
+        _buildWifiSection(context, bleProvider),
+        const SizedBox(height: 12),
+        // ── Bluetooth expandable section ──
+        _buildBluetoothSection(context, bleProvider),
+      ],
+    );
+  }
+
+  /// Build the WiFi expandable section with connection settings and Access Point.
+  Widget _buildWifiSection(BuildContext context, BleProvider bleProvider) {
+    return Consumer<WifiProvider>(
+      builder: (context, wifiProvider, child) {
+        return Card(
+          child: Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              leading: const Icon(Icons.wifi, color: AppColors.primaryAccent),
+              title: const Text(
+                'WiFi',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primaryText,
+                  fontSize: 16,
+                ),
+              ),
+              subtitle: Text(
+                wifiProvider.isConnected
+                    ? 'Connected to ${wifiProvider.deviceHost}'
+                    : 'Connection & Access Point settings',
+                style: TextStyle(
+                  color: wifiProvider.isConnected
+                      ? AppColors.success
+                      : AppColors.secondaryText,
+                  fontSize: 12,
+                ),
+              ),
+              initiallyExpanded: false,
+              children: [
+                const Divider(color: AppColors.divider, height: 1),
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // ── WiFi Connection content ──
+                      _buildWifiConnectionContent(context),
+
+                      const SizedBox(height: 16),
+                      // ── OR separator ──
+                      Row(
+                        children: [
+                          const Expanded(
+                              child: Divider(color: AppColors.divider)),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Text(
+                              'OR',
+                              style: TextStyle(
+                                color: AppColors.disabledText,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 2,
+                              ),
+                            ),
+                          ),
+                          const Expanded(
+                              child: Divider(color: AppColors.divider)),
+                        ],
+                      ),
+
+                      const SizedBox(height: 12),
+                      _buildAccessPointContent(
+                          context, wifiProvider, bleProvider),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAccessPointContent(BuildContext context,
+      WifiProvider wifiProvider, BleProvider bleProvider) {
+    void _showApplyResultDialog(bool sent) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.secondaryBackground,
+          title: Row(
+            children: [
+              Icon(
+                sent ? Icons.wifi : Icons.error,
+                color: sent ? AppColors.success : AppColors.error,
+                size: 24,
+              ),
+              const SizedBox(width: 10),
+              Text(
+                sent ? 'WiFi Credentials Sent' : 'Failed to Send',
+                style: TextStyle(
+                  color: sent ? AppColors.success : AppColors.error,
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            sent
+                ? 'The device is now attempting to connect to the WiFi network. '
+                    'If the connection was lost, enter the device\'s new IP address '
+                    'or FQDN in the field above and tap Connect.'
+                : 'Could not send the WiFi credentials to the device. '
+                    'Make sure the device is still connected.',
+            style: const TextStyle(color: AppColors.primaryText, fontSize: 14),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('OK',
+                  style: TextStyle(color: AppColors.secondaryText)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Access Point Name (SSID)',
+          style: TextStyle(
+            color: AppColors.primaryText,
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+          ),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'Name of the access point the device will broadcast for configuration.',
+          style: TextStyle(color: AppColors.secondaryText, fontSize: 11),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _apNameController,
+          decoration: InputDecoration(
+            hintText: 'e.g. EvilCrow_RF2-AP',
+            prefixIcon: const Icon(Icons.wifi_tethering, size: 20),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(6),
+            ),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            isDense: true,
+          ),
+          style: Theme.of(context).textTheme.bodyMedium,
+          maxLength: 32,
+        ),
+        const SizedBox(height: 12),
+        const Text(
+          'Access Point Password',
+          style: TextStyle(
+            color: AppColors.primaryText,
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+          ),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'Optional password for the access point. Leave empty for open AP.',
+          style: TextStyle(color: AppColors.secondaryText, fontSize: 11),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _apPasswordController,
+          decoration: InputDecoration(
+            hintText: 'Leave empty for no password',
+            prefixIcon: const Icon(Icons.lock, size: 20),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(6),
+            ),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            isDense: true,
+          ),
+          style: Theme.of(context).textTheme.bodyMedium,
+          obscureText: true,
+          maxLength: 64,
+        ),
+        const SizedBox(height: 12),
+
+        // Save button — enabled when fields are non-empty
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: _apNameController,
+          builder: (context, _, __) {
+            final hasName = _apNameController.text.trim().isNotEmpty;
+            return SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: hasName
+                    ? () async {
+                        if (!bleProvider.isConnected &&
+                            !wifiProvider.isConnected) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                  'No device connected. Connect via WiFi or BLE first.'),
+                              backgroundColor: AppColors.error,
+                            ),
+                          );
+                          return;
+                        }
+                        final name = _apNameController.text.trim();
+                        bool success;
+                        if (bleProvider.isConnected) {
+                          success = await bleProvider.setWifiApConfig(
+                            name,
+                            _apPasswordController.text.trim(),
+                          );
+                        } else {
+                          final cmd = FirmwareBinaryProtocol
+                              .createSetWifiApConfigCommand(
+                            name,
+                            _apPasswordController.text.trim(),
+                          );
+                          success = await wifiProvider.sendCommand(cmd);
+                        }
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(success
+                                  ? 'Access Point credentials saved'
+                                  : 'Failed to save Access Point credentials'),
+                              backgroundColor:
+                                  success ? AppColors.success : AppColors.error,
+                            ),
+                          );
+                        }
+                      }
+                    : null,
+                icon: const Icon(Icons.save, size: 18),
+                label: const Text('Save Access Point'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.warning,
+                  foregroundColor: AppColors.onBright,
+                  disabledBackgroundColor:
+                      AppColors.warning.withValues(alpha: 0.3),
+                ),
+              ),
+            );
+          },
+        ),
+
+        const SizedBox(height: 16),
+
+        // Apply button — enabled when name is non-empty
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: _apNameController,
+          builder: (context, _, __) {
+            final hasName = _apNameController.text.trim().isNotEmpty;
+            return SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: hasName
+                    ? () async {
+                        if (!wifiProvider.isConnected &&
+                            !bleProvider.isConnected) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                  'No device connected. Connect via WiFi or BLE first.'),
+                              backgroundColor: AppColors.error,
+                            ),
+                          );
+                          return;
+                        }
+                        final ssid = _apNameController.text.trim();
+                        final password = _apPasswordController.text.trim();
+                        bool sent = false;
+                        if (wifiProvider.isConnected) {
+                          sent = await wifiProvider.applyWifiConfig(
+                              ssid, password);
+                        } else {
+                          final cmd =
+                              FirmwareBinaryProtocol.createApplyWifiCommand(
+                                  ssid, password);
+                          sent = await bleProvider
+                              .sendBinaryCommand(cmd)
+                              .then((_) => true)
+                              .catchError((_) => false);
+                        }
+                        if (context.mounted) {
+                          _showApplyResultDialog(sent);
+                        }
+                      }
+                    : null,
+                icon: const Icon(Icons.wifi_find, size: 18),
+                label: const Text('Apply'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.success,
+                  foregroundColor: AppColors.onBright,
+                  disabledBackgroundColor:
+                      AppColors.success.withValues(alpha: 0.3),
+                ),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  /// Build the Bluetooth expandable section with device name settings.
+  Widget _buildBluetoothSection(BuildContext context, BleProvider bleProvider) {
     return Card(
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          leading: const Icon(Icons.build_circle, color: AppColors.info),
+          leading: const Icon(Icons.bluetooth, color: AppColors.info),
           title: const Text(
-            'Device Management',
+            'Bluetooth',
             style: TextStyle(
               fontWeight: FontWeight.bold,
               color: AppColors.primaryText,
@@ -1869,8 +2212,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           subtitle: Text(
             bleProvider.isConnected
-                ? 'Name: ${bleProvider.deviceName}'
-                : 'Not connected',
+                ? 'Device: ${bleProvider.deviceName}'
+                : 'Bluetooth device settings',
             style: TextStyle(
               color: bleProvider.isConnected
                   ? AppColors.success
@@ -1938,9 +2281,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ],
                   ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-                  const SizedBox(height: 24),
-
+  /// Build Device Management section (Format SD, Factory Reset).
+  Widget _buildDeviceManagementSection(
+      BuildContext context, BleProvider bleProvider) {
+    return Card(
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          leading: const Icon(Icons.build_circle, color: AppColors.info),
+          title: const Text(
+            'Device Management',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: AppColors.primaryText,
+              fontSize: 16,
+            ),
+          ),
+          subtitle: Text(
+            bleProvider.isConnected
+                ? 'Format SD, Factory Reset'
+                : 'Not connected',
+            style: TextStyle(
+              color: bleProvider.isConnected
+                  ? AppColors.success
+                  : AppColors.secondaryText,
+              fontSize: 12,
+            ),
+          ),
+          initiallyExpanded: false,
+          children: [
+            const Divider(color: AppColors.divider, height: 1),
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   // ── Format SD Card ──
                   Container(
                     width: double.infinity,
@@ -2064,13 +2448,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             color: AppColors.secondaryText, fontSize: 11),
                       ),
                     ),
-
-                  // ── WiFi Connection (separator) ──
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16),
-                    child: Divider(color: AppColors.divider, height: 1),
-                  ),
-                  _buildWifiConnectionContent(context),
                 ],
               ),
             ),
@@ -2090,17 +2467,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // Section header
             Row(
               children: [
-                const Icon(Icons.wifi,
-                    color: AppColors.primaryAccent, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  'WiFi Connection',
-                  style: const TextStyle(
-                    color: AppColors.primaryText,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                ),
                 if (wifiProvider.isConnected)
                   Container(
                     margin: const EdgeInsets.only(left: 8),
@@ -2169,6 +2535,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
 
             const SizedBox(height: 16),
+            // ── OR separator ──
+            Row(
+              children: [
+                const Expanded(child: Divider(color: AppColors.divider)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(
+                    'OR',
+                    style: TextStyle(
+                      color: AppColors.disabledText,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ),
+                const Expanded(child: Divider(color: AppColors.divider)),
+              ],
+            ),
 
             // IP/FQDN field
             const Text(

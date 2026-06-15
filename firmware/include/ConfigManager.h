@@ -3,11 +3,15 @@
 
 #include <LittleFS.h>
 #include <cstring>
+#include "BinaryMessages.h"
+#include "core/ClientsManager.h"
 
 // Maximum length for BLE device name (NimBLE limit is ~29, keep it safe)
 static constexpr size_t MAX_DEVICE_NAME_LEN = 20;
 static constexpr const char* DEFAULT_DEVICE_NAME = "EvilCrow_RF2";
 static constexpr size_t MAX_BUTTON_SIGNAL_PATH_LEN = 127;
+static constexpr size_t MAX_WIFI_AP_NAME_LEN = 32;
+static constexpr size_t MAX_WIFI_AP_PASS_LEN = 64;
 
 // Persistent device settings stored in /config.txt on LittleFS.
 // WiFi parameters removed — this project uses BLE only.
@@ -34,6 +38,9 @@ struct DeviceSettings {
     int16_t cpuTempOffsetDeciC; // CPU temperature offset in deci-C (e.g. -200 = -20.0C)
     // BLE device name (user-configurable, persisted)
     char deviceName[MAX_DEVICE_NAME_LEN + 1];  // null-terminated
+    // WiFi Access Point credentials (for SoftAP mode)
+    char wifiApName[MAX_WIFI_AP_NAME_LEN + 1];   // null-terminated
+    char wifiApPassword[MAX_WIFI_AP_PASS_LEN + 1]; // null-terminated
 };
 
 // Internal flash filesystem for configuration and state.
@@ -63,7 +70,9 @@ class ConfigManager
         76,         // nrfChannel
         5,          // nrfAutoRetransmit
         -360,       // cpuTempOffsetDeciC
-        "EvilCrow_RF2"  // deviceName
+        "EvilCrow_RF2",  // deviceName
+        "EvilCrow_RF2-AP",  // wifiApName
+        ""            // wifiApPassword
     };
 
     /// Load settings from /config.txt into the in-memory struct.
@@ -116,6 +125,14 @@ class ConfigManager
                 strncpy(settings.deviceName, val.c_str(), MAX_DEVICE_NAME_LEN);
                 settings.deviceName[MAX_DEVICE_NAME_LEN] = '\0';
             }
+            else if (key == "wifi_ap_name") {
+                strncpy(settings.wifiApName, val.c_str(), MAX_WIFI_AP_NAME_LEN);
+                settings.wifiApName[MAX_WIFI_AP_NAME_LEN] = '\0';
+            }
+            else if (key == "wifi_ap_password") {
+                strncpy(settings.wifiApPassword, val.c_str(), MAX_WIFI_AP_PASS_LEN);
+                settings.wifiApPassword[MAX_WIFI_AP_PASS_LEN] = '\0';
+            }
             // Unknown keys are silently ignored (forward-compatible)
         }
         f.close();
@@ -148,6 +165,11 @@ class ConfigManager
         if (settings.deviceName[0] == '\0') {
             strncpy(settings.deviceName, DEFAULT_DEVICE_NAME, MAX_DEVICE_NAME_LEN);
             settings.deviceName[MAX_DEVICE_NAME_LEN] = '\0';
+        }
+        // Ensure WiFi AP name is valid
+        if (settings.wifiApName[0] == '\0') {
+            strncpy(settings.wifiApName, "EvilCrow_RF2-AP", MAX_WIFI_AP_NAME_LEN);
+            settings.wifiApName[MAX_WIFI_AP_NAME_LEN] = '\0';
         }
 
         ESP_LOGI("ConfigManager", "Settings loaded: baud=%d rssi=%d power=%d delay=%d reps=%d mod1=%d mod2=%d btn1=%d btn2=%d b1PathType=%d b2PathType=%d nrf_pa=%d nrf_dr=%d nrf_ch=%d name=%s",
@@ -184,6 +206,8 @@ class ConfigManager
         f.printf("nrf_auto_retransmit=%d\n", settings.nrfAutoRetransmit);
         f.printf("cpu_temp_offset_decic=%d\n", settings.cpuTempOffsetDeciC);
         f.printf("device_name=%s\n", settings.deviceName);
+        f.printf("wifi_ap_name=%s\n", settings.wifiApName);
+        f.printf("wifi_ap_password=%s\n", settings.wifiApPassword);
         f.close();
         ESP_LOGI("ConfigManager", "Settings saved to /config.txt");
         return true;
@@ -260,7 +284,9 @@ class ConfigManager
             "", "",
             3, 0, 76, 5,
             -200,
-            "EvilCrow_RF2"
+            "EvilCrow_RF2",
+            "EvilCrow_RF2-AP",
+            ""
         };
         settings = defaults;
         saveSettings();
@@ -283,6 +309,55 @@ class ConfigManager
     {
         if (settings.deviceName[0] == '\0') return DEFAULT_DEVICE_NAME;
         return settings.deviceName;
+    }
+
+    /// Get the WiFi AP name.
+    static const char* getWifiApName()
+    {
+        return settings.wifiApName;
+    }
+
+    /// Get the WiFi AP password.
+    static const char* getWifiApPassword()
+    {
+        return settings.wifiApPassword;
+    }
+
+    /// Set WiFi AP credentials and persist.
+    static bool setWifiApCredentials(const char* name, size_t nameLen,
+                                      const char* password, size_t passLen)
+    {
+        if (nameLen == 0 || nameLen > MAX_WIFI_AP_NAME_LEN) return false;
+        if (passLen > MAX_WIFI_AP_PASS_LEN) return false;
+        memcpy(settings.wifiApName, name, nameLen);
+        settings.wifiApName[nameLen] = '\0';
+        memcpy(settings.wifiApPassword, password, passLen);
+        settings.wifiApPassword[passLen] = '\0';
+        saveSettings();
+        ESP_LOGI("ConfigManager", "WiFi AP credentials set: name=%s", settings.wifiApName);
+        return true;
+    }
+
+    /// Send WiFi AP config notification to all clients.
+    static void sendWifiApConfig()
+    {
+        size_t nameLen = strlen(settings.wifiApName);
+        size_t passLen = strlen(settings.wifiApPassword);
+        size_t totalLen = 1 + nameLen + 1 + passLen; // nameLen:1 + name + passLen:1 + pass
+        uint8_t* payload = new uint8_t[totalLen + 1];
+        if (!payload) return;
+        payload[0] = MSG_WIFI_AP_CONFIG;
+        size_t offset = 1;
+        payload[offset++] = (uint8_t)nameLen;
+        memcpy(payload + offset, settings.wifiApName, nameLen);
+        offset += nameLen;
+        payload[offset++] = (uint8_t)passLen;
+        memcpy(payload + offset, settings.wifiApPassword, passLen);
+        offset += passLen;
+        ClientsManager::getInstance().notifyAllBinary(
+            NotificationType::State, payload, totalLen + 1);
+        delete[] payload;
+        ESP_LOGI("ConfigManager", "WiFi AP config sent: name=%s", settings.wifiApName);
     }
 
     /// Full factory reset: remove ALL files from LittleFS and reboot.

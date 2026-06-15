@@ -48,6 +48,7 @@ enum BinaryMessageType {
   hwButtonStatus(0xC8), // HW button config sync
   sdStatus(0xC9), // SD card storage info
   nrfModuleStatus(0xCA), // nRF24 module presence/state
+  wifiApConfig(0xCB), // WiFi AP credentials
   // ProtoPirate (automotive key fob decoder) notifications
   ppDecodeResult(0xB5), // Decoded signal result
   ppHistoryEntry(0xB6), // History entry with timestamp
@@ -1404,6 +1405,26 @@ class BinaryMessageParser {
               'modulation': data[7],
             },
           };
+
+        case BinaryMessageType.wifiApConfig:
+          // [0xCB][nameLen:1][name...][passLen:1][pass...]
+          if (data.length < 4) return null;
+          {
+            int nameLen = data[1];
+            if (1 + nameLen + 1 > data.length) return null;
+            int passLen = data[2 + nameLen];
+            if (2 + nameLen + passLen > data.length) return null;
+            String apName = String.fromCharCodes(data.sublist(2, 2 + nameLen));
+            String apPassword = String.fromCharCodes(
+                data.sublist(3 + nameLen, 3 + nameLen + passLen));
+            return {
+              'type': 'WifiApConfig',
+              'data': {
+                'apName': apName,
+                'apPassword': apPassword,
+              },
+            };
+          }
 
         // ── OTA notifications ──────────────────────────────────
 

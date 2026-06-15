@@ -25,6 +25,10 @@ struct RequestScan {
 #include "modules/battery/BatteryModule.h"
 #endif
 
+#if EVILCROW_WIFI_MODE
+#include "core/wifi/WifiConfigManager.h"
+#endif
+
 class StateCommands {
 public:
     // Registering all state commands
@@ -39,6 +43,8 @@ public:
         handler.registerCommand(0x15, handleReboot);
         handler.registerCommand(0x16, handleFactoryReset);
         handler.registerCommand(0xC1, handleSettingsUpdate);
+        handler.registerCommand(0x19, handleSetWifiApConfig);
+        handler.registerCommand(0x1A, handleApplyWifi);
         
         ESP_LOGI("StateCommands", "State commands registered successfully");
     }
@@ -75,6 +81,9 @@ private:
 
         // Send nRF24 module status
         sendNrfStatus();
+
+        // Send WiFi AP config
+        ConfigManager::sendWifiApConfig();
         
         return true;
     }
@@ -300,6 +309,59 @@ private:
             reinterpret_cast<const uint8_t*>(&status), sizeof(status));
         ESP_LOGI("StateCommands", "SdStatus sent: mounted=%d total=%dMB free=%dMB",
                  status.mounted, status.totalMB, status.freeMB);
+    }
+
+    // Handle Apply WiFi — save credentials and connect to a network (0x1A).
+    // Payload: [ssidLen:1][ssid...][passLen:1][pass...]
+    // On success the device will switch networks and the app may lose connection.
+    static bool handleApplyWifi(const uint8_t* data, size_t len) {
+        if (len < 3) {
+            ESP_LOGW("StateCommands", "Insufficient data for applyWifi (%u < 3)", (unsigned)len);
+            return false;
+        }
+        size_t ssidLen = data[0];
+        size_t passLen = data[1 + ssidLen];
+        if (1 + ssidLen + 1 + passLen > len) {
+            ESP_LOGW("StateCommands", "ApplyWifi payload size mismatch");
+            return false;
+        }
+#if EVILCROW_WIFI_MODE
+        {
+            String ssid = String(reinterpret_cast<const char*>(data + 1), ssidLen);
+            String password = String(reinterpret_cast<const char*>(data + 2 + ssidLen), passLen);
+            ESP_LOGI("StateCommands", "ApplyWifi: connecting to SSID=%s", ssid.c_str());
+            WifiConfigManager::saveCredentials(ssid, password);
+            WifiConfigManager::resetState();
+        }
+#else
+        ESP_LOGW("StateCommands", "ApplyWifi not available in BT mode");
+#endif
+        return true;
+    }
+
+    // Handle setting WiFi AP credentials from app.
+    // Payload: [nameLen:1][name...][passLen:1][pass...]
+    static bool handleSetWifiApConfig(const uint8_t* data, size_t len) {
+        if (len < 3) { // nameLen + passLen + at least 1 char for name
+            ESP_LOGW("StateCommands", "Insufficient data for setWifiApConfig (%u < 3)", (unsigned)len);
+            return false;
+        }
+        size_t nameLen = data[0];
+        size_t passLen = data[1 + nameLen];
+        if (1 + nameLen + 1 + passLen > len) {
+            ESP_LOGW("StateCommands", "WiFi AP config payload size mismatch");
+            return false;
+        }
+        if (!ConfigManager::setWifiApCredentials(
+                reinterpret_cast<const char*>(data + 1), nameLen,
+                reinterpret_cast<const char*>(data + 2 + nameLen), passLen)) {
+            ESP_LOGE("StateCommands", "Failed to set WiFi AP credentials");
+            return false;
+        }
+        ESP_LOGI("StateCommands", "WiFi AP credentials set: name=%s", ConfigManager::settings.wifiApName);
+        // Echo back the new config to confirm
+        ConfigManager::sendWifiApConfig();
+        return true;
     }
 
     // Send nRF24 module status to all BLE clients.

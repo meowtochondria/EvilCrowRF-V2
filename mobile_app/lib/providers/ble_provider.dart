@@ -2089,6 +2089,9 @@ class BleProvider extends ChangeNotifier {
         case 'NrfModuleStatus':
           _handleNrfModuleStatus(data['data']);
           break;
+        case 'WifiApConfig':
+          _handleWifiApConfig(data['data']);
+          break;
         // ── NRF24 notifications ──
         case 'NrfDeviceFound':
           final d = data['data'] as Map?;
@@ -3491,6 +3494,12 @@ class BleProvider extends ChangeNotifier {
   String _deviceName = 'EvilCrow_RF2';
   String get deviceName => _deviceName;
 
+  // --- WiFi AP config (received via 0xCB on connect) ---
+  String _wifiApName = '';
+  String _wifiApPassword = '';
+  String get wifiApName => _wifiApName;
+  String get wifiApPassword => _wifiApPassword;
+
   /// Set BLE device name on the device. Takes effect after reboot.
   Future<bool> setDeviceName(String name) async {
     if (name.isEmpty || name.length > 20) return false;
@@ -3518,6 +3527,24 @@ class BleProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       _log('error', 'Failed to send factory reset: $e');
+      return false;
+    }
+  }
+
+  /// Send WiFi AP credentials to the device. Persisted in config.txt.
+  Future<bool> setWifiApConfig(String apName, String apPassword) async {
+    if (!isConnected || txCharacteristic == null) return false;
+    try {
+      final cmd = FirmwareBinaryProtocol.createSetWifiApConfigCommand(
+          apName, apPassword);
+      await sendBinaryCommand(cmd);
+      _wifiApName = apName;
+      _wifiApPassword = apPassword;
+      notifyListeners();
+      _log('info', 'WiFi AP config set: name=$apName');
+      return true;
+    } catch (e) {
+      _log('error', 'Failed to set WiFi AP config: $e');
       return false;
     }
   }
@@ -4139,6 +4166,16 @@ class BleProvider extends ChangeNotifier {
       _log('info', 'Device name: $_deviceName');
       notifyListeners();
     }
+  }
+
+  /// Handle WiFi AP config (0xCB) — received on getState and after update.
+  void _handleWifiApConfig(Map<String, dynamic> data) {
+    final apName = data['apName'] as String? ?? '';
+    final apPassword = data['apPassword'] as String? ?? '';
+    _wifiApName = apName;
+    _wifiApPassword = apPassword;
+    _log('info', 'WiFi AP config: name=$apName');
+    notifyListeners();
   }
 
   /// Handle battery status (0xC3) — received periodically and on connect.
