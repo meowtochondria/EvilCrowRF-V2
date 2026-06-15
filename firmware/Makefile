@@ -97,6 +97,9 @@ flash-monitor-bt:
 flash-monitor-wifi:
 	@uv run platformio run --target upload --target monitor --environment evilcrow-wifi
 
+monitor:
+	@uv run platformio run --target monitor
+
 update:
 	@uv sync
 	@uv run platformio upgrade
