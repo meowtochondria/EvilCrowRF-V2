@@ -58,7 +58,7 @@ help: ## Show this help
 		sort | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-24s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
-	@echo "Linux requires: sudo apt install libgtk-3-dev lzma-dev"
+	@echo "Linux requires: sudo apt install libgtk-3-dev cmake clang ninja-build"
 	@echo "  then: flutter config --enable-linux-desktop"
 
 # ── All-in-one ─────────────────────────────────────────────────────────
