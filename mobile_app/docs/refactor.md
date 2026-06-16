@@ -15,6 +15,10 @@
 - Added SharedPreferences handling note
 - HomeScreen fix moved to Milestone 0 (trivial, immediate)
 - Acknowledged widgets >500 lines and deferred with a plan
+- Updated MessageDispatcher to accept parsed `Map<String, dynamic>` instead of raw `Uint8List` (see audit finding: WiFi JSON responses have no binary message type byte)
+- Deferred "Modules Busy" investigation until after WiFi response routing is fixed
+- Cleaned up `CommandResponseHandler` → `BleChunkHandler` naming
+- Updated `ConnectionStateProvider` to reference new types (`BleConnectionProvider`/`WifiConnectionProvider`)
 
 ---
 
@@ -22,8 +26,17 @@
 
 **Before any refactoring**, fix the connection check bug in `home_screen.dart`.
 
-### Why this is zero-risk
-This is a single-line addition to use `ActiveConnectionProvider` (or a simple helper) that wraps both BLE and WiFi providers.
+### Scope of the problem
+
+This bug has two layers:
+
+1. **Surface layer (HomeScreen navigation guard).** The tab-bar tap handler in `home_screen.dart` line ~151 correctly checks `bleProvider.isConnected || wifiProvider.isConnected`, but every other screen that reads `Provider.of<BleProvider>(context).isConnected` sees `false` when connected via WiFi — so they all show "device not connected."
+
+2. **Deep layer (WiFi response routing is completely unwired).** Even if you bypass the HomeScreen guard, WiFi mode cannot process *any* module responses. `WifiProvider._handleBinaryFrame()` calls `onJsonReceived!(response)` (line 319 of `wifi_provider.dart`), but **nothing ever sets `onJsonReceived`**. The entire `_handleCompleteResponse` dispatch — with 50+ case handlers for Sub-GHz, NRF, Files, Bruter, OTA, settings — lives exclusively in `BleProvider`. This means **WiFi mode is completely non-functional for all modules**, not just blocked by a navigation check. Fixing this requires the `MessageDispatcher` from Milestone 1 — see §1.1 and §1.5.
+
+### Why Milestone 0 is still zero-risk
+
+We fix only the **surface layer** here: create `ConnectionStateProvider` so the HomeScreen navigation guard and widget connection checks work correctly for the BLE path (which already works) and return correct state for the WiFi path (which will become functional once §1.5 wires the response routing).
 
 ### The Bug
 
@@ -41,7 +54,7 @@ When connected via WiFi, `BleProvider.isConnected` is `false`, so every screen t
 
 ### Fix
 
-Create `ConnectionStateProvider` (the simpler cousin of `ActiveConnectionProvider` — see Milestone 1) and update `HomeScreen`'s navigation guard to use it. This is a one-file, ~50-line provider that listens to both BLE and WiFi providers and exposes `isConnected`.
+Create `ConnectionStateProvider` (see Milestone 1.2) and update `HomeScreen`'s navigation guard to use it. This is a one-file, ~50-line provider that listens to both BLE and WiFi providers and exposes `isConnected`.
 
 **Files touched:** `providers/connection_state_provider.dart` (new ~50 lines)
 
@@ -49,14 +62,15 @@ Create `ConnectionStateProvider` (the simpler cousin of `ActiveConnectionProvide
 
 ## 0b. Investigate "Modules Busy" — Is It a Real Bug?
 
-Before touching architecture, determine whether "Sub-GHz modules are busy" is:
+> **Deferred.** The "modules busy" investigation is blocked until Milestone 1.5 wires WiFi response routing to `MessageDispatcher`. Without this, you cannot send module commands over WiFi or observe firmware responses, so testing for SPI contention over WiFi is impossible. Resume this investigation after Milestone 1 is complete and both transport paths can exercise Sub-GHz and NRF commands.
 
-1. **An architectural issue** (screens using wrong provider — already identified above)
-2. **A real SPI contention bug** (NRF24 and CC1101 share SPI; commands may race)
-3. **Missing command queuing** (module A receives a command while still processing module B's previous command)
-4. **A firmware-side issue** (firmware reports "busy" when SPI is locked)
+For reference, the possible causes remain:
 
-### How to investigate
+1. **A real SPI contention bug** (NRF24 and CC1101 share SPI; commands may race)
+2. **Missing command queuing** (module A receives a command while still processing module B's previous command)
+3. **A firmware-side issue** (firmware reports "busy" when SPI is locked)
+
+### How to investigate (after Milestone 1)
 
 1. In `ble_provider.dart`, search for "busy" and "module" in string literals — find where this error originates
 2. Check `_handleFirmwareResponse` and its dispatch logic: when a module is busy, does the firmware return a specific error code?
@@ -75,61 +89,89 @@ Before touching architecture, determine whether "Sub-GHz modules are busy" is:
 
 This is the most important design decision in the entire refactor. Every subsequent step depends on it.
 
-**Option A — Event Bus (simpler, recommended for this codebase):**
+**Two-layer routing model — do NOT conflate them:**
+
 ```
-BLE/WiFi notification
-  → ConnectionProvider parses header
-  → ConnectionProvider emits raw payload on a stream (StreamController)
-  → Each module provider subscribes to the stream and filters for its message types
+Layer 1 - MessageDispatcher (parsed firmware responses)
+  BLE: raw BLE notify bytes
+    → BleChunkHandler reassembles chunks → complete Uint8List
+    → FirmwareBinaryProtocol.parseResponse() → Map<String, dynamic>
+    → MessageDispatcher.dispatch(parsedMap)
+  WiFi: raw WebSocket binary frame
+    → FirmwareBinaryProtocol.parseResponse() → Map<String, dynamic> (complete, no chunks)
+    → MessageDispatcher.dispatch(parsedMap)
+  → [providers filter by type field]
+  → Module providers update their state
+
+Layer 2 - AppEventBus (domain events, Milestone 2.7)
+  AppEventBus.emit(SubGhzRecordingStarted(moduleIndex))
+  → DeviceInfoProvider absorbs for its own state
+  → SubGhzProvider absorbs for its own state
+  → RecordScreen rebuilds
 ```
 
-**Option B — Router pattern (more explicit but more boilerplate):**
-```
-BLE/WiFi notification
-  → ConnectionProvider parses header + routes to specific module provider's handler
-  → Each module provider implements a `handleMessage(type, payload)` method
-  → ConnectionProvider calls the correct handler based on message type
-```
+**Layering rule (the rule that prevents the double-listening bug):**
+> *`MessageDispatcher` handles binary/transport frames. `AppEventBus` handles domain events. A provider never listens to both for the same piece of state.*
 
-**Decision for this codebase:** Option A (Event Bus) is better because:
-- Message types are already defined in `FirmwareBinaryProtocol` as `MSG_*` constants
-- Each module provider only cares about a subset of messages
-- Adding a new module doesn't require modifying `ConnectionProvider`
-- Less boilerplate for a codebase of this size
+Why this matters in practice: `BleChunkHandler` emits a `ChunkComplete` event (binary-layer concern). `SubGhzProvider` does **not** need to react to `ChunkComplete` — it reacts only to `SubGhzRecordingStarted` (domain-layer concern). The transport layer fires `ChunkComplete`, the domain layer fires `RecordingStarted`, and they live in separate streams. This eliminates the question of whether a provider should "listen on the dispatcher, the bus, or both." It listens on exactly one.
 
-**Implementation:**
+**Why this rules out some alternatives:**
+- Option B (Router pattern) would require `ConnectionProvider` to grow a `switch (msgType)` block — adding new modules means modifying `ConnectionProvider`, violating open-closed.
+- A single unified bus with both binary and domain events would force every subscriber to filter noise and risk missing events.
+
+**Decision for this codebase:** Two-layer model (MessageDispatcher + AppEventBus) because it maps cleanly onto the existing binary protocol while giving providers a type-safe domain API.
+
+**Important — why `dispatch` accepts parsed `Map<String, dynamic>`, not raw `Uint8List`:**
+
+The current `BleProvider._handleFirmwareResponse()` (line 1690) receives a `Map<String, dynamic>` from `FirmwareBinaryProtocol.parseResponse()`. This function parses both binary payloads (where `messageType` is `payload[0]`) and JSON payloads (where `type` is a string like `"SignalRecorded"`). If `MessageDispatcher` accepted raw `Uint8List`, JSON responses would have no meaningful `messageType` byte. The dispatcher must accept the **already-parsed** form so all providers can filter uniformly on the `type` field.
+
 ```dart
 // connection/message_dispatcher.dart
 class MessageDispatcher {
-  final StreamController<RawMessage> _controller = StreamController.broadcast();
+  // Broadcast: multiple providers observe simultaneously
+  final StreamController<Map<String, dynamic>> _controller = StreamController.broadcast();
 
-  Stream<RawMessage> get messages => _controller.stream;
+  Stream<Map<String, dynamic>> get messages => _controller.stream;
 
-  // ConnectionProviders call this for every incoming notification
-  void dispatch(Uint8List payload) {
-    _controller.add(RawMessage(payload));
+  /// Dispatch a parsed firmware response to all subscribers.
+  ///
+  /// Called by:
+  /// - BleConnectionProvider: after BleChunkHandler reassembles chunks and
+  ///   FirmwareBinaryProtocol.parseResponse() parses the complete payload
+  /// - WifiConnectionProvider: after FirmwareBinaryProtocol.parseResponse()
+  ///   parses the complete WebSocket frame
+  void dispatch(Map<String, dynamic> parsedResponse) {
+    _controller.add(parsedResponse);
   }
-}
 
-class RawMessage {
-  final Uint8List payload;
-  final int messageType; // first byte of payload
-  RawMessage(this.payload) : messageType = payload.isNotEmpty ? payload[0] : 0;
+  void dispose() => _controller.close();
 }
 ```
+
+**Critical contract for all providers consuming `MessageDispatcher.messages`:**
+```dart
+// Every provider subscriber MUST filter by the 'type' field before acting.
+// A provider reacting to the wrong response type is a bug, not a feature.
+_messageDispatcher.messages
+    .where((msg) => msg['type'] == 'SignalRecorded')
+    .listen(_handleSignalRecorded);
+```
+
+This is the same filtering pattern that `_handleCompleteResponse` (line 1978 of `ble_provider.dart`) already uses — a `switch` on `data['type']`. The MessageDispatcher simply broadcasts the parsed map and lets each provider run its own filter.
 
 ### 1.2 Create `ConnectionStateProvider` (~50 lines)
 
 A lightweight `ChangeNotifier` that:
-- Watches both `BleProvider` and `WifiProvider` via `addListener`
+- Watches both `BleConnectionProvider` and `WifiConnectionProvider` via `addListener`
 - Exposes `isConnected` (true if either is connected)
 - Exposes `connectedTransport` ('ble' | 'wifi' | null)
-- Exposes `deviceName`, `fwVersion` from the active transport
+
+> **Transition note:** During Milestones 0-2, `ConnectionStateProvider` will reference `BleProvider` and `WifiProvider` directly since `BleConnectionProvider` and `WifiConnectionProvider` don't exist yet. Once Milestone 1 creates the new transport providers, update the constructor. The public API (`isConnected`, `connectedTransport`) stays the same.
 
 ```dart
 class ConnectionStateProvider extends ChangeNotifier {
-  final BleProvider _ble;
-  final WifiProvider _wifi;
+  final BleConnectionProvider _ble;
+  final WifiConnectionProvider _wifi;
 
   ConnectionStateProvider(this._ble, this._wifi) {
     _ble.addListener(_onChange);
@@ -138,13 +180,20 @@ class ConnectionStateProvider extends ChangeNotifier {
 
   bool get isConnected => _ble.isConnected || _wifi.isConnected;
   String? get connectedTransport => _ble.isConnected ? 'ble' : (_wifi.isConnected ? 'wifi' : null);
-  String get deviceName => _ble.isConnected ? _ble.deviceName : _wifi.deviceName;
+  // deviceName and fwVersion come from DeviceInfoProvider, not the transport
 
   void _onChange() { notifyListeners(); }
+
+  @override
+  void dispose() {
+    _ble.removeListener(_onChange);
+    _wifi.removeListener(_onChange);
+    super.dispose();
+  }
 }
 ```
 
-### 1.3 Extract `command_response_handler.dart` (~200 lines)
+### 1.3 Extract `ble_chunk_handler.dart` (~200 lines)
 
 Extract from `BleProvider` the chunked response assembly logic (L1773-L1978 approximately):
 - `_handleChunkedResponse`
@@ -153,9 +202,40 @@ Extract from `BleProvider` the chunked response assembly logic (L1773-L1978 appr
 - `_chunkStartTimes`, `_chunkLastReceived` maps
 - Chunk timeout constants (`_chunkTimeout`, `_chunkStaleTimeout`)
 
-This is the only BLE-specific chunking code that needs to be preserved. It's clean enough to extract and makes the subsequent transport split easier.
+**Important: Verify before extracting.**
 
-**This file is shared** between BLE and WiFi connection providers.
+`WifiProvider` currently handles incoming frames as **complete WebSocket messages** — not chunked BLE notifications. In `WifiProvider._handleBinaryFrame()`:
+```dart
+void _handleBinaryFrame(List<int> data) {
+  // Parse binary protocol frame (single complete message)
+  final payload = data.sublist(PACKET_HEADER_SIZE, PACKET_HEADER_SIZE + dataLen);
+  final response = FirmwareBinaryProtocol.parseResponse(Uint8List.fromList(payload));
+  onJsonReceived!(response);  // complete, not chunked
+}
+```
+
+**This means `BleChunkHandler` is NOT shared with WiFi.**
+
+**Decision:** Keep chunk assembly **inside `BleConnectionProvider`** only. `WifiConnectionProvider` does NOT use `BleChunkHandler` since WebSocket already delivers complete frames. `BleChunkHandler` is a pure in-memory buffer class that `BleConnectionProvider` owns.
+
+```dart
+// connection/ble_chunk_handler.dart
+class BleChunkHandler {
+  final Map<int, Map<int, Uint8List>> _chunkData = {};
+  final Map<int, int> _expectedChunks = {};
+  final Map<int, Set<int>> _receivedChunks = {};
+  final Map<int, DateTime> _chunkStartTimes = {};
+  final Map<int, DateTime> _chunkLastReceived = {};
+
+  static const Duration _chunkTimeout = Duration(seconds: 10);
+  static const Duration _chunkStaleTimeout = Duration(seconds: 4);
+
+  /// Process an incoming chunk. Returns complete assembled bytes when all chunks received.
+  Uint8List? processChunk(int chunkId, int chunkNumber, int totalChunks, Uint8List data);
+  void cleanupStaleBuffers();
+  void dispose();
+}
+```
 
 ### 1.4 Create `BleConnectionProvider` (~300 lines) — Transport Only
 
@@ -163,25 +243,46 @@ Extract from `BleProvider`:
 - BLE scanning (start/stop, scan results, permission handling)
 - BLE device connection/disconnection
 - Characteristic discovery and subscription setup
-- Calling `MessageDispatcher.dispatch()` on incoming notifications
-- Calling `_chunkData` assembly (via `CommandResponseHandler`)
+- Calling `BleChunkHandler.processChunk()` on incoming BLE notifications
+- After chunk assembly: `FirmwareBinaryProtocol.parseResponse()` → `MessageDispatcher.dispatch(parsedMap)`
 
 **Does NOT contain:** any module logic, any response handlers beyond chunk assembly, any module state.
 
 ### 1.5 Create `WifiConnectionProvider` (~200 lines) — Transport Only
 
 Refactor `WifiProvider` to:
-- Use `MessageDispatcher` for incoming messages
-- Use `CommandResponseHandler` for chunk assembly
+- Parse incoming WebSocket binary frames via `FirmwareBinaryProtocol.parseResponse()` (same parser BLE uses after chunk assembly)
+- Dispatch parsed `Map<String, dynamic>` through `MessageDispatcher.dispatch()` — this is the **critical fix** that makes WiFi mode functional for modules
 - Expose `sendCommand(Uint8List)` via WebSocket
+- **Remove** the `onJsonReceived` / `onBinaryReceived` callback pattern — these are replaced by `MessageDispatcher`
 
-**Does NOT contain:** any module logic.
+**WiFi wiring (the critical path that currently doesn't exist):**
+```dart
+// WifiConnectionProvider._handleBinaryFrame — replaces current WifiProvider L299-324
+void _handleBinaryFrame(List<int> data) {
+  if (data.length < FirmwareBinaryProtocol.PACKET_HEADER_SIZE + 1) return;
+  if (data[0] != FirmwareBinaryProtocol.MAGIC_BYTE) return;
+
+  final dataLen = data[5] | (data[6] << 8);
+  final payload = data.sublist(
+    FirmwareBinaryProtocol.PACKET_HEADER_SIZE,
+    FirmwareBinaryProtocol.PACKET_HEADER_SIZE + dataLen,
+  );
+
+  // Parse → same format BleProvider._handleFirmwareResponse receives today
+  final parsed = FirmwareBinaryProtocol.parseResponse(Uint8List.fromList(payload));
+  // Route to all module providers (replaces onJsonReceived callback)
+  _messageDispatcher.dispatch(parsed);
+}
+```
+
+**Does NOT contain:** any module logic, any chunk assembly.
 
 ### 1.6 Delete or Integrate Dead `transport/` Code
 
 The existing `transport/transport_layer.dart` with `ITransportLayer`, `BLEBinaryTransport`, `WifiWebSocketTransport`, and `TransportFactory` is **dead code** — never wired to the providers.
 
-**Decision:** Delete it. The new `CommandResponseHandler` + `MessageDispatcher` approach is cleaner and better suited for this codebase. The existing transport abstractions were a prior attempted design that was abandoned.
+**Decision:** Delete it. The new `BleChunkHandler` + `MessageDispatcher` approach is cleaner and better suited for this codebase. The existing transport abstractions were a prior attempted design that was abandoned.
 
 ---
 
@@ -201,7 +302,7 @@ Extract from `BleProvider`:
 - `deviceBtn1Action`, `deviceBtn2Action`, `deviceBtn1PathType`, `deviceBtn2PathType`
 - `_handleVersionInfo`, `_handleDeviceName`, `_handleWifiApConfig`, `_handleBatteryStatus`, `_handleHwButtonStatus`, `_handleSdStatus`, `_handleNrfModuleStatus`, `_handleSettingsSync`
 
-Handles: Settings sync (when device connects, it pushes all device state). Subscribes to `MessageDispatcher` and filters for `MSG_VERSION_INFO`, `MSG_SETTINGS_SYNC`, `MSG_SETTINGS_UPDATE`, etc.
+Handles: Settings sync (when device connects, it pushes all device state). Subscribes to `MessageDispatcher.messages` and filters for `type == 'VersionInfo'`, `type == 'SettingsSync'`, `type == 'State'`, `type == 'DeviceName'`, `type == 'BatteryStatus'`, `type == 'HwButtonStatus'`, `type == 'SdStatus'`, `type == 'NrfModuleStatus'`, `type == 'WifiApConfig'`, `type == 'SdrStatus'`, `type == 'ModeSwitch'.
 
 ### 2.2 `SubGhzProvider` (~500 lines)
 
@@ -219,7 +320,7 @@ Extract from `BleProvider`:
 - `transmitFromFile`, `sendSetTimeCommand`
 - `_handleSignalDetectedResponse`, `_handleSignalRecordedResponse`, `_handleSignalSentResponse`, `_handleSignalSendingErrorResponse`
 
-Subscribes to: `MessageDispatcher.messages` and filters for `MSG_REQUEST_RECORD`, `MSG_FREQUENCY_SEARCH`, `MSG_START_JAM`, `MSG_TRANSMIT_BINARY`, `MSG_TRANSMIT_FROM_FILE`, signal-related types (0x81, 0x82, etc.)
+Subscribes to: `MessageDispatcher.messages` and filters for `type == 'SignalDetected'`, `type == 'SignalRecorded'`, `type == 'SignalRecordError'`, `type == 'SignalSent'`, `type == 'SignalSendingError'`, `type == 'ModeSwitch'`.
 
 ### 2.3 `FilesProvider` (~500 lines)
 
@@ -234,7 +335,7 @@ Extract from `BleProvider`:
 - `getDirectoryTree`, `_rebuildDirectoryTree`
 - `_handleFilesListResponse`, `_handleFileDataResponse`, `_handleFileSystemResponse`, `_handleFileLoadResponse`, `_handleFileUploadResponse`
 
-Subscribes to: File list messages (0xA1), file data chunks, error responses for file operations.
+Subscribes to: `MessageDispatcher.messages` and filters for `type == 'files_list'`, `type == 'file_data'`, `type == 'FileSystem'`, `type == 'FileUpload'`, `type == 'DirectoryTree'`.
 
 **Note:** All file system methods currently return `Future` using `_pendingFileReadCompleter`, `_pendingRenameCompleter`, etc. The `FilesProvider` should replace these completers with proper `Completer` instances inside each method, not stored as provider fields.
 
@@ -252,6 +353,8 @@ Extract from `BleProvider`:
 
 **Caveat:** The NRF provider also handles ProtoPirate state (`ppDecoding`, `ppResults`, etc.). Consider keeping ProtoPirate in `NrfProvider` for now to avoid over-splitting. ProtoPirate shares the NRF hardware module, so their state is inherently coupled.
 
+Subscribes to: `MessageDispatcher.messages` and filters for `type == 'NrfModuleStatus'`, `type == 'NrfDeviceFound'`, `type == 'NrfAttackComplete'`, `type == 'NrfScanComplete'`, `type == 'NrfScanStatus'`, `type == 'NrfSpectrumData'`, `type == 'NrfJamStatus'`, `type == 'NrfJamModeConfig'`, `type == 'NrfJamModeInfo'`, plus ProtoPirate types (`PPDecodeResult`, `PPHistoryEntry`, `PPStatus`, `PPHistoryCount`, `PPFileList`, `PPTxStatus`, `PPSaveResult`).
+
 ### 2.5 `BruterProvider` (~400 lines)
 
 Extract from `BleProvider`:
@@ -263,7 +366,7 @@ Extract from `BleProvider`:
 - `queryBruterSavedState`, `setBruterDelay`, `setBruterModule`, `_resetBruterState`
 - `_handleBruterProgress`, `_handleBruterComplete`, `_handleBruterPaused`, `_handleBruterResumed`, `_handleBruterStateAvail`
 
-Subscribes to: `MSG_BRUTER` messages.
+Subscribes to: `MessageDispatcher.messages` and filters for `type == 'BruterProgress'`, `type == 'BruterComplete'`, `type == 'BruterPaused'`, `type == 'BruterResumed'`, `type == 'BruterStateAvail'`.
 
 ### 2.6 `OtaProvider` (~300 lines)
 
@@ -278,25 +381,66 @@ IDLE → UPLOADING (begin → chunks → end) → REBOOTING → WAITING_RECONNEC
 ```
 The `OtaProvider` should implement this as a proper state machine (use a `state` field with an enum, not scattered booleans). This is the most stateful extraction and warrants careful design.
 
-Subscribes to: `MSG_OTA_BEGIN`, `MSG_OTA_DATA`, `MSG_OTA_END`, `MSG_OTA_STATUS`, `MSG_OTA_REBOOT`.
+Subscribes to: `MessageDispatcher.messages` and filters for `type == 'OtaProgress'`, `type == 'OtaComplete'`, `type == 'OtaError'`.
+
+---
 
 ### 2.7 Cross-Provider State Synchronization
 
-When `SubGhzProvider.startRecording()` is called, `DeviceInfoProvider` may need to know (`isRecording = true`). Define one of these patterns:
+**Decision:** Use a lightweight event bus. The previous "computed properties" recommendation was unworkable because `ChangeNotifier` doesn't propagate changes from sibling providers automatically. Adding `addListener` chains between every pair of providers creates tight coupling and memory leaks.
 
-**Pattern A — Events (simplest for this codebase):**
+**Lightweight Event Bus Implementation (~30 lines):**
 ```dart
-// In SubGhzProvider
-void startRecording() {
-  _connection.sendCommand(FirmwareProtocol.createRequestRecordCommand(...));
-  // Emit an event
-  AppEvents.emit(SubGhzStartedRecording(moduleIndex: _selectedModule));
+// services/app_event_bus.dart
+import 'package:flutter/foundation.dart';
+
+class AppEventBus {
+  static final AppEventBus _instance = AppEventBus._internal();
+  factory AppEventBus() => _instance;
+  AppEventBus._internal();
+
+  final _controllers = <Type, dynamic>{};
+
+  void emit<T>(T event) {
+    if (_controllers.containsKey(T)) {
+      (_controllers[T]! as _EventController<T>).add(event);
+    }
+  }
+
+  void on<T>(void Function(T) callback) {
+    if (!_controllers.containsKey(T)) {
+      _controllers[T] = _EventController<T>();
+    }
+    (_controllers[T]! as _EventController<T>).subscribe(callback);
+  }
+
+  void off<T>(void Function(T) callback) {
+    if (_controllers.containsKey(T)) {
+      (_controllers[T]! as _EventController<T>).unsubscribe(callback);
+    }
+  }
 }
 
-// In DeviceInfoProvider
-class DeviceInfoProvider {
+class _EventController<T> {
+  final List<void Function(T)> _listeners = [];
+  void add(T event) => _listeners.toList().forEach((l) => l(event));
+  void subscribe(void Function(T) callback) => _listeners.add(callback);
+  void unsubscribe(void Function(T) callback) => _listeners.remove(callback);
+}
+```
+
+**Usage for the recording example:**
+```dart
+// SubGhzProvider
+void startRecording() {
+  _connection.sendCommand(FirmwareProtocol.createRequestRecordCommand(...));
+  AppEventBus().emit(SubGhzStartedRecording(moduleIndex: _selectedModule));
+}
+
+// DeviceInfoProvider
+class DeviceInfoProvider extends ChangeNotifier {
   DeviceInfoProvider() {
-    AppEvents.on<SubGhzStartedRecording>((event) {
+    AppEventBus().on<SubGhzStartedRecording>((event) {
       _isModuleRecording[event.moduleIndex] = true;
       notifyListeners();
     });
@@ -304,10 +448,12 @@ class DeviceInfoProvider {
 }
 ```
 
-**Pattern B — Computed properties:**
-`DeviceInfoProvider.isRecording` reads directly from `SubGhzProvider.isRecording`. Requires `context.read<SubGhzProvider>().isRecording`.
+**Only 3 event types are needed:**
+1. `SubGhzStartedRecording(int moduleIndex)` / `SubGhzStoppedRecording(int moduleIndex)`
+2. `NrfModuleStateChanged(bool busy, {String? reason})`
+3. `ConnectionLost(String reason)` — used by OTA, Bruter, any provider that needs cleanup
 
-**Decision:** Pattern B (computed) is simpler for this codebase — it avoids introducing an event system. Module providers that need to know each other's state use `context.read` at build time, or subscribe to the other provider's `addListener` at init time.
+**Why this is mobile-friendly:** Zero memory overhead when no events are flowing. No persistent streams. Listeners are cleaned up by `off()` in provider `dispose()`. No isolate communication. No dependency on `BuildContext`.
 
 ---
 
@@ -377,6 +523,42 @@ Keep `_SettingsScreenState` as the scroll container that builds sections. Split 
 - `settings/sections/system_section.dart` (~300 lines) — device name, factory reset, format SD, about
 
 **Target main file:** ~400 lines (the scroll container + section dispatch)
+
+**Data flow for all screen splits — choose one:**
+
+| Option | Data Access | Mobile Impact | When to Use |
+|--------|-------------|---------------|-------------|
+| **A** `context.read<T>()` | Each sub-widget uses `context.read<DeviceInfoProvider>()` directly | ✅ Lowest memory — providers are already in memory, no extra copies | **Recommended.** Default for all splits. |
+| **B** `Consumer<T>` wrappers | Parent screen wraps child in `Consumer<SubGhzProvider>` | ⚠️ More rebuilds, but localized. Acceptable for deeply nested widgets that need frequent updates. | Use for a widget that updates at >10Hz (spectrum, jammer visualizer) where `ListenableBuilder` is too verbose. |
+| **C** Constructor prop-drilling | Parent passes `final SubGhzProvider provider` down | ❌ Avoid. Adds boilerplate, increases widget tree size, harder to test. | Only if the sub-widget is genuinely reusable across screens and shouldn't be coupled to `Provider`. |
+
+**Decision for this codebase:** Use **Option A** (`context.read<T>()`) for all sub-widgets. The only exceptions are high-frequency widgets (spectrum, jammer) which use **Option B** with `Consumer<T>` or `Selector<T, R>` to prevent full rebuilds.
+
+```dart
+// RECOMMENDED: Option A — sub-widget reads directly
+class DeviceInfoSection extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final deviceInfo = context.read<DeviceInfoProvider>();
+    return Column(...);
+  }
+}
+
+// For high-frequency updates: Option B with Selector
+class SpectrumTab extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Selector<NrfProvider, List<int>>(
+      selector: (_, provider) => provider.nrfSpectrumLevels,
+      builder: (_, levels, __) => CustomPaint(
+        painter: SpectrumPainter(levels),
+      ),
+    );
+  }
+}
+```
+
+**Mobile resource justification:** `context.read<T>()` is a single hashmap lookup — ~100ns, no memory allocation. `Selector` caches its selector result and only rebuilds when the extracted value changes. This avoids the memory bloat of prop-drilling and the CPU cost of `Consumer` on the entire subtree.
 
 ### 4.2 `nrf_screen.dart` (1,546 lines → 3 sub-files)
 
@@ -517,7 +699,7 @@ connection.sendCommand(cmd); // any provider or screen can call
 
 The OTA flow has 6 distinct states:
 ```
-kIdle → kUploading → kRebooting → kWaitingReconnect → kComplete/kError
+idle → uploading → rebooting → waitingReconnect → complete/error
 ```
 
 Implement as a proper state machine in `OtaProvider`:
@@ -535,7 +717,7 @@ class OtaProvider extends ChangeNotifier {
 }
 ```
 
-The `_otaRebootPending`, `_otaPreRebootVersion`, `_otaReconnectTimer` fields in the old BleProvider map directly to `kRebooting` and `kWaitingReconnect` states.
+The `_otaRebootPending`, `_otaPreRebootVersion`, `_otaReconnectTimer` fields in the old BleProvider map directly to `OtaState.rebooting` and `OtaState.waitingReconnect` states.
 
 ---
 
