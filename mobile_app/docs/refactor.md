@@ -19,6 +19,7 @@
 - Deferred "Modules Busy" investigation until after WiFi response routing is fixed
 - Cleaned up `CommandResponseHandler` → `BleChunkHandler` naming
 - Updated `ConnectionStateProvider` to reference new types (`BleConnectionProvider`/`WifiConnectionProvider`)
+- Added D5: WiFi Provisioning via mobile app — firmware SmartConfig background listener + app-side provisioning UI
 
 ---
 
@@ -718,6 +719,100 @@ class OtaProvider extends ChangeNotifier {
 ```
 
 The `_otaRebootPending`, `_otaPreRebootVersion`, `_otaReconnectTimer` fields in the old BleProvider map directly to `OtaState.rebooting` and `OtaState.waitingReconnect` states.
+
+### D5. WiFi Provisioning from the Mobile App
+
+**Firmware behavior (already implemented):**
+
+On boot without saved credentials, the device immediately starts **SoftAP** mode and simultaneously listens for **SmartConfig (ESP-TOUCH)** in the background. This means:
+- The device's WiFi network is visible within ~1 second of boot — phone can connect directly
+- If the user opens an ESP-TOUCH provisioning app and sends credentials, the device picks them up and switches to STA mode
+
+**Provisioning flow:**
+```
+Device boots
+  ├─ Saved STA credentials exist → connect to home WiFi
+  │     └─ Success → mDNS + WebSocket + REST API available
+  └─ No credentials / connection fails → SoftAP + background SmartConfig
+        ├─ Phone connects to device's WiFi (e.g. "EvilCrow_RF2-Config")
+        │     └─ Captive portal at 192.168.4.1 → enter home WiFi credentials
+        │           └─ Device saves to NVS, switches to STA mode
+        └─ Phone sends credentials via ESP-TOUCH (optional)
+              └─ Device receives in background, saves, switches to STA
+```
+
+**App-side provisioning — new feature plan:**
+
+The app needs three provisioning entry points, all of which send ESP-TOUCH broadcasts to configure the device without the user needing to join the device's SoftAP network:
+
+| Entry Point | Location | User Flow |
+|------------|----------|-----------|
+| **Quick Connect** | `widgets/quick_connect_widget.dart` | User opens app, sees "No device found" → tap "Provision WiFi" → enters SSID/password → app sends ESP-TOUCH |
+| **Settings > WiFi** | `screens/settings_screen.dart` (WiFi section) | Already connected? Send new credentials. Not connected? Same ESP-TOUCH flow as Quick Connect. |
+| **Home Page banner** | `screens/home_screen.dart` | When `ConnectionStateProvider.isConnected == false` for >5s and BLE scan finds nothing, show a banner: "No device found — tap to configure WiFi" |
+
+**New files to create:**
+
+| File | Purpose | Lines |
+|------|---------|-------|
+| `services/wifi_provisioning_service.dart` | Encodes SSID/password as ESP-TOUCH UDP broadcast packets, sends over WiFi | ~150 |
+| `widgets/provision_wifi_dialog.dart` | Reusable dialog: SSID input, password input, "Send" button with progress indicator | ~120 |
+
+**Required dependencies:**
+
+This requires a Flutter ESP-TOUCH plugin. Two options:
+
+| Option | Package | Pros | Cons |
+|--------|---------|------|------|
+| **A** | [`esp_touch_flutter`](https://pub.dev/packages/esp_touch_flutter) | Wraps Espressif's ESP-TOUCH SDK natively (Android + iOS) | Larger APK, platform-specific native code |
+| **B** | Manual UDP broadcast | No native dependencies, pure Dart | Only works if phone is on 2.4 GHz WiFi, less reliable |
+
+**Recommendation:** Use **Option A** for reliability, with **Option B** as a fallback if the native plugin fails. This matches what the firmware expects (ESP-TOUCH packet sniffing in promiscuous mode).
+
+**`WifiProvisioningService` API:**
+```dart
+class WifiProvisioningService {
+  /// Send ESP-TOUCH credentials via UDP broadcast.
+  /// [ssid] - The 2.4 GHz WiFi SSID.
+  /// [password] - The WiFi password (may be empty for open networks).
+  /// Returns true if the packet was sent successfully.
+  Future<bool> provision(String ssid, String password);
+
+  /// Listen for a device to appear on the network after provisioning.
+  /// Polls mDNS or IP subnet for up to [timeout].
+  /// Returns the device's IP or null.
+  Future<String?> waitForDevice({Duration timeout = const Duration(seconds: 30)});
+}
+```
+
+**`ProvisionWifiDialog` widget:**
+```dart
+// Shows a dialog prompting for WiFi credentials and sends via ESP-TOUCH.
+// Usage:
+//   final result = await ProvisionWifiDialog.show(context);
+//   if (result != null) {
+//     // Device provisioned, now connect via WifiProvider
+//   }
+class ProvisionWifiDialog extends StatefulWidget { ... }
+```
+
+**Wiring into existing screens:**
+
+1. `QuickConnectWidget` — add a "Provision New Device" button below the scan results list. Tapping it opens `ProvisionWifiDialog`. On success, auto-connect via `WifiProvider.connect(ip)`.
+
+2. `SettingsScreen` WiFi section — add "Provision WiFi" button that opens `ProvisionWifiDialog`. This is useful when the user already has a device but wants to move it to a different network.
+
+3. `HomeScreen` — add a `Consumer<ConnectionStateProvider>` that shows a persistent info banner when no device has been found for 5+ seconds. Banner says: "No EvilCrow RF device found. Tap to provision a new device over WiFi." Tapping opens `ProvisionWifiDialog`.
+
+**Implementation order:**
+```
+1. Install esp_touch_flutter dependency in pubspec.yaml
+2. Create WifiProvisioningService (wraps the plugin)
+3. Create ProvisionWifiDialog (UI for SSID/password entry)
+4. Update QuickConnectWidget — add provisioning button
+5. Update settings_screen.dart WiFi section — add provisioning button
+6. Update home_screen.dart — add provisioning banner
+```
 
 ---
 
