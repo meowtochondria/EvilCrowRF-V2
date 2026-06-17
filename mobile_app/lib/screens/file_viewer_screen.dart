@@ -7,7 +7,8 @@ import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import '../l10n/app_localizations.dart';
-import '../providers/ble_provider.dart';
+import '../providers/files_provider.dart';
+import '../providers/connection_state_provider.dart';
 import '../services/logger_service.dart';
 import '../providers/notification_provider.dart';
 import '../services/file_parsers/file_parser_factory.dart';
@@ -79,7 +80,7 @@ class _FileViewerScreenState extends State<FileViewerScreen>
     });
 
     try {
-      final bleProvider = Provider.of<BleProvider>(context, listen: false);
+      (context, listen: false);
 
       // Log file path for debugging
 
@@ -91,7 +92,7 @@ class _FileViewerScreenState extends State<FileViewerScreen>
           'Loading file: path="$filePath", pathType=${widget.pathType}');
 
       // Read file from ESP (pathType determines how path is interpreted)
-      final content = await bleProvider.readFileContent(filePath,
+      final content = await context.read<FilesProvider>().readFileContent(filePath,
           pathType: widget.pathType);
 
       if (mounted) {
@@ -155,10 +156,10 @@ class _FileViewerScreenState extends State<FileViewerScreen>
     });
 
     try {
-      final bleProvider = Provider.of<BleProvider>(context, listen: false);
+      (context, listen: false);
 
       // Load file from ESP
-      final content = await bleProvider.downloadFile(
+      final content = await context.read<FilesProvider>().downloadFile(
         widget.filePath,
         onProgress: (progress) {
           if (mounted) {
@@ -859,7 +860,7 @@ class _FileViewerScreenState extends State<FileViewerScreen>
                   )
                 : null,
       ),
-      body: Consumer<BleProvider>(
+      body: Consumer<FilesProvider>(
         builder: (context, bleProvider, _) {
           // Show loading indicator if file is being loaded
           if (isLoading) {
@@ -871,17 +872,17 @@ class _FileViewerScreenState extends State<FileViewerScreen>
                   const SizedBox(height: 16),
                   Text(AppLocalizations.of(context)!.loadingFile),
                   const SizedBox(height: 8),
-                  if (bleProvider.fileContentProgress > 0)
+                  if (context.read<FilesProvider>().fileContentProgress > 0)
                     Text(
-                      '${(bleProvider.fileContentProgress * 100).toStringAsFixed(0)}%',
+                      '${(context.read<FilesProvider>().fileContentProgress * 100).toStringAsFixed(0)}%',
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
-                  if (bleProvider.fileContentProgress > 0)
+                  if (context.read<FilesProvider>().fileContentProgress > 0)
                     Padding(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 48, vertical: 16),
                       child: LinearProgressIndicator(
-                        value: bleProvider.fileContentProgress,
+                        value: context.read<FilesProvider>().fileContentProgress,
                       ),
                     ),
                 ],
@@ -889,7 +890,7 @@ class _FileViewerScreenState extends State<FileViewerScreen>
             );
           }
 
-          if (!bleProvider.isConnected) {
+          if (!context.read<ConnectionStateProvider>().isConnected) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,

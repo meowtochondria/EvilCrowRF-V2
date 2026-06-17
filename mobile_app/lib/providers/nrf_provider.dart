@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../connection/message_dispatcher.dart';
+import '../models/protopirate_result.dart';
 import 'firmware_protocol.dart';
 
 /// NRF24 provider — handles MouseJack scanning, spectrum analysis, jamming,
@@ -61,12 +62,17 @@ class NrfProvider extends ChangeNotifier {
   // ══════════════════════════════════════════════════════════════
 
   bool ppDecoding = false;
-  List<Map<String, dynamic>> ppResults = [];
+  List<ProtoPirateResult> ppResults = [];
   List<Map<String, dynamic>> ppHistory = [];
   Map<String, dynamic>? ppStatus;
   int ppHistoryCount = 0;
   bool ppTranismitting = false;
   List<Map<String, dynamic>> ppFileList = [];
+  bool ppFileListReceived = false;
+  int ppModule = -1;
+  int ppSignalCount = 0;
+  int ppTxState = 0;
+  int ppTxErrorCode = 0;
 
   // ══════════════════════════════════════════════════════════════
   //  Dispatch
@@ -199,7 +205,7 @@ class NrfProvider extends ChangeNotifier {
   // ══════════════════════════════════════════════════════════════
 
   void _handlePPDecodeResult(Map<String, dynamic> data) {
-    ppResults.add(data);
+    ppResults.add(ProtoPirateResult.fromMap(data));
     if (ppResults.length > 100) {
       ppResults = ppResults.sublist(ppResults.length - 100);
     }
@@ -214,6 +220,8 @@ class NrfProvider extends ChangeNotifier {
   void _handlePPStatus(Map<String, dynamic> data) {
     ppStatus = data;
     ppDecoding = data['state'] == 'decoding' || data['state'] == 1;
+    ppModule = data['module'] ?? -1;
+    ppSignalCount = data['signalCount'] ?? 0;
     notifyListeners();
   }
 
@@ -226,6 +234,7 @@ class NrfProvider extends ChangeNotifier {
     if (data['files'] is List) {
       ppFileList = List<Map<String, dynamic>>.from(data['files']);
     }
+    ppFileListReceived = true;
     notifyListeners();
   }
 
@@ -385,9 +394,92 @@ class NrfProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// List .sub files on the SD card at the given path.
+  Future<void> ppListSubFiles([String path = '/']) async {
+    ppFileList = [];
+    ppFileListReceived = false;
+    final cmd = FirmwareBinaryProtocol.createPPListSubFilesCommand(path);
+    await sendCommand?.call(cmd);
+    notifyListeners();
+  }
+
+  /// List saved captures on the SD card.
+  Future<void> ppListSaved() async {
+    ppFileList = [];
+    ppFileListReceived = false;
+    final cmd = FirmwareBinaryProtocol.createPPListSavedCommand();
+    await sendCommand?.call(cmd);
+    notifyListeners();
+  }
+
+  /// Save a decoded capture to SD card (/DATA/PROTOPIRATE/).
+  Future<void> ppSaveCapture(ProtoPirateResult result) async {
+    final cmd = FirmwareBinaryProtocol.createPPSaveCaptureCommand(
+      protocolName: result.protocolName,
+      data: result.data,
+      data2: result.data2,
+      serial: result.serial,
+      button: result.button,
+      counter: result.counter,
+      dataBits: result.dataBits,
+      frequencyMhz: result.frequency,
+    );
+    await sendCommand?.call(cmd);
+  }
+
+  /// Clear local PP results list.
+  void ppClearResults() {
+    ppResults.clear();
+    notifyListeners();
+  }
+
+  /// Load a .sub file and feed it to PP decoders (diagnostic).
+  Future<void> ppLoadSubFile(String filePath) async {
+    final cmd = FirmwareBinaryProtocol.createPPLoadSubFileCommand(filePath);
+    await sendCommand?.call(cmd);
+  }
+
+  /// Emulate (TX) a decoded ProtoPirate signal.
+  Future<void> ppEmulate(ProtoPirateResult result,
+      {int module = 0, int repeat = 3}) async {
+    ppTxState = 0;
+    ppTxErrorCode = 0;
+    final cmd = FirmwareBinaryProtocol.createPPEmulateCommand(
+      module: module,
+      repeat: repeat,
+      protocolName: result.protocolName,
+      data: result.data,
+      data2: result.data2,
+      serial: result.serial,
+      button: result.button,
+      counter: result.counter,
+      dataBits: result.dataBits,
+      frequencyMhz: result.frequency,
+    );
+    await sendCommand?.call(cmd);
+    notifyListeners();
+  }
+
+  /// Reset all ProtoPirate state (called on disconnect).
+  void resetPPState() {
+    ppDecoding = false;
+    ppModule = -1;
+    ppResults.clear();
+    ppHistoryCount = 0;
+    ppSignalCount = 0;
+    ppTxState = 0;
+    ppTxErrorCode = 0;
+    ppFileList = [];
+    ppFileListReceived = false;
+    notifyListeners();
+  }
+
   // ══════════════════════════════════════════════════════════════
   //  Lifecycle
   // ══════════════════════════════════════════════════════════════
+
+  /// Trigger UI rebuild after NRF state fields are modified externally.
+  void nrfNotify() => notifyListeners();
 
   @override
   void dispose() {

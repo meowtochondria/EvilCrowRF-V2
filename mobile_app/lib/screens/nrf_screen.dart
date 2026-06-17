@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/ble_provider.dart';
+import '../providers/nrf_provider.dart';
+import '../providers/device_info_provider.dart';
+import '../providers/connection_state_provider.dart';
 import '../providers/firmware_protocol.dart';
 import '../models/nrf_jam_mode.dart';
 import '../theme/app_colors.dart';
@@ -85,10 +87,10 @@ class _NrfScreenState extends State<NrfScreen>
   /// operations can resume without SPI bus contention.
   void _cleanupNrf() {
     try {
-      final bleProvider = Provider.of<BleProvider>(context, listen: false);
-      if (bleProvider.isConnected) {
+      final nrf = context.read<NrfProvider>();
+      if (context.read<ConnectionStateProvider>().isConnected) {
         final cmd = FirmwareBinaryProtocol.createNrfStopAllCommand();
-        bleProvider.sendBinaryCommand(cmd);
+        nrf.sendCommand!(cmd);
       }
     } catch (_) {
       // Ignore errors during dispose — widget tree may be torn down
@@ -98,24 +100,24 @@ class _NrfScreenState extends State<NrfScreen>
   // ── NRF Initialization ──────────────────────────────────────
 
   Future<void> _initNrf() async {
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
-    if (!bleProvider.isConnected) return;
+    final nrf = context.read<NrfProvider>();
+    if (!context.read<ConnectionStateProvider>().isConnected) return;
 
     setState(() => _initializing = true);
 
     try {
       // Send the init command
       final cmd = FirmwareBinaryProtocol.createNrfInitCommand();
-      await bleProvider.sendBinaryCommand(cmd);
+      await nrf.sendCommand!(cmd);
 
       // Wait for firmware to respond with MSG_NRF_STATUS (0xCA).
       // The firmware now sends this after init so the app learns the real
       // detection result (present=true/false).
-      final present = await bleProvider.awaitNrfInitResult();
+      final present = await nrf.awaitNrfInitResult();
 
       if (present) {
-        bleProvider.nrfInitialized = true;
-        bleProvider.nrfNotify();
+        nrf.nrfInitialized = true;
+        nrf.nrfNotify();
         setState(() => _initializing = false);
       } else {
         // Firmware responded: NRF24 chip is NOT present on the SPI bus
@@ -136,82 +138,82 @@ class _NrfScreenState extends State<NrfScreen>
   // ── MouseJack Commands ──────────────────────────────────────
 
   Future<void> _startScan() async {
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
+    final nrf = context.read<NrfProvider>();
     final cmd = FirmwareBinaryProtocol.createNrfScanStartCommand();
-    await bleProvider.sendBinaryCommand(cmd);
-    bleProvider.nrfScanning = true;
-    bleProvider.nrfNotify();
+    await nrf.sendCommand!(cmd);
+    nrf.nrfScanning = true;
+    nrf.nrfNotify();
   }
 
   Future<void> _stopScan() async {
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
+    final nrf = context.read<NrfProvider>();
     final cmd = FirmwareBinaryProtocol.createNrfScanStopCommand();
-    await bleProvider.sendBinaryCommand(cmd);
-    bleProvider.nrfScanning = false;
-    bleProvider.nrfNotify();
+    await nrf.sendCommand!(cmd);
+    nrf.nrfScanning = false;
+    nrf.nrfNotify();
   }
 
   Future<void> _attackString(int targetIndex) async {
     if (_stringController.text.isEmpty) return;
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
+    final nrf = context.read<NrfProvider>();
     final cmd = FirmwareBinaryProtocol.createNrfAttackStringCommand(
       targetIndex,
       _stringController.text,
     );
-    await bleProvider.sendBinaryCommand(cmd);
-    bleProvider.nrfAttacking = true;
-    bleProvider.nrfNotify();
+    await nrf.sendCommand!(cmd);
+    nrf.nrfAttacking = true;
+    nrf.nrfNotify();
   }
 
   Future<void> _attackDucky(int targetIndex) async {
     if (_duckyPathController.text.isEmpty) return;
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
+    final nrf = context.read<NrfProvider>();
     final cmd = FirmwareBinaryProtocol.createNrfAttackDuckyCommand(
       targetIndex,
       _duckyPathController.text,
     );
-    await bleProvider.sendBinaryCommand(cmd);
-    bleProvider.nrfAttacking = true;
-    bleProvider.nrfNotify();
+    await nrf.sendCommand!(cmd);
+    nrf.nrfAttacking = true;
+    nrf.nrfNotify();
   }
 
   Future<void> _stopAttack() async {
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
+    final nrf = context.read<NrfProvider>();
     final cmd = FirmwareBinaryProtocol.createNrfAttackStopCommand();
-    await bleProvider.sendBinaryCommand(cmd);
-    bleProvider.nrfAttacking = false;
-    bleProvider.nrfNotify();
+    await nrf.sendCommand!(cmd);
+    nrf.nrfAttacking = false;
+    nrf.nrfNotify();
   }
 
   Future<void> _requestScanStatus() async {
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
+    final nrf = context.read<NrfProvider>();
     final cmd = FirmwareBinaryProtocol.createNrfScanStatusCommand();
-    await bleProvider.sendBinaryCommand(cmd);
+    await nrf.sendCommand!(cmd);
   }
 
   // ── Spectrum Commands ───────────────────────────────────────
 
   Future<void> _startSpectrum() async {
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
+    final nrf = context.read<NrfProvider>();
     final cmd = FirmwareBinaryProtocol.createNrfSpectrumStartCommand();
-    await bleProvider.sendBinaryCommand(cmd);
-    bleProvider.nrfSpectrumRunning = true;
-    bleProvider.nrfNotify();
+    await nrf.sendCommand!(cmd);
+    nrf.nrfSpectrumRunning = true;
+    nrf.nrfNotify();
   }
 
   Future<void> _stopSpectrum() async {
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
+    final nrf = context.read<NrfProvider>();
     final cmd = FirmwareBinaryProtocol.createNrfSpectrumStopCommand();
-    await bleProvider.sendBinaryCommand(cmd);
-    bleProvider.nrfSpectrumRunning = false;
-    bleProvider.nrfSpectrumLevels = List.filled(126, 0);
-    bleProvider.nrfNotify();
+    await nrf.sendCommand!(cmd);
+    nrf.nrfSpectrumRunning = false;
+    nrf.nrfSpectrumLevels = List.filled(126, 0);
+    nrf.nrfNotify();
   }
 
   // ── Jammer Commands ─────────────────────────────────────────
 
   Future<void> _startJammer() async {
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
+    final nrf = context.read<NrfProvider>();
     Uint8List cmd;
     if (_jamMode == 8) {
       // Single channel mode
@@ -224,77 +226,77 @@ class _NrfScreenState extends State<NrfScreen>
     } else {
       cmd = FirmwareBinaryProtocol.createNrfJamStartCommand(_jamMode);
     }
-    await bleProvider.sendBinaryCommand(cmd);
-    bleProvider.nrfJammerRunning = true;
-    bleProvider.nrfNotify();
+    await nrf.sendCommand!(cmd);
+    nrf.nrfJammerRunning = true;
+    nrf.nrfNotify();
     // Read current dwell from cached config for the live slider
-    final cachedCfg = bleProvider.nrfJamModeConfigs[_jamMode];
+    final cachedCfg = nrf.nrfJamModeConfigs[_jamMode];
     setState(() {
       _liveDwellMs = cachedCfg?['dwellTimeMs'] ?? 0;
     });
   }
 
   Future<void> _stopJammer() async {
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
+    final nrf = context.read<NrfProvider>();
     final cmd = FirmwareBinaryProtocol.createNrfJamStopCommand();
-    await bleProvider.sendBinaryCommand(cmd);
-    bleProvider.nrfJammerRunning = false;
-    bleProvider.nrfNotify();
+    await nrf.sendCommand!(cmd);
+    nrf.nrfJammerRunning = false;
+    nrf.nrfNotify();
   }
 
   // ── Jammer Per-Mode Commands ────────────────────────────────
 
   Future<void> _setDwellTimeLive(int ms) async {
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
+    final nrf = context.read<NrfProvider>();
     final cmd = FirmwareBinaryProtocol.createNrfJamSetDwellCommand(ms);
-    await bleProvider.sendBinaryCommand(cmd);
+    await nrf.sendCommand!(cmd);
   }
 
   Future<void> _requestModeConfig(int mode) async {
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
+    final nrf = context.read<NrfProvider>();
     final cmd = FirmwareBinaryProtocol.createNrfJamModeConfigGetCommand(mode);
-    await bleProvider.sendBinaryCommand(cmd);
+    await nrf.sendCommand!(cmd);
   }
 
   Future<void> _setModeConfig(
       int mode, int pa, int dr, int dwell, bool flooding, int bursts) async {
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
+    final nrf = context.read<NrfProvider>();
     final cmd = FirmwareBinaryProtocol.createNrfJamModeConfigSetCommand(
         mode, pa, dr, dwell, flooding, bursts);
-    await bleProvider.sendBinaryCommand(cmd);
+    await nrf.sendCommand!(cmd);
   }
 
   Future<void> _requestModeInfo(int mode) async {
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
+    final nrf = context.read<NrfProvider>();
     final cmd = FirmwareBinaryProtocol.createNrfJamModeInfoCommand(mode);
-    await bleProvider.sendBinaryCommand(cmd);
+    await nrf.sendCommand!(cmd);
   }
 
   Future<void> _resetAllConfigs() async {
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
+    final nrf = context.read<NrfProvider>();
     final cmd = FirmwareBinaryProtocol.createNrfJamResetConfigCommand();
-    await bleProvider.sendBinaryCommand(cmd);
+    await nrf.sendCommand!(cmd);
     // Clear local cache so it gets refreshed
-    bleProvider.nrfJamModeConfigs.clear();
-    bleProvider.nrfNotify();
+    nrf.nrfJamModeConfigs.clear();
+    nrf.nrfNotify();
   }
 
   // ── Build ───────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<BleProvider>(
-      builder: (context, bleProvider, _) {
-        if (!bleProvider.isConnected) {
+    return Consumer<NrfProvider>(
+      builder: (context, nrf, _) {
+        if (!context.read<ConnectionStateProvider>().isConnected) {
           return _buildNotConnected();
         }
 
         // If GetState already told us NRF24 hardware is absent (from a
         // previous init attempt that failed), show the not-detected screen.
-        if (!bleProvider.nrfInitialized) {
-          return _buildInitScreen(bleProvider: bleProvider);
+        if (!nrf.nrfInitialized) {
+          return _buildInitScreen(nrf: nrf);
         }
-        return _buildMainScreen(bleProvider);
+        return _buildMainScreen(nrf);
       },
     );
   }
@@ -314,12 +316,12 @@ class _NrfScreenState extends State<NrfScreen>
     );
   }
 
-  Widget _buildInitScreen({BleProvider? bleProvider}) {
+  Widget _buildInitScreen({NrfProvider? nrf}) {
     // Proactive message: GetState already told us NRF24 hardware is absent
     // (from a previous init attempt that set present=false).
-    final bool knownNotPresent = bleProvider != null &&
-        bleProvider.isConnected &&
-        !bleProvider.nrfPresent;
+    final bool knownNotPresent = nrf != null &&
+        context.read<ConnectionStateProvider>().isConnected &&
+        !context.read<DeviceInfoProvider>().nrfPresent;
 
     return Center(
       child: Column(
@@ -390,7 +392,7 @@ class _NrfScreenState extends State<NrfScreen>
     );
   }
 
-  Widget _buildMainScreen(BleProvider bleProvider) {
+  Widget _buildMainScreen(NrfProvider nrf) {
     return Column(
       children: [
         Container(
@@ -411,9 +413,9 @@ class _NrfScreenState extends State<NrfScreen>
           child: TabBarView(
             controller: _tabController,
             children: [
-              _buildMouseJackTab(bleProvider),
-              _buildSpectrumTab(bleProvider),
-              _buildJammerTab(bleProvider),
+              _buildMouseJackTab(nrf),
+              _buildSpectrumTab(nrf),
+              _buildJammerTab(nrf),
             ],
           ),
         ),
@@ -423,16 +425,16 @@ class _NrfScreenState extends State<NrfScreen>
 
   // ── MouseJack Tab ───────────────────────────────────────────
 
-  Widget _buildMouseJackTab(BleProvider bleProvider) {
-    final allTargets = bleProvider.nrfTargets;
+  Widget _buildMouseJackTab(NrfProvider nrf) {
+    final allTargets = nrf.nrfTargets;
     final targets = _hideUnknown
         ? allTargets.where((t) {
             final code = t['deviceType'] ?? 0;
             return NrfTarget.typeFromCode(code) != 'Unknown';
           }).toList()
         : allTargets;
-    final isScanning = bleProvider.nrfScanning;
-    final isAttacking = bleProvider.nrfAttacking;
+    final isScanning = nrf.nrfScanning;
+    final isAttacking = nrf.nrfAttacking;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -717,9 +719,9 @@ class _NrfScreenState extends State<NrfScreen>
 
   // ── Spectrum Tab ────────────────────────────────────────────
 
-  Widget _buildSpectrumTab(BleProvider bleProvider) {
-    final spectrumRunning = bleProvider.nrfSpectrumRunning;
-    final spectrumLevels = bleProvider.nrfSpectrumLevels;
+  Widget _buildSpectrumTab(NrfProvider nrf) {
+    final spectrumRunning = nrf.nrfSpectrumRunning;
+    final spectrumLevels = nrf.nrfSpectrumLevels;
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -805,8 +807,8 @@ class _NrfScreenState extends State<NrfScreen>
 
   // ── Jammer Tab ──────────────────────────────────────────────
 
-  Widget _buildJammerTab(BleProvider bleProvider) {
-    final jammerRunning = bleProvider.nrfJammerRunning;
+  Widget _buildJammerTab(NrfProvider nrf) {
+    final jammerRunning = nrf.nrfJammerRunning;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -840,8 +842,8 @@ class _NrfScreenState extends State<NrfScreen>
             icon: Icons.tune,
             child: Column(
               children: [
-                ...NrfJamModeUiData.allModes.map(
-                    (m) => _buildModeOption(m, bleProvider, jammerRunning)),
+                ...NrfJamModeUiData.allModes
+                    .map((m) => _buildModeOption(m, nrf, jammerRunning)),
                 // Reset all configs button
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
@@ -1039,7 +1041,7 @@ class _NrfScreenState extends State<NrfScreen>
   }
 
   Widget _buildModeOption(
-      NrfJamModeUiData modeData, BleProvider bleProvider, bool jammerRunning) {
+      NrfJamModeUiData modeData, NrfProvider nrf, bool jammerRunning) {
     final isSelected = _jamMode == modeData.mode;
     return GestureDetector(
       onTap: () async {
@@ -1048,9 +1050,9 @@ class _NrfScreenState extends State<NrfScreen>
           // Send live mode change command (0x2C) to firmware
           final cmd =
               FirmwareBinaryProtocol.createNrfJamSetModeCommand(modeData.mode);
-          await bleProvider.sendBinaryCommand(cmd);
+          await nrf.sendCommand!(cmd);
           // Update cached dwell for the live slider
-          final cachedCfg = bleProvider.nrfJamModeConfigs[modeData.mode];
+          final cachedCfg = nrf.nrfJamModeConfigs[modeData.mode];
           setState(() {
             _liveDwellMs = cachedCfg?['dwellTimeMs'] ?? 0;
           });
@@ -1107,15 +1109,14 @@ class _NrfScreenState extends State<NrfScreen>
             _ModeActionButton(
               icon: Icons.settings,
               tooltip: 'Settings',
-              onPressed: () =>
-                  _showModeSettingsDialog(modeData.mode, bleProvider),
+              onPressed: () => _showModeSettingsDialog(modeData.mode, nrf),
             ),
             const SizedBox(width: 4),
             // Info icon
             _ModeActionButton(
               icon: Icons.info_outline,
               tooltip: 'Info',
-              onPressed: () => _showModeInfoDialog(modeData.mode, bleProvider),
+              onPressed: () => _showModeInfoDialog(modeData.mode, nrf),
             ),
           ],
         ),
@@ -1125,8 +1126,7 @@ class _NrfScreenState extends State<NrfScreen>
 
   // ── Mode Settings Dialog (cmd 0x43) ──────────────────────────
 
-  Future<void> _showModeSettingsDialog(
-      int mode, BleProvider bleProvider) async {
+  Future<void> _showModeSettingsDialog(int mode, NrfProvider nrf) async {
     // Request config from firmware first
     await _requestModeConfig(mode);
     // Wait briefly for the response notification
@@ -1134,7 +1134,7 @@ class _NrfScreenState extends State<NrfScreen>
 
     if (!mounted) return;
 
-    final cachedCfg = bleProvider.nrfJamModeConfigs[mode];
+    final cachedCfg = nrf.nrfJamModeConfigs[mode];
     int pa = cachedCfg?['paLevel'] ?? 3;
     int dr = cachedCfg?['dataRate'] ?? 1;
     int dwell = cachedCfg?['dwellTimeMs'] ?? 0;
@@ -1286,14 +1286,14 @@ class _NrfScreenState extends State<NrfScreen>
 
   // ── Mode Info Dialog (cmd 0x44) ──────────────────────────────
 
-  Future<void> _showModeInfoDialog(int mode, BleProvider bleProvider) async {
+  Future<void> _showModeInfoDialog(int mode, NrfProvider nrf) async {
     // Request info from firmware
     await _requestModeInfo(mode);
     await Future.delayed(const Duration(milliseconds: 400));
 
     if (!mounted) return;
 
-    final cached = bleProvider.nrfJamModeInfos[mode];
+    final cached = nrf.nrfJamModeInfos[mode];
     final ui = NrfJamModeUiData.allModes[mode];
     final name = cached?['name'] ?? ui.label;
     final desc = cached?['description'] ?? ui.shortDesc;

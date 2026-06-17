@@ -165,6 +165,12 @@ class SubGhzProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Clear all detected signals.
+  void clearSignals() {
+    detectedSignals.clear();
+    notifyListeners();
+  }
+
   // ══════════════════════════════════════════════════════════════
   //  Commands
   // ══════════════════════════════════════════════════════════════

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/ble_provider.dart';
-import '../providers/wifi_provider.dart';
 import '../providers/connection_state_provider.dart';
 import '../providers/log_provider.dart';
 import '../providers/notification_provider.dart';
@@ -293,7 +292,8 @@ class HomeTab extends StatelessWidget {
               const QuickConnectWidget(),
 
               // Permissions Status (only show if there are errors)
-              if (_isPermissionError(bleProvider.statusMessage)) ...[
+              if (_isPermissionError(
+                  context.read<BleProvider>().statusMessage)) ...[
                 Card(
                   color: AppColors.error,
                   child: Padding(
@@ -323,8 +323,8 @@ class HomeTab extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          _getLocalizedStatusMessage(
-                              context, bleProvider.statusMessage),
+                          _getLocalizedStatusMessage(context,
+                              context.read<BleProvider>().statusMessage),
                           style:
                               Theme.of(context).textTheme.bodyMedium?.copyWith(
                                     color: AppColors.primaryText,
@@ -348,6 +348,18 @@ class HomeTab extends StatelessWidget {
         status.contains('Permission') ||
         status.contains('denied') ||
         status.contains('error');
+  }
+
+  Widget _connectionIcon(String? transport) {
+    switch (transport) {
+      case 'ble':
+        return const Icon(Icons.bluetooth_connected,
+            size: 16, color: AppColors.success);
+      case 'wifi':
+        return const Icon(Icons.wifi, size: 16, color: AppColors.success);
+      default:
+        return const Icon(Icons.cloud_off, size: 16, color: AppColors.error);
+    }
   }
 
   String _getLocalizedStatusMessage(BuildContext context, String statusKey) {

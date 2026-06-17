@@ -3,9 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../models/protopirate_result.dart';
-import '../providers/ble_provider.dart';
+import '../providers/nrf_provider.dart';
 import '../providers/notification_provider.dart';
 import '../theme/app_colors.dart';
+import '../providers/connection_state_provider.dart';
 
 /// Accent color for the ProtoPirate module (cyan / teal)
 const Color _ppAccent = AppColors.ppAccent;
@@ -58,23 +59,23 @@ class _ProtoPirateScreenState extends State<ProtoPirateScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<BleProvider>(
-      builder: (context, ble, _) {
-        final isDecoding = ble.ppDecoding;
-        final results = ble.ppResults;
+    return Consumer<NrfProvider>(
+      builder: (context, nrf, _) {
+        final isDecoding = nrf.ppDecoding;
+        final results = nrf.ppResults;
         final l10n = AppLocalizations.of(context)!;
 
         return Column(
           children: [
             // Control panel
-            _buildControlPanel(context, ble, isDecoding, l10n),
+            _buildControlPanel(context, nrf, isDecoding, l10n),
 
             // Status indicator
-            if (isDecoding) _buildDecodingBanner(context, ble, l10n),
+            if (isDecoding) _buildDecodingBanner(context, nrf, l10n),
 
             // Results header
             if (results.isNotEmpty)
-              _buildResultsHeader(context, ble, results, l10n),
+              _buildResultsHeader(context, nrf, results, l10n),
 
             // Results list or empty state
             Expanded(
@@ -92,7 +93,7 @@ class _ProtoPirateScreenState extends State<ProtoPirateScreen>
   //  Control Panel — frequency, module, start/stop
   // ══════════════════════════════════════════════════════════════
 
-  Widget _buildControlPanel(BuildContext context, BleProvider ble,
+  Widget _buildControlPanel(BuildContext context, NrfProvider nrf,
       bool isDecoding, AppLocalizations l10n) {
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 4, 12, 4),
@@ -129,7 +130,9 @@ class _ProtoPirateScreenState extends State<ProtoPirateScreen>
                 height: 8,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: ble.isConnected ? AppColors.success : AppColors.error,
+                  color: context.read<ConnectionStateProvider>().isConnected
+                      ? AppColors.success
+                      : AppColors.error,
                 ),
               ),
             ],
@@ -202,9 +205,10 @@ class _ProtoPirateScreenState extends State<ProtoPirateScreen>
                 child: SizedBox(
                   height: 38,
                   child: ElevatedButton.icon(
-                    onPressed: ble.isConnected
-                        ? () => _toggleDecode(context, ble, isDecoding)
-                        : null,
+                    onPressed:
+                        context.read<ConnectionStateProvider>().isConnected
+                            ? () => _toggleDecode(context, nrf, isDecoding)
+                            : null,
                     icon: Icon(
                       isDecoding
                           ? Icons.stop_rounded
@@ -237,9 +241,11 @@ class _ProtoPirateScreenState extends State<ProtoPirateScreen>
                 height: 38,
                 width: 38,
                 child: IconButton(
-                  onPressed: (ble.isConnected && !isDecoding)
-                      ? () => _showLoadSubDialog(context, ble)
-                      : null,
+                  onPressed:
+                      (context.read<ConnectionStateProvider>().isConnected &&
+                              !isDecoding)
+                          ? () => _showLoadSubDialog(context, nrf)
+                          : null,
                   icon: const Icon(Icons.folder_open, size: 18),
                   style: IconButton.styleFrom(
                     backgroundColor: AppColors.surfaceElevated,
@@ -291,7 +297,7 @@ class _ProtoPirateScreenState extends State<ProtoPirateScreen>
   // ══════════════════════════════════════════════════════════════
 
   Widget _buildDecodingBanner(
-      BuildContext context, BleProvider ble, AppLocalizations l10n) {
+      BuildContext context, NrfProvider nrf, AppLocalizations l10n) {
     return AnimatedBuilder(
       animation: _pulseController,
       builder: (context, child) {
@@ -328,7 +334,7 @@ class _ProtoPirateScreenState extends State<ProtoPirateScreen>
                   children: [
                     Text(
                       l10n.ppDecodingOn(
-                        ble.ppModule >= 0 ? ble.ppModule : _selectedModule,
+                        nrf.ppModule >= 0 ? nrf.ppModule : _selectedModule,
                         _frequencyPresets[_selectedFreqIndex]
                             .mhz
                             .toStringAsFixed(2),
@@ -339,9 +345,9 @@ class _ProtoPirateScreenState extends State<ProtoPirateScreen>
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    if (ble.ppSignalCount > 0)
+                    if (nrf.ppSignalCount > 0)
                       Text(
-                        l10n.ppSignalsAnalyzed(ble.ppSignalCount),
+                        l10n.ppSignalsAnalyzed(nrf.ppSignalCount),
                         style: TextStyle(
                           color: _ppAccent.withValues(alpha: opacity * 0.7),
                           fontSize: 10,
@@ -361,7 +367,7 @@ class _ProtoPirateScreenState extends State<ProtoPirateScreen>
   //  Results Header with count + clear
   // ══════════════════════════════════════════════════════════════
 
-  Widget _buildResultsHeader(BuildContext context, BleProvider ble,
+  Widget _buildResultsHeader(BuildContext context, NrfProvider nrf,
       List<ProtoPirateResult> results, AppLocalizations l10n) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
@@ -382,7 +388,7 @@ class _ProtoPirateScreenState extends State<ProtoPirateScreen>
           // Clear results button
           InkWell(
             onTap: () {
-              ble.ppClearResults();
+              nrf.ppClearResults();
               Provider.of<NotificationProvider>(context, listen: false)
                   .showInfo(l10n.ppHistoryCleared);
             },
@@ -496,18 +502,18 @@ class _ProtoPirateScreenState extends State<ProtoPirateScreen>
   // ══════════════════════════════════════════════════════════════
 
   Future<void> _toggleDecode(
-      BuildContext context, BleProvider ble, bool isDecoding) async {
+      BuildContext context, NrfProvider nrf, bool isDecoding) async {
     final notifications =
         Provider.of<NotificationProvider>(context, listen: false);
     final l10n = AppLocalizations.of(context)!;
 
     try {
       if (isDecoding) {
-        await ble.ppStopDecode();
+        await nrf.ppStopDecode();
         notifications.showInfo(l10n.ppStopped);
       } else {
         final freq = _frequencyPresets[_selectedFreqIndex].mhz;
-        await ble.ppStartDecode(module: _selectedModule, frequency: freq);
+        await nrf.ppStartDecode(_selectedModule, freq);
         notifications.showSuccess(l10n.ppStarted(_selectedModule));
       }
     } catch (e) {
@@ -517,12 +523,12 @@ class _ProtoPirateScreenState extends State<ProtoPirateScreen>
 
   /// Show file browser dialog — queries SD card for .sub files and allows selection.
   /// Falls back to manual path entry via a secondary button.
-  Future<void> _showLoadSubDialog(BuildContext context, BleProvider ble) async {
+  Future<void> _showLoadSubDialog(BuildContext context, NrfProvider nrf) async {
     final notifications =
         Provider.of<NotificationProvider>(context, listen: false);
 
     try {
-      await ble.ppListSubFiles('/');
+      await nrf.ppListSubFiles('/');
     } catch (e) {
       notifications.showError('Failed to list files: $e');
       return;
@@ -532,10 +538,10 @@ class _ProtoPirateScreenState extends State<ProtoPirateScreen>
     final selected = await showDialog<String>(
       context: context,
       builder: (ctx) {
-        return Consumer<BleProvider>(
-          builder: (_, bleProv, __) {
-            final files = bleProv.ppFileList;
-            final received = bleProv.ppFileListReceived;
+        return Consumer<NrfProvider>(
+          builder: (_, nrf, __) {
+            final files = nrf.ppFileList;
+            final received = nrf.ppFileListReceived;
 
             Widget body;
             if (!received) {
@@ -626,7 +632,7 @@ class _ProtoPirateScreenState extends State<ProtoPirateScreen>
                 TextButton(
                   onPressed: () {
                     Navigator.pop(ctx);
-                    _showManualPathDialog(context, ble);
+                    _showManualPathDialog(context, nrf);
                   },
                   child: const Text('Manual path…',
                       style: TextStyle(color: _ppAccent)),
@@ -640,7 +646,7 @@ class _ProtoPirateScreenState extends State<ProtoPirateScreen>
 
     if (selected != null && selected.isNotEmpty) {
       try {
-        await ble.ppLoadSubFile(selected);
+        await nrf.ppLoadSubFile(selected);
         if (context.mounted) {
           notifications.showSuccess('Analyzing: $selected');
         }
@@ -652,7 +658,7 @@ class _ProtoPirateScreenState extends State<ProtoPirateScreen>
 
   /// Fallback dialog for entering a .sub file path manually
   Future<void> _showManualPathDialog(
-      BuildContext context, BleProvider ble) async {
+      BuildContext context, NrfProvider nrf) async {
     final controller = TextEditingController(text: '/protopirate/');
     final notifications =
         Provider.of<NotificationProvider>(context, listen: false);
@@ -704,7 +710,7 @@ class _ProtoPirateScreenState extends State<ProtoPirateScreen>
 
     if (result != null && result.isNotEmpty) {
       try {
-        await ble.ppLoadSubFile(result);
+        await nrf.ppLoadSubFile(result);
         notifications.showSuccess('Analyzing: $result');
       } catch (e) {
         notifications.showError('Load failed: $e');
@@ -1112,7 +1118,7 @@ class _ResultCard extends StatelessWidget {
 
   /// Emulate (TX) this decoded result via the device
   void _emulateResult(BuildContext context) {
-    final ble = Provider.of<BleProvider>(context, listen: false);
+    final nrf = context.read<NrfProvider>();
     final notifications =
         Provider.of<NotificationProvider>(context, listen: false);
 
@@ -1208,7 +1214,7 @@ class _ResultCard extends StatelessWidget {
                   onPressed: () async {
                     Navigator.pop(ctx);
                     try {
-                      await ble.ppEmulate(result,
+                      await nrf.ppEmulate(result,
                           module: module, repeat: repeat);
                       notifications.showSuccess(
                           'Emulating ${result.protocolName} on module #${module + 1}…');
@@ -1233,12 +1239,12 @@ class _ResultCard extends StatelessWidget {
 
   /// Save this decoded result to SD card (/DATA/PROTOPIRATE/)
   void _saveResult(BuildContext context) async {
-    final ble = Provider.of<BleProvider>(context, listen: false);
+    final nrf = context.read<NrfProvider>();
     final notifications =
         Provider.of<NotificationProvider>(context, listen: false);
 
     try {
-      await ble.ppSaveCapture(result);
+      await nrf.ppSaveCapture(result);
       notifications.showSuccess('Saving ${result.protocolName} to SD card…');
     } catch (e) {
       notifications.showError('Save failed: $e');

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
-import '../providers/ble_provider.dart';
+import '../providers/subghz_provider.dart';
+import '../providers/device_info_provider.dart';
+import '../providers/connection_state_provider.dart';
 import '../providers/notification_provider.dart';
 import '../services/cc1101/cc1101_values.dart';
 import '../widgets/record_screen_widgets.dart';
@@ -112,17 +114,16 @@ class _TransmitScreenState extends State<TransmitScreen>
   }
 
   void _transmitSignal(int moduleIndex) async {
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
-
-    if (!bleProvider.isConnected) {
+    if (!context.read<ConnectionStateProvider>().isConnected) {
       _showErrorDialog(AppLocalizations.of(context)!.error,
           AppLocalizations.of(context)!.deviceNotConnected);
       return;
     }
 
     // Check module availability
-    if (!bleProvider.isModuleAvailable(moduleIndex)) {
-      final status = bleProvider.getModuleStatus(moduleIndex);
+    if (!context.read<DeviceInfoProvider>().isModuleAvailable(moduleIndex)) {
+      final status =
+          context.read<DeviceInfoProvider>().getModuleStatus(moduleIndex);
       _showErrorDialog(
           AppLocalizations.of(context)!.moduleBusy,
           AppLocalizations.of(context)!
@@ -142,11 +143,11 @@ class _TransmitScreenState extends State<TransmitScreen>
 
     try {
       // Send binary transmission command via Enhanced Protocol
-      await bleProvider.sendTransmitCommand(
-        frequency: config.frequency,
-        data: config.rawData,
-        pulseDuration: 100, // TODO: Calculate from config
-      );
+      await context.read<SubGhzProvider>().sendTransmitCommand(
+            frequency: config.frequency,
+            data: config.rawData,
+            pulseDuration: 100, // TODO: Calculate from config
+          );
 
       _showSuccessSnackBar(AppLocalizations.of(context)!
           .transmissionStartedOnModule(moduleIndex + 1));
@@ -157,9 +158,7 @@ class _TransmitScreenState extends State<TransmitScreen>
   }
 
   void _transmitFromFile(int moduleIndex) async {
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
-
-    if (!bleProvider.isConnected) {
+    if (!context.read<ConnectionStateProvider>().isConnected) {
       _showErrorDialog(AppLocalizations.of(context)!.error,
           AppLocalizations.of(context)!.deviceNotConnected);
       return;
@@ -257,9 +256,9 @@ class _TransmitScreenState extends State<TransmitScreen>
                 labelPadding: const EdgeInsets.symmetric(horizontal: 8),
                 tabs: _transmitConfigs.asMap().entries.map((entry) {
                   final index = entry.key;
-                  return Consumer<BleProvider>(
-                    builder: (context, bleProvider, child) {
-                      final isAvailable = bleProvider.isModuleAvailable(index);
+                  return Consumer<DeviceInfoProvider>(
+                    builder: (context, deviceInfo, child) {
+                      final isAvailable = deviceInfo.isModuleAvailable(index);
 
                       return Tab(
                         icon: Stack(
@@ -311,10 +310,10 @@ class _TransmitScreenState extends State<TransmitScreen>
   }
 
   Widget _buildModuleTab(int moduleIndex, TransmitConfig config) {
-    return Consumer<BleProvider>(
-      builder: (context, bleProvider, child) {
+    return Consumer<DeviceInfoProvider>(
+      builder: (context, deviceInfo, child) {
         final isTransmitting =
-            bleProvider.cc1101Modules?[moduleIndex]['mode'] == 'SendSignal';
+            deviceInfo.cc1101Modules?[moduleIndex]['mode'] == 'SendSignal';
 
         return SingleChildScrollView(
           padding: const EdgeInsets.all(12.0),
@@ -322,7 +321,7 @@ class _TransmitScreenState extends State<TransmitScreen>
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // Module status
-              _buildModuleStatus(moduleIndex, bleProvider),
+              _buildModuleStatus(moduleIndex),
 
               const SizedBox(height: 12),
 
@@ -345,10 +344,11 @@ class _TransmitScreenState extends State<TransmitScreen>
     );
   }
 
-  Widget _buildModuleStatus(int moduleIndex, BleProvider bleProvider) {
-    final module = bleProvider.cc1101Modules?[moduleIndex];
+  Widget _buildModuleStatus(int moduleIndex) {
+    final module =
+        context.read<DeviceInfoProvider>().cc1101Modules?[moduleIndex];
     final mode = module?['mode'] ?? 'Unknown';
-    final isConnected = bleProvider.isConnected;
+    final isConnected = context.read<ConnectionStateProvider>().isConnected;
 
     Color statusColor;
     IconData statusIcon;

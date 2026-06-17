@@ -273,6 +273,23 @@ class DeviceInfoProvider extends ChangeNotifier {
     await sendCommand!(FirmwareBinaryProtocol.createGetStateCommand());
   }
 
+  /// Check if a CC1101 module is available for operations.
+  bool isModuleAvailable(int moduleIndex) {
+    if (cc1101Modules == null || moduleIndex >= cc1101Modules!.length) {
+      return false;
+    }
+    final mode = cc1101Modules![moduleIndex]['mode'] as String? ?? 'Unknown';
+    return mode == 'Idle';
+  }
+
+  /// Get a CC1101 module's current state string.
+  String getModuleStatus(int moduleIndex) {
+    if (cc1101Modules == null || moduleIndex >= cc1101Modules!.length) {
+      return 'Unknown';
+    }
+    return cc1101Modules![moduleIndex]['mode'] as String? ?? 'Unknown';
+  }
+
   Future<bool> setDeviceName(String name) async {
     if (sendCommand == null) return false;
     final cmd = FirmwareBinaryProtocol.createSetDeviceNameCommand(name);

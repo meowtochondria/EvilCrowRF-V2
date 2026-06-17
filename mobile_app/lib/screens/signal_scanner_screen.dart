@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
-import '../providers/ble_provider.dart';
+import '../providers/subghz_provider.dart';
 import '../providers/notification_provider.dart';
 import '../providers/firmware_protocol.dart';
 import '../models/detected_signal.dart';
@@ -85,7 +85,7 @@ class _SignalScannerScreenState extends State<SignalScannerScreen>
 
   Future<void> _startScanning() async {
     if (_isScanning) return;
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
+    final subGhz = context.read<SubGhzProvider>();
 
     setState(() => _isScanning = true);
     if (_viewMode != 0) _spectrumAnimationController.repeat();
@@ -101,12 +101,12 @@ class _SignalScannerScreenState extends State<SignalScannerScreen>
             rssiThresholdInt, 0);
         final cmd1 = FirmwareBinaryProtocol.createRequestScanCommand(
             rssiThresholdInt, 1);
-        await bleProvider.sendBinaryCommand(cmd0);
-        await bleProvider.sendBinaryCommand(cmd1);
+        await subGhz.sendCommand!(cmd0);
+        await subGhz.sendCommand!(cmd1);
       } else {
         final command = FirmwareBinaryProtocol.createRequestScanCommand(
             rssiThresholdInt, _selectedModule);
-        await bleProvider.sendBinaryCommand(command);
+        await subGhz.sendCommand!(command);
       }
     } catch (e) {
       setState(() => _isScanning = false);
@@ -121,7 +121,7 @@ class _SignalScannerScreenState extends State<SignalScannerScreen>
 
   Future<void> _stopScanning() async {
     if (!_isScanning) return;
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
+    final subGhz = context.read<SubGhzProvider>();
 
     setState(() => _isScanning = false);
     _spectrumAnimationController.stop();
@@ -132,12 +132,12 @@ class _SignalScannerScreenState extends State<SignalScannerScreen>
         // Stop both modules
         final cmd0 = FirmwareBinaryProtocol.createRequestIdleCommand(0);
         final cmd1 = FirmwareBinaryProtocol.createRequestIdleCommand(1);
-        await bleProvider.sendBinaryCommand(cmd0);
-        await bleProvider.sendBinaryCommand(cmd1);
+        await subGhz.sendCommand!(cmd0);
+        await subGhz.sendCommand!(cmd1);
       } else {
         final command =
             FirmwareBinaryProtocol.createRequestIdleCommand(_selectedModule);
-        await bleProvider.sendBinaryCommand(command);
+        await subGhz.sendCommand!(command);
       }
     } catch (e) {
       if (mounted) {
@@ -148,13 +148,13 @@ class _SignalScannerScreenState extends State<SignalScannerScreen>
   }
 
   void _clearSignals() {
-    Provider.of<BleProvider>(context, listen: false).updateDetectedSignals([]);
+    context.read<SubGhzProvider>().clearSignals();
   }
 
   /// Re-send scan command with updated RSSI threshold while scanning
   Future<void> _restartScanningWithNewRssi() async {
     if (!_isScanning) return;
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
+    final subGhz = context.read<SubGhzProvider>();
     try {
       final int rssiThresholdInt = -_rssiThreshold.toInt();
       if (_selectedModule == -1) {
@@ -162,12 +162,12 @@ class _SignalScannerScreenState extends State<SignalScannerScreen>
             rssiThresholdInt, 0);
         final cmd1 = FirmwareBinaryProtocol.createRequestScanCommand(
             rssiThresholdInt, 1);
-        await bleProvider.sendBinaryCommand(cmd0);
-        await bleProvider.sendBinaryCommand(cmd1);
+        await subGhz.sendCommand!(cmd0);
+        await subGhz.sendCommand!(cmd1);
       } else {
         final command = FirmwareBinaryProtocol.createRequestScanCommand(
             rssiThresholdInt, _selectedModule);
-        await bleProvider.sendBinaryCommand(command);
+        await subGhz.sendCommand!(command);
       }
     } catch (_) {}
   }
@@ -198,8 +198,8 @@ class _SignalScannerScreenState extends State<SignalScannerScreen>
     _decayTimer = Timer.periodic(const Duration(milliseconds: 150), (_) {
       if (!mounted || !_isScanning) return;
 
-      final bleProvider = Provider.of<BleProvider>(context, listen: false);
-      final signals = bleProvider.detectedSignals;
+      final subGhz = context.read<SubGhzProvider>();
+      final signals = subGhz.detectedSignals;
 
       // Build fresh snapshot from recent signals (last 3 seconds)
       final now = DateTime.now();
@@ -232,7 +232,7 @@ class _SignalScannerScreenState extends State<SignalScannerScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<BleProvider>(
+    return Consumer<SubGhzProvider>(
       builder: (context, bleProvider, child) {
         return Scaffold(
           backgroundColor: AppColors.primaryBackground,
@@ -466,8 +466,8 @@ class _SignalScannerScreenState extends State<SignalScannerScreen>
 
   // ── Signal list (dark cards) ──────────────────────────────────────
 
-  Widget _buildListView(BleProvider bleProvider) {
-    if (bleProvider.detectedSignals.isEmpty) {
+  Widget _buildListView(SubGhzProvider subGhz) {
+    if (subGhz.detectedSignals.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -489,9 +489,9 @@ class _SignalScannerScreenState extends State<SignalScannerScreen>
 
     return ListView.builder(
       padding: const EdgeInsets.all(12),
-      itemCount: bleProvider.detectedSignals.length,
+      itemCount: subGhz.detectedSignals.length,
       itemBuilder: (context, index) {
-        final signal = bleProvider.detectedSignals[index];
+        final signal = subGhz.detectedSignals[index];
         return Card(
           margin: const EdgeInsets.only(bottom: 6),
           color: AppColors.secondaryBackground,
@@ -534,7 +534,7 @@ class _SignalScannerScreenState extends State<SignalScannerScreen>
 
   // ── Spectrogram view (dark, populated from detected signals) ──────
 
-  Widget _buildSpectrumView(BleProvider bleProvider) {
+  Widget _buildSpectrumView(SubGhzProvider subGhz) {
     // Use the dynamic spectrum levels (with decay) instead of static snapshot
     final spectrum = Map<double, double>.from(_spectrumLevels);
 

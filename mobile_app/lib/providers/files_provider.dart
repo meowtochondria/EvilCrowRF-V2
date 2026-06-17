@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import '../connection/message_dispatcher.dart';
@@ -38,6 +39,7 @@ class FilesProvider extends ChangeNotifier {
   bool isFormattingSD = false;
   bool sdFormatSuccess = false;
   String sdFormatProgress = '';
+  int totalFilesInDirectory = 0;
 
   // Cache for file lists
   final Map<String, List<FileItem>> _fileCache = {};
@@ -124,9 +126,7 @@ class FilesProvider extends ChangeNotifier {
       if (data['type'] == 'DirectoryTree' && data['data'] is Map) {
         final dirData = data['data'] as Map<String, dynamic>;
         if (dirData.containsKey('error')) {
-          _isStreamingDirectoryTree = false;
           _streamingDirectoryTreeBuffer.clear();
-          _streamingTotalDirs = 0;
           if (_pendingDirectoryTreeCompleter != null &&
               !_pendingDirectoryTreeCompleter!.isCompleted) {
             _pendingDirectoryTreeCompleter!
@@ -513,6 +513,52 @@ class FilesProvider extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+  }
+
+  /// Upload a local file to the device in chunks.
+  /// Returns a map with 'success' (bool) and optionally 'error' (String).
+  Future<Map<String, dynamic>> uploadFile(
+    File file,
+    String targetPath, {
+    int pathType = 0,
+    Function(double progress)? onProgress,
+  }) async {
+    if (!await file.exists()) {
+      return {'success': false, 'error': 'File does not exist'};
+    }
+
+    final bytes = await file.readAsBytes();
+    const chunkSize = 500;
+    final totalChunks = (bytes.length + chunkSize - 1) ~/ chunkSize;
+    final chunkId = DateTime.now().millisecondsSinceEpoch & 0xFF;
+
+    // Send start command with path info
+    final startCmd = FirmwareBinaryProtocol.createUploadFileStartCommand(
+      targetPath,
+      chunkId: chunkId,
+      totalChunks: totalChunks,
+    );
+    await sendCommand?.call(startCmd);
+
+    // Send data chunks
+    for (int i = 0; i < totalChunks; i++) {
+      final start = i * chunkSize;
+      final end =
+          start + chunkSize > bytes.length ? bytes.length : start + chunkSize;
+      final chunk = bytes.sublist(start, end);
+      final cmd = FirmwareBinaryProtocol.createUploadFileChunkCommand(
+        chunk,
+        chunkId,
+        i + 1,
+        totalChunks,
+      );
+      final sent = await sendCommand?.call(cmd);
+      if (sent != true) {
+        return {'success': false, 'error': 'Upload failed at chunk ${i + 1}'};
+      }
+      onProgress?.call((i + 1) / totalChunks);
+    }
+    return {'success': true};
   }
 
   // ══════════════════════════════════════════════════════════════

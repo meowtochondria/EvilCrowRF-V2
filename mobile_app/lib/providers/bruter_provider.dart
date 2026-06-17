@@ -232,6 +232,25 @@ class BruterProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Start a custom De Bruijn attack with per-protocol timing and frequency.
+  Future<void> sendCustomDeBruijnCommand({
+    required int bits,
+    required int te,
+    required int ratio,
+    required double frequencyMhz,
+  }) async {
+    final cmd = FirmwareBinaryProtocol.createCustomDeBruijnCommand(
+      bits: bits,
+      te: te,
+      ratio: ratio,
+      frequencyMhz: frequencyMhz,
+    );
+    await sendCommand?.call(cmd);
+    _isBruterRunning = true;
+    _bruterActiveProtocol = 0xFD;
+    notifyListeners();
+  }
+
   void _resetBruterState() {
     _isBruterRunning = false;
     _bruterActiveProtocol = 0;

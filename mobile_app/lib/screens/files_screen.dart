@@ -7,7 +7,8 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
-import '../providers/ble_provider.dart';
+import '../providers/files_provider.dart';
+import '../providers/connection_state_provider.dart';
 import '../providers/notification_provider.dart';
 import '../providers/log_provider.dart';
 import '../widgets/file_list_widget.dart';
@@ -40,18 +41,18 @@ class _FilesScreenState extends State<FilesScreen> {
     super.initState();
     // Load file list on initialization
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final bleProvider = Provider.of<BleProvider>(context, listen: false);
-      if (bleProvider.isConnected) {
-        bleProvider.refreshFileList();
+      final files = context.read<FilesProvider>();
+      if (context.read<ConnectionStateProvider>().isConnected) {
+        files.refreshFileList();
       }
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<BleProvider>(
-      builder: (context, bleProvider, child) {
-        if (!bleProvider.isConnected) {
+    return Consumer<FilesProvider>(
+      builder: (context, filesProvider, child) {
+        if (!context.read<ConnectionStateProvider>().isConnected) {
           return Scaffold(
             body: SafeArea(
               child: Center(
@@ -88,14 +89,14 @@ class _FilesScreenState extends State<FilesScreen> {
 
         // Intercept Android back button: navigate up when inside a
         // subdirectory instead of popping the entire screen.
-        final bool isInSubdir = bleProvider.currentPath != '/' &&
-            bleProvider.currentPath.isNotEmpty;
+        final bool isInSubdir = filesProvider.currentPath != '/' &&
+            filesProvider.currentPath.isNotEmpty;
 
         return PopScope(
           canPop: !isInSubdir,
           onPopInvokedWithResult: (didPop, result) {
             if (!didPop) {
-              bleProvider.navigateUp();
+              filesProvider.navigateUp();
             }
           },
           child: Scaffold(
@@ -130,12 +131,12 @@ class _FilesScreenState extends State<FilesScreen> {
                                 icon: const Icon(Icons.memory, size: 14),
                               ),
                             ],
-                            selected: {bleProvider.currentPathType == 4},
+                            selected: {filesProvider.currentPathType == 4},
                             onSelectionChanged: (selected) {
                               if (selected.first) {
-                                bleProvider.switchPathType(4); // LittleFS
+                                filesProvider.switchPathType(4); // LittleFS
                               } else {
-                                bleProvider.switchPathType(5); // SD Root
+                                filesProvider.switchPathType(5); // SD Root
                               }
                             },
                             style: ButtonStyle(
@@ -160,15 +161,15 @@ class _FilesScreenState extends State<FilesScreen> {
                     child: Row(
                       children: [
                         // Show back button only when not in root directory
-                        if (bleProvider.currentPath != '/' &&
-                            bleProvider.currentPath.isNotEmpty)
+                        if (filesProvider.currentPath != '/' &&
+                            filesProvider.currentPath.isNotEmpty)
                           IconButton(
-                            onPressed: () => bleProvider.navigateUp(),
+                            onPressed: () => filesProvider.navigateUp(),
                             icon: const Icon(Icons.arrow_back),
                             iconSize: 20,
                           ),
                         Expanded(
-                          child: _buildPathWithDropdown(context, bleProvider),
+                          child: _buildPathWithDropdown(context, filesProvider),
                         ),
                       ],
                     ),
@@ -181,10 +182,10 @@ class _FilesScreenState extends State<FilesScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        if (bleProvider.isLoadingFiles)
+                        if (filesProvider.isLoadingFiles)
                           IconButton(
                             onPressed: () =>
-                                bleProvider.resetFileLoadingState(),
+                                filesProvider.resetFileLoadingState(),
                             icon: const Icon(Icons.stop),
                             iconSize: 20,
                             tooltip: AppLocalizations.of(context)!.stopLoading,
@@ -192,15 +193,15 @@ class _FilesScreenState extends State<FilesScreen> {
                           )
                         else
                           IconButton(
-                            onPressed: () =>
-                                bleProvider.refreshFileList(forceRefresh: true),
+                            onPressed: () => filesProvider.refreshFileList(
+                                forceRefresh: true),
                             icon: const Icon(Icons.refresh),
                             iconSize: 20,
                             tooltip: AppLocalizations.of(context)!.refresh,
                           ),
                         IconButton(
-                          onPressed: () =>
-                              _showCreateDirectoryDialog(context, bleProvider),
+                          onPressed: () => _showCreateDirectoryDialog(
+                              context, filesProvider),
                           icon: const Icon(Icons.create_new_folder),
                           iconSize: 20,
                           tooltip:
@@ -208,7 +209,7 @@ class _FilesScreenState extends State<FilesScreen> {
                         ),
                         IconButton(
                           onPressed: () =>
-                              _uploadFileFromDevice(context, bleProvider),
+                              _uploadFileFromDevice(context, filesProvider),
                           icon: const Icon(Icons.upload_file),
                           iconSize: 20,
                           tooltip: AppLocalizations.of(context)!.uploadFile,
@@ -238,7 +239,7 @@ class _FilesScreenState extends State<FilesScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          _buildFileCountText(bleProvider),
+                          _buildFileCountText(filesProvider),
                           style:
                               Theme.of(context).textTheme.bodySmall?.copyWith(
                                     fontSize: 11,
@@ -253,24 +254,24 @@ class _FilesScreenState extends State<FilesScreen> {
                   // File list
                   Expanded(
                     child: FileListWidget(
-                      files: bleProvider.fileList,
+                      files: filesProvider.fileList,
                       mode: _isMultiSelectMode
                           ? FileListMode.multiSelect
                           : FileListMode.browse,
-                      currentPath: bleProvider.currentPath,
-                      currentPathType: bleProvider.currentPathType,
+                      currentPath: filesProvider.currentPath,
+                      currentPathType: filesProvider.currentPathType,
                       showActions: true,
                       showHeader: false, // Hide the "SD Card" header
-                      isLoading: bleProvider.isLoadingFiles,
+                      isLoading: filesProvider.isLoadingFiles,
                       onRefresh: () =>
-                          bleProvider.refreshFileList(forceRefresh: true),
-                      onNavigateUp: () => bleProvider.navigateUp(),
+                          filesProvider.refreshFileList(forceRefresh: true),
+                      onNavigateUp: () => filesProvider.navigateUp(),
                       onFileSelected: (file) =>
-                          _handleFileSelection(context, file, bleProvider),
-                      onFileAction: (file, action) =>
-                          _handleFileAction(context, file, action, bleProvider),
+                          _handleFileSelection(context, file, filesProvider),
+                      onFileAction: (file, action) => _handleFileAction(
+                          context, file, action, filesProvider),
                       onMultiSelectAction: (files) => _handleMultiSelectAction(
-                          context, files, 'delete', bleProvider),
+                          context, files, 'delete', filesProvider),
                       isMultiSelectMode: _isMultiSelectMode,
                       selectedFiles: _selectedFiles,
                       onFileSelectionChanged: (fileName) =>
@@ -289,16 +290,16 @@ class _FilesScreenState extends State<FilesScreen> {
     );
   }
 
-  String _buildFileCountText(BleProvider bleProvider) {
+  String _buildFileCountText(FilesProvider filesProvider) {
     final l10n = AppLocalizations.of(context)!;
 
     // Show "?" instead of previous value while loading
-    if (bleProvider.isLoadingFiles) {
+    if (filesProvider.isLoadingFiles) {
       return l10n.loadingFiles;
     }
 
-    final loadedCount = bleProvider.fileList.length;
-    final totalCount = bleProvider.totalFilesInDirectory;
+    final loadedCount = filesProvider.fileList.length;
+    final totalCount = filesProvider.totalFilesInDirectory;
 
     if (totalCount > 0) {
       return l10n.filesLoadedCount(loadedCount, totalCount);
@@ -310,19 +311,20 @@ class _FilesScreenState extends State<FilesScreen> {
   }
 
   void _handleFileSelection(
-      BuildContext context, dynamic file, BleProvider bleProvider) {
+      BuildContext context, dynamic file, FilesProvider filesProvider) {
     if (_isMultiSelectMode && !file.isDirectory) {
       // Toggle selection in multi-select mode
       _toggleFileSelection(file.name);
     } else if (file.isDirectory) {
-      bleProvider.navigateToDirectory(file.name);
+      filesProvider.navigateToDirectory(file.name);
     } else {
       // Build full file path considering current directory
       String fullPath;
-      if (bleProvider.currentPath == '/' || bleProvider.currentPath.isEmpty) {
+      if (filesProvider.currentPath == '/' ||
+          filesProvider.currentPath.isEmpty) {
         fullPath = file.name;
       } else {
-        fullPath = '${bleProvider.currentPath}/${file.name}';
+        fullPath = '${filesProvider.currentPath}/${file.name}';
       }
 
       if (widget.pickMode) {
@@ -339,7 +341,7 @@ class _FilesScreenState extends State<FilesScreen> {
         }
         Navigator.of(context).pop({
           'path': fullPath,
-          'pathType': bleProvider.currentPathType,
+          'pathType': filesProvider.currentPathType,
           'name': file.name,
         });
         return;
@@ -350,7 +352,7 @@ class _FilesScreenState extends State<FilesScreen> {
           builder: (context) => FileViewerScreen(
             fileItem: file,
             filePath: fullPath,
-            pathType: bleProvider.currentPathType,
+            pathType: filesProvider.currentPathType,
           ),
         ),
       );
@@ -358,62 +360,63 @@ class _FilesScreenState extends State<FilesScreen> {
   }
 
   void _handleFileAction(BuildContext context, dynamic file, String action,
-      BleProvider bleProvider) {
+      FilesProvider filesProvider) {
     switch (action) {
       case 'navigate':
         if (file.isDirectory) {
-          bleProvider.navigateToDirectory(file.name);
+          filesProvider.navigateToDirectory(file.name);
         }
         break;
       case 'transmit':
-        _transmitFile(context, file, bleProvider);
+        _transmitFile(context, file, filesProvider);
         break;
       case 'download':
-        _downloadFile(context, file, bleProvider);
+        _downloadFile(context, file, filesProvider);
         break;
       case 'copy':
-        _copyFile(context, file, bleProvider);
+        _copyFile(context, file, filesProvider);
         break;
       case 'rename':
-        _renameFile(context, file, bleProvider);
+        _renameFile(context, file, filesProvider);
         break;
       case 'delete':
-        _deleteFile(context, file, bleProvider);
+        _deleteFile(context, file, filesProvider);
         break;
       case 'move':
-        _moveFile(context, file, bleProvider);
+        _moveFile(context, file, filesProvider);
         break;
     }
   }
 
   void _transmitFile(
-      BuildContext context, dynamic file, BleProvider bleProvider) async {
+      BuildContext context, dynamic file, FilesProvider filesProvider) async {
     // Pass full file path
-    final fullPath = bleProvider.currentPath == '/'
+    final fullPath = filesProvider.currentPath == '/'
         ? file.name
-        : '${bleProvider.currentPath}/${file.name}';
+        : '${filesProvider.currentPath}/${file.name}';
 
     await TransmitFileDialog.showAndTransmit(
       context,
       fileName: file.name,
       filePath: fullPath,
-      pathType: bleProvider.currentPathType,
+      pathType: filesProvider.currentPathType,
     );
   }
 
   void _downloadFile(
-      BuildContext context, dynamic file, BleProvider bleProvider) async {
+      BuildContext context, dynamic file, FilesProvider filesProvider) async {
     try {
       // Build full file path considering current directory
       String fullPath;
-      if (bleProvider.currentPath == '/' || bleProvider.currentPath.isEmpty) {
+      if (filesProvider.currentPath == '/' ||
+          filesProvider.currentPath.isEmpty) {
         fullPath = file.name;
       } else {
-        fullPath = '${bleProvider.currentPath}/${file.name}';
+        fullPath = '${filesProvider.currentPath}/${file.name}';
       }
 
       // Download file from ESP
-      final content = await bleProvider.downloadFile(fullPath);
+      final content = await filesProvider.downloadFile(fullPath);
 
       if (content != null && context.mounted) {
         // Save file to device
@@ -522,13 +525,13 @@ class _FilesScreenState extends State<FilesScreen> {
   }
 
   void _copyFile(
-      BuildContext context, dynamic file, BleProvider bleProvider) async {
+      BuildContext context, dynamic file, FilesProvider filesProvider) async {
     // First select destination directory
     final l10n = AppLocalizations.of(context)!;
     final directoryResult = await showDirectoryPickerDialog(
       context,
       l10n.copyFile,
-      bleProvider,
+      filesProvider,
     );
 
     if (directoryResult == null) return;
@@ -583,10 +586,11 @@ class _FilesScreenState extends State<FilesScreen> {
       try {
         // Build full file path considering current directory
         String fullPath;
-        if (bleProvider.currentPath == '/' || bleProvider.currentPath.isEmpty) {
+        if (filesProvider.currentPath == '/' ||
+            filesProvider.currentPath.isEmpty) {
           fullPath = file.name;
         } else {
-          fullPath = '${bleProvider.currentPath}/${file.name}';
+          fullPath = '${filesProvider.currentPath}/${file.name}';
         }
 
         // Build destination path with new name
@@ -602,7 +606,7 @@ class _FilesScreenState extends State<FilesScreen> {
           destPath = destPath.substring(1);
         }
 
-        await bleProvider.copyFile(fullPath, destPath);
+        await filesProvider.copyFile(fullPath, destPath);
         if (context.mounted) {
           final l10n = AppLocalizations.of(context)!;
           _showSuccessSnackBar(l10n.fileCopied(newName));
@@ -618,7 +622,7 @@ class _FilesScreenState extends State<FilesScreen> {
   }
 
   void _renameFile(
-      BuildContext context, dynamic file, BleProvider bleProvider) async {
+      BuildContext context, dynamic file, FilesProvider filesProvider) async {
     final newName = await showDialog<String>(
       context: context,
       builder: (dialogContext) {
@@ -655,21 +659,22 @@ class _FilesScreenState extends State<FilesScreen> {
       try {
         // Build full file path considering current directory
         String fullPath;
-        if (bleProvider.currentPath == '/' || bleProvider.currentPath.isEmpty) {
+        if (filesProvider.currentPath == '/' ||
+            filesProvider.currentPath.isEmpty) {
           fullPath = file.name;
         } else {
-          fullPath = '${bleProvider.currentPath}/${file.name}';
+          fullPath = '${filesProvider.currentPath}/${file.name}';
         }
 
-        final success = await bleProvider.renameFile(fullPath, newName);
+        final success = await filesProvider.renameFile(fullPath, newName);
         if (context.mounted) {
           if (success) {
             // Refresh file list
-            await bleProvider.refreshFileList(forceRefresh: true);
+            await filesProvider.refreshFileList(forceRefresh: true);
 
             // If the directory we are in was renamed, update path
             if (file.isDirectory) {
-              final currentPath = bleProvider.currentPath;
+              final currentPath = filesProvider.currentPath;
               if (currentPath.endsWith('/${file.name}')) {
                 // We are inside the renamed directory
                 final pathParts = currentPath.split('/');
@@ -680,7 +685,7 @@ class _FilesScreenState extends State<FilesScreen> {
                   currentPath == file.name) {
                 // We are at the root of the renamed directory
                 // In this case need to navigate up
-                bleProvider.navigateUp();
+                filesProvider.navigateUp();
               }
             }
 
@@ -704,7 +709,7 @@ class _FilesScreenState extends State<FilesScreen> {
   }
 
   void _deleteFile(
-      BuildContext context, dynamic file, BleProvider bleProvider) async {
+      BuildContext context, dynamic file, FilesProvider filesProvider) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
@@ -736,13 +741,14 @@ class _FilesScreenState extends State<FilesScreen> {
       try {
         // Build full file path considering current directory
         String fullPath;
-        if (bleProvider.currentPath == '/' || bleProvider.currentPath.isEmpty) {
+        if (filesProvider.currentPath == '/' ||
+            filesProvider.currentPath.isEmpty) {
           fullPath = file.name;
         } else {
-          fullPath = '${bleProvider.currentPath}/${file.name}';
+          fullPath = '${filesProvider.currentPath}/${file.name}';
         }
 
-        final success = await bleProvider.deleteFile(fullPath);
+        final success = await filesProvider.deleteFile(fullPath);
         if (context.mounted) {
           final l10n = AppLocalizations.of(context)!;
           if (success) {
@@ -753,7 +759,7 @@ class _FilesScreenState extends State<FilesScreen> {
             _showErrorSnackBar(
                 l10n.deleteFailed('File not found or delete failed'));
           }
-          await bleProvider.refreshFileList(forceRefresh: true);
+          await filesProvider.refreshFileList(forceRefresh: true);
         }
       } catch (e) {
         if (context.mounted) {
@@ -765,12 +771,12 @@ class _FilesScreenState extends State<FilesScreen> {
   }
 
   void _moveFile(
-      BuildContext context, dynamic file, BleProvider bleProvider) async {
+      BuildContext context, dynamic file, FilesProvider filesProvider) async {
     final l10n = AppLocalizations.of(context)!;
     final result = await showDirectoryPickerDialog(
       context,
       file.isDirectory ? l10n.moveDirectory : l10n.moveFile,
-      bleProvider,
+      filesProvider,
     );
 
     if (result != null && result['path'] != null) {
@@ -780,10 +786,11 @@ class _FilesScreenState extends State<FilesScreen> {
       try {
         // Build full file path considering current directory
         String sourcePath;
-        if (bleProvider.currentPath == '/' || bleProvider.currentPath.isEmpty) {
+        if (filesProvider.currentPath == '/' ||
+            filesProvider.currentPath.isEmpty) {
           sourcePath = file.name;
         } else {
-          sourcePath = '${bleProvider.currentPath}/${file.name}';
+          sourcePath = '${filesProvider.currentPath}/${file.name}';
         }
 
         // Build destination path
@@ -794,10 +801,10 @@ class _FilesScreenState extends State<FilesScreen> {
         destPath = '$destPath${file.name}';
 
         // Use current pathType for source, pathType from dialog for destination
-        final success = await bleProvider.moveFile(
+        final success = await filesProvider.moveFile(
           sourcePath,
           destPath,
-          sourcePathType: bleProvider.currentPathType,
+          sourcePathType: filesProvider.currentPathType,
           destPathType: pathType,
         );
         if (context.mounted) {
@@ -806,7 +813,7 @@ class _FilesScreenState extends State<FilesScreen> {
             _showSuccessSnackBar(file.isDirectory
                 ? l10n.directoryMoved(file.name)
                 : l10n.fileMoved(file.name));
-            await bleProvider.refreshFileList(forceRefresh: true);
+            await filesProvider.refreshFileList(forceRefresh: true);
           } else {
             _showErrorSnackBar(l10n.moveFailed(file.name));
           }
@@ -821,7 +828,7 @@ class _FilesScreenState extends State<FilesScreen> {
   }
 
   void _handleMultiSelectAction(BuildContext context, List<dynamic> files,
-      String action, BleProvider bleProvider) async {
+      String action, FilesProvider filesProvider) async {
     if (action == 'delete') {
       final confirmed = await showDialog<bool>(
         context: context,
@@ -858,13 +865,13 @@ class _FilesScreenState extends State<FilesScreen> {
           try {
             // Build full path including current directory
             String fullPath;
-            if (bleProvider.currentPath == '/' ||
-                bleProvider.currentPath.isEmpty) {
+            if (filesProvider.currentPath == '/' ||
+                filesProvider.currentPath.isEmpty) {
               fullPath = file.name;
             } else {
-              fullPath = '${bleProvider.currentPath}/${file.name}';
+              fullPath = '${filesProvider.currentPath}/${file.name}';
             }
-            await bleProvider.deleteFile(fullPath);
+            await filesProvider.deleteFile(fullPath);
             successCount++;
           } catch (e) {
             failCount++;
@@ -873,7 +880,7 @@ class _FilesScreenState extends State<FilesScreen> {
         }
 
         // Force refresh file list
-        await bleProvider.refreshFileList(forceRefresh: true);
+        await filesProvider.refreshFileList(forceRefresh: true);
 
         if (context.mounted) {
           final l10n = AppLocalizations.of(context)!;
@@ -922,7 +929,7 @@ class _FilesScreenState extends State<FilesScreen> {
           IconButton(
             onPressed: () {
               _handleMultiSelectAction(context, _selectedFileObjects, 'delete',
-                  Provider.of<BleProvider>(context, listen: false));
+                  context.read<FilesProvider>());
               // Do NOT reset selection here - it will be done in _handleMultiSelectAction after successful deletion
             },
             icon: const Icon(Icons.delete),
@@ -954,8 +961,8 @@ class _FilesScreenState extends State<FilesScreen> {
   }
 
   List<dynamic> get _selectedFileObjects {
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
-    return bleProvider.fileList
+    final filesProvider = context.read<FilesProvider>();
+    return filesProvider.fileList
         .where((file) => _selectedFiles.contains(file.name))
         .toList();
   }
@@ -998,9 +1005,11 @@ class _FilesScreenState extends State<FilesScreen> {
     }
   }
 
-  Widget _buildPathWithDropdown(BuildContext context, BleProvider bleProvider) {
-    final pathTypeName = _getPathTypeName(context, bleProvider.currentPathType);
-    final currentPath = bleProvider.currentPath;
+  Widget _buildPathWithDropdown(
+      BuildContext context, FilesProvider filesProvider) {
+    final pathTypeName =
+        _getPathTypeName(context, filesProvider.currentPathType);
+    final currentPath = filesProvider.currentPath;
 
     // Get path without root directory
     String pathWithoutRoot = currentPath;
@@ -1022,8 +1031,8 @@ class _FilesScreenState extends State<FilesScreen> {
                 ),
           ),
           onSelected: (int selectedType) {
-            if (selectedType != bleProvider.currentPathType) {
-              bleProvider.switchPathType(selectedType);
+            if (selectedType != filesProvider.currentPathType) {
+              filesProvider.switchPathType(selectedType);
             }
           },
           itemBuilder: (BuildContext menuContext) {
@@ -1039,8 +1048,8 @@ class _FilesScreenState extends State<FilesScreen> {
                       l10n.records,
                       style: const TextStyle(color: AppColors.primaryText),
                     ),
-                    if (bleProvider.currentPathType == 0) const Spacer(),
-                    if (bleProvider.currentPathType == 0)
+                    if (filesProvider.currentPathType == 0) const Spacer(),
+                    if (filesProvider.currentPathType == 0)
                       const Icon(Icons.check,
                           size: 20, color: AppColors.primaryText),
                   ],
@@ -1056,8 +1065,8 @@ class _FilesScreenState extends State<FilesScreen> {
                       l10n.captured,
                       style: const TextStyle(color: AppColors.primaryText),
                     ),
-                    if (bleProvider.currentPathType == 1) const Spacer(),
-                    if (bleProvider.currentPathType == 1)
+                    if (filesProvider.currentPathType == 1) const Spacer(),
+                    if (filesProvider.currentPathType == 1)
                       const Icon(Icons.check,
                           size: 20, color: AppColors.primaryText),
                   ],
@@ -1073,8 +1082,8 @@ class _FilesScreenState extends State<FilesScreen> {
                       l10n.presets,
                       style: const TextStyle(color: AppColors.primaryText),
                     ),
-                    if (bleProvider.currentPathType == 2) const Spacer(),
-                    if (bleProvider.currentPathType == 2)
+                    if (filesProvider.currentPathType == 2) const Spacer(),
+                    if (filesProvider.currentPathType == 2)
                       const Icon(Icons.check,
                           size: 20, color: AppColors.primaryText),
                   ],
@@ -1090,8 +1099,8 @@ class _FilesScreenState extends State<FilesScreen> {
                       l10n.temp,
                       style: const TextStyle(color: AppColors.primaryText),
                     ),
-                    if (bleProvider.currentPathType == 3) const Spacer(),
-                    if (bleProvider.currentPathType == 3)
+                    if (filesProvider.currentPathType == 3) const Spacer(),
+                    if (filesProvider.currentPathType == 3)
                       const Icon(Icons.check,
                           size: 20, color: AppColors.primaryText),
                   ],
@@ -1108,8 +1117,8 @@ class _FilesScreenState extends State<FilesScreen> {
                       'Root',
                       style: TextStyle(color: AppColors.primaryText),
                     ),
-                    if (bleProvider.currentPathType == 5) const Spacer(),
-                    if (bleProvider.currentPathType == 5)
+                    if (filesProvider.currentPathType == 5) const Spacer(),
+                    if (filesProvider.currentPathType == 5)
                       const Icon(Icons.check,
                           size: 20, color: AppColors.primaryText),
                   ],
@@ -1125,8 +1134,8 @@ class _FilesScreenState extends State<FilesScreen> {
                       AppLocalizations.of(context)!.internalLittleFs,
                       style: const TextStyle(color: AppColors.primaryText),
                     ),
-                    if (bleProvider.currentPathType == 4) const Spacer(),
-                    if (bleProvider.currentPathType == 4)
+                    if (filesProvider.currentPathType == 4) const Spacer(),
+                    if (filesProvider.currentPathType == 4)
                       const Icon(Icons.check,
                           size: 20, color: AppColors.primaryText),
                   ],
@@ -1159,7 +1168,7 @@ class _FilesScreenState extends State<FilesScreen> {
   }
 
   Future<void> _showCreateDirectoryDialog(
-      BuildContext context, BleProvider bleProvider) async {
+      BuildContext context, FilesProvider filesProvider) async {
     final nameController = TextEditingController();
 
     final result = await showDialog<String>(
@@ -1208,19 +1217,20 @@ class _FilesScreenState extends State<FilesScreen> {
       try {
         // Build full path for directory creation
         String fullPath;
-        if (bleProvider.currentPath == '/' || bleProvider.currentPath.isEmpty) {
+        if (filesProvider.currentPath == '/' ||
+            filesProvider.currentPath.isEmpty) {
           fullPath = result;
         } else {
-          fullPath = '${bleProvider.currentPath}/$result';
+          fullPath = '${filesProvider.currentPath}/$result';
         }
 
-        await bleProvider.createDirectory(fullPath);
+        await filesProvider.createDirectory(fullPath);
 
         if (context.mounted) {
           final l10n = AppLocalizations.of(context)!;
           _showSuccessSnackBar(l10n.directoryCreated(result));
           // Refresh file list
-          await bleProvider.refreshFileList(forceRefresh: true);
+          await filesProvider.refreshFileList(forceRefresh: true);
         }
       } catch (e) {
         if (context.mounted) {
@@ -1232,7 +1242,7 @@ class _FilesScreenState extends State<FilesScreen> {
   }
 
   Future<void> _uploadFileFromDevice(
-      BuildContext context, BleProvider bleProvider) async {
+      BuildContext context, FilesProvider filesProvider) async {
     try {
       // Select file from device
       FilePickerResult? result = await FilePicker.platform.pickFiles();
@@ -1271,8 +1281,8 @@ class _FilesScreenState extends State<FilesScreen> {
 
         try {
           // Use current directory and pathType
-          final currentPath = bleProvider.currentPath;
-          final pathType = bleProvider.currentPathType;
+          final currentPath = filesProvider.currentPath;
+          final pathType = filesProvider.currentPathType;
 
           AppLogger.debug(
               'Upload: currentPath="$currentPath", pathType=$pathType, fileName="$fileName"');
@@ -1290,7 +1300,7 @@ class _FilesScreenState extends State<FilesScreen> {
           AppLogger.debug('Upload: targetPath="$targetPath"');
 
           // Upload file
-          final response = await bleProvider.uploadFile(
+          final response = await filesProvider.uploadFile(
             file,
             targetPath,
             pathType: pathType,
@@ -1306,7 +1316,7 @@ class _FilesScreenState extends State<FilesScreen> {
             if (response['success'] == true) {
               _showSuccessSnackBar(l10n.fileUploaded(fileName));
               // Refresh file list
-              await bleProvider.refreshFileList(forceRefresh: true);
+              await filesProvider.refreshFileList(forceRefresh: true);
             } else {
               final errorMsg =
                   response['error'] ?? l10n.uploadFailed('Unknown error');

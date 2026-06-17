@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../providers/ble_provider.dart';
+import '../providers/files_provider.dart';
 import '../models/directory_tree_node.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/app_colors.dart';
@@ -7,11 +7,11 @@ import 'directory_tree_widget.dart';
 
 class _DirectoryPickerDialog extends StatefulWidget {
   final String title;
-  final BleProvider bleProvider;
+  final FilesProvider filesProvider;
 
   const _DirectoryPickerDialog({
     required this.title,
-    required this.bleProvider,
+    required this.filesProvider,
   });
 
   @override
@@ -38,7 +38,8 @@ class __DirectoryPickerDialogState extends State<_DirectoryPickerDialog> {
     });
 
     try {
-      final directories = await widget.bleProvider.getDirectoryTree(pathType: pathType);
+      final directories =
+          await widget.filesProvider.getDirectoryTree(pathType: pathType);
       setState(() {
         _directories = directories;
         _isLoading = false;
@@ -77,7 +78,7 @@ class __DirectoryPickerDialogState extends State<_DirectoryPickerDialog> {
       2: l10n.presets,
       3: l10n.temp,
     };
-    
+
     return AlertDialog(
       title: Text(
         widget.title,
@@ -96,9 +97,9 @@ class __DirectoryPickerDialogState extends State<_DirectoryPickerDialog> {
                 Text(
                   AppLocalizations.of(context)!.storageLabel,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.primaryText,
-                  ),
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.primaryText,
+                      ),
                 ),
                 const SizedBox(width: 8),
                 DropdownButton<int>(
@@ -133,17 +134,22 @@ class __DirectoryPickerDialogState extends State<_DirectoryPickerDialog> {
                               ),
                               const SizedBox(height: 16),
                               Text(
-                                AppLocalizations.of(context)!.errorLoadingDirectories,
-                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  color: AppColors.error,
-                                ),
+                                AppLocalizations.of(context)!
+                                    .errorLoadingDirectories,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(
+                                      color: AppColors.error,
+                                    ),
                               ),
                               const SizedBox(height: 8),
                               Padding(
                                 padding: const EdgeInsets.all(16.0),
                                 child: Text(
                                   _errorMessage!,
-                                  style: const TextStyle(color: AppColors.primaryText),
+                                  style: const TextStyle(
+                                      color: AppColors.primaryText),
                                   textAlign: TextAlign.center,
                                 ),
                               ),
@@ -179,13 +185,13 @@ class __DirectoryPickerDialogState extends State<_DirectoryPickerDialog> {
 }
 
 // Export a function to show the dialog
-Future<Map<String, dynamic>?> showDirectoryPickerDialog(BuildContext context, String title, BleProvider bleProvider) {
+Future<Map<String, dynamic>?> showDirectoryPickerDialog(
+    BuildContext context, String title, FilesProvider filesProvider) {
   return showDialog<Map<String, dynamic>>(
     context: context,
     builder: (context) => _DirectoryPickerDialog(
       title: title,
-      bleProvider: bleProvider,
+      filesProvider: filesProvider,
     ),
   );
 }
-

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
-import '../providers/ble_provider.dart';
+import '../providers/bruter_provider.dart';
 import '../providers/notification_provider.dart';
 import '../providers/settings_provider.dart';
 import '../theme/app_colors.dart';
@@ -599,19 +599,19 @@ class _BruteScreenState extends State<BruteScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<BleProvider, SettingsProvider>(
-      builder: (context, bleProvider, settingsProvider, child) {
-        final isRunning = bleProvider.isBruterRunning;
-        final activeProto = bleProvider.bruterActiveProtocol;
+    return Consumer2<BruterProvider, SettingsProvider>(
+      builder: (context, bruterProvider, settingsProvider, child) {
+        final isRunning = bruterProvider.isBruterRunning;
+        final activeProto = bruterProvider.bruterActiveProtocol;
         final delayMs = settingsProvider.bruterDelayMs;
 
         // Show completion notification
-        if (bleProvider.lastBruterCompletionStatus >= 0 && !_completionShown) {
+        if (bruterProvider.lastBruterCompletionStatus >= 0 && !_completionShown) {
           _completionShown = true;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted) return;
-            final status = bleProvider.lastBruterCompletionStatus;
-            final menuId = bleProvider.lastBruterCompletionMenuId;
+            final status = bruterProvider.lastBruterCompletionStatus;
+            final menuId = bruterProvider.lastBruterCompletionMenuId;
             final protoName = bruterProtocols
                     .where((p) => p.menuId == menuId)
                     .map((p) => p.name)
@@ -631,18 +631,18 @@ class _BruteScreenState extends State<BruteScreen> {
               notificationProvider
                   .showError(l10n.bruteForceErrorMsg(protoName));
             }
-            bleProvider.clearBruterCompletion();
+            bruterProvider.clearBruterCompletion();
             _completionShown = false;
           });
-        } else if (bleProvider.lastBruterCompletionStatus < 0) {
+        } else if (bruterProvider.lastBruterCompletionStatus < 0) {
           _completionShown = false;
         }
 
         return Column(
           children: [
             // Unified attack banner (running OR paused state)
-            if (isRunning || bleProvider.bruterSavedStateAvailable)
-              _buildAttackBanner(context, bleProvider, isRunning, activeProto),
+            if (isRunning || bruterProvider.bruterSavedStateAvailable)
+              _buildAttackBanner(context, bruterProvider, isRunning, activeProto),
 
             // Category filter chips
             _buildCategoryFilter(),
@@ -665,7 +665,7 @@ class _BruteScreenState extends State<BruteScreen> {
                         final protocol = _filteredProtocols[index];
                         final isActive =
                             isRunning && activeProto == protocol.menuId;
-                        return _buildProtocolCard(context, bleProvider,
+                        return _buildProtocolCard(context, bruterProvider,
                             protocol, isActive, isRunning, delayMs);
                       },
                     ),
@@ -677,13 +677,13 @@ class _BruteScreenState extends State<BruteScreen> {
   }
 
   /// Unified banner for running, paused, and resumable attack states
-  Widget _buildAttackBanner(BuildContext context, BleProvider bleProvider,
+  Widget _buildAttackBanner(BuildContext context, BruterProvider bruterProvider,
       bool isRunning, int activeProto) {
-    final bool isPaused = !isRunning && bleProvider.bruterSavedStateAvailable;
+    final bool isPaused = !isRunning && bruterProvider.bruterSavedStateAvailable;
 
     // Determine protocol name and progress values
     final int displayMenuId =
-        isPaused ? bleProvider.bruterSavedMenuId : activeProto;
+        isPaused ? bruterProvider.bruterSavedMenuId : activeProto;
     final activeName = bruterProtocols
             .where((p) => p.menuId == displayMenuId)
             .map((p) => p.name)
@@ -695,15 +695,15 @@ class _BruteScreenState extends State<BruteScreen> {
     final rateLabel = isDeBruijn ? 'b/s' : 'c/s';
 
     final int currentCode = isPaused
-        ? bleProvider.bruterSavedCurrentCode
-        : bleProvider.bruterCurrentCode;
+        ? bruterProvider.bruterSavedCurrentCode
+        : bruterProvider.bruterCurrentCode;
     final int totalCodes = isPaused
-        ? bleProvider.bruterSavedTotalCodes
-        : bleProvider.bruterTotalCodes;
+        ? bruterProvider.bruterSavedTotalCodes
+        : bruterProvider.bruterTotalCodes;
     final int percentage = isPaused
-        ? bleProvider.bruterSavedPercentage
-        : bleProvider.bruterPercentage;
-    final int codesPerSec = isPaused ? 0 : bleProvider.bruterCodesPerSec;
+        ? bruterProvider.bruterSavedPercentage
+        : bruterProvider.bruterPercentage;
+    final int codesPerSec = isPaused ? 0 : bruterProvider.bruterCodesPerSec;
 
     // Calculate ETA (only when running)
     String etaStr = '';
@@ -780,8 +780,8 @@ class _BruteScreenState extends State<BruteScreen> {
               // PAUSE / RESUME toggle button
               ElevatedButton.icon(
                 onPressed: isPaused
-                    ? () => _resumeAttack(context, bleProvider)
-                    : () => _pauseAttack(context, bleProvider),
+                    ? () => _resumeAttack(context, bruterProvider)
+                    : () => _pauseAttack(context, bruterProvider),
                 icon: Icon(isPaused ? Icons.play_arrow : Icons.pause, size: 18),
                 label: Text(isPaused
                     ? AppLocalizations.of(context)!.bruteResume
@@ -797,7 +797,7 @@ class _BruteScreenState extends State<BruteScreen> {
               ),
               const SizedBox(width: 8),
               ElevatedButton.icon(
-                onPressed: () => _cancelAttack(context, bleProvider),
+                onPressed: () => _cancelAttack(context, bruterProvider),
                 icon: const Icon(Icons.stop, size: 18),
                 label: Text(AppLocalizations.of(context)!.bruteStop),
                 style: ElevatedButton.styleFrom(
@@ -975,7 +975,7 @@ class _BruteScreenState extends State<BruteScreen> {
 
   Widget _buildProtocolCard(
     BuildContext context,
-    BleProvider bleProvider,
+    BruterProvider bruterProvider,
     BruterProtocol protocol,
     bool isActive,
     bool isAnyRunning,
@@ -999,7 +999,7 @@ class _BruteScreenState extends State<BruteScreen> {
       child: InkWell(
         onTap: isAnyRunning
             ? null
-            : () => _confirmAndStart(context, bleProvider, protocol),
+            : () => _confirmAndStart(context, bruterProvider, protocol),
         borderRadius: BorderRadius.circular(6),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -1144,7 +1144,7 @@ class _BruteScreenState extends State<BruteScreen> {
 
   Future<void> _confirmAndStart(
     BuildContext context,
-    BleProvider bleProvider,
+    BruterProvider bruterProvider,
     BruterProtocol protocol,
   ) async {
     final settingsProvider =
@@ -1238,14 +1238,14 @@ class _BruteScreenState extends State<BruteScreen> {
     try {
       if (useCustomDeBruijn) {
         // Send custom De Bruijn command with per-protocol timing and frequency
-        await bleProvider.sendCustomDeBruijnCommand(
+        await bruterProvider.sendCustomDeBruijnCommand(
           bits: protocol.bits,
           te: protocol.te,
           ratio: protocol.ratio,
           frequencyMhz: protocol.frequencyMhz,
         );
       } else {
-        await bleProvider.sendBruterCommand(actualMenuId);
+        await bruterProvider.sendBruterCommand(actualMenuId);
       }
 
       if (context.mounted) {
@@ -1267,9 +1267,9 @@ class _BruteScreenState extends State<BruteScreen> {
   }
 
   Future<void> _pauseAttack(
-      BuildContext context, BleProvider bleProvider) async {
+      BuildContext context, BruterProvider bruterProvider) async {
     try {
-      await bleProvider.sendBruterPauseCommand();
+      await bruterProvider.sendBruterPauseCommand();
 
       if (context.mounted) {
         final notificationProvider =
@@ -1288,9 +1288,9 @@ class _BruteScreenState extends State<BruteScreen> {
   }
 
   Future<void> _resumeAttack(
-      BuildContext context, BleProvider bleProvider) async {
+      BuildContext context, BruterProvider bruterProvider) async {
     try {
-      await bleProvider.sendBruterResumeCommand();
+      await bruterProvider.sendBruterResumeCommand();
 
       if (context.mounted) {
         final notificationProvider =
@@ -1309,9 +1309,9 @@ class _BruteScreenState extends State<BruteScreen> {
   }
 
   Future<void> _cancelAttack(
-      BuildContext context, BleProvider bleProvider) async {
+      BuildContext context, BruterProvider bruterProvider) async {
     try {
-      await bleProvider.sendBruterCancelCommand();
+      await bruterProvider.sendBruterCancelCommand();
 
       if (context.mounted) {
         final notificationProvider =
