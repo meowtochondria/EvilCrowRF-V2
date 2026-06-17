@@ -3468,11 +3468,21 @@ class BleProvider extends ChangeNotifier {
   int _bruterCodesPerSec = 0;
   int get bruterCodesPerSec => _bruterCodesPerSec;
 
-  /// Inter-frame delay in ms (configurable, synced with firmware)
+  /// Inter-frame delay in ms (configurable, synced with firmware).
+  ///
+  /// **Deprecated.** As of M4/M5 of `docs/refactor.md`, the canonical source
+  /// of this value is `SettingsProvider.bruterDelayMs`. The legacy field is
+  /// still populated by `_handleSettingsSync` for backward compatibility
+  /// with widgets that haven't migrated yet.
   int _bruterDelayMs = 10; // Default matches BRUTER_INTER_FRAME_GAP_MS
   int get bruterDelayMs => _bruterDelayMs;
 
   // --- Persistent device settings (synced via 0xC0 / 0xC1) ---
+  //
+  // **Deprecated.** All settings state was migrated to `SettingsProvider`.
+  // These getters remain so existing call sites (debug screen, status bar)
+  // continue to work without churn. They will be removed when those call
+  // sites are migrated in M5.
   int _scannerRssi = -80;
   int get scannerRssi => _scannerRssi;
   int _bruterPower = 7;

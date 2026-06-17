@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/ble_provider.dart';
 import '../providers/log_provider.dart';
+import '../providers/settings_provider.dart';
+import '../providers/files_provider.dart';
 import '../widgets/log_viewer_widget.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/app_colors.dart';
@@ -230,8 +232,9 @@ class _DebugScreenState extends State<DebugScreen> {
                                     ),
                                   ),
                                   ElevatedButton.icon(
-                                    onPressed: () =>
-                                        bleProvider.clearFileCache(),
+                                    onPressed: () => context
+                                        .read<FilesProvider>()
+                                        .clearFileCache(),
                                     icon: const Icon(Icons.folder_delete),
                                     label: Text(AppLocalizations.of(context)!
                                         .clearFileCache),
@@ -355,27 +358,39 @@ class _DebugScreenState extends State<DebugScreen> {
                                     ),
                               ),
                               const SizedBox(height: 12),
-                              Text(
-                                '${(bleProvider.cpuTempOffsetDeciC / 10.0).toStringAsFixed(1)} C',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodyMedium
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                              ),
-                              Slider(
-                                value: (bleProvider.cpuTempOffsetDeciC / 10.0)
-                                    .clamp(-50.0, 50.0),
-                                min: -50,
-                                max: 50,
-                                divisions: 200,
-                                label:
-                                    '${(bleProvider.cpuTempOffsetDeciC / 10.0).toStringAsFixed(1)} C',
-                                onChanged: (value) {
-                                  final deciC = (value * 10).round();
-                                  bleProvider.sendSettingsToDevice(
-                                      cpuTempOffsetDeciC: deciC);
+                              Consumer<SettingsProvider>(
+                                builder: (context, settingsProvider, child) {
+                                  final offset =
+                                      settingsProvider.cpuTempOffsetDeciC;
+                                  final offsetC = offset / 10.0;
+                                  return Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        '${offsetC.toStringAsFixed(1)} C',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodyMedium
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                      ),
+                                      Slider(
+                                        value: offsetC.clamp(-50.0, 50.0),
+                                        min: -50,
+                                        max: 50,
+                                        divisions: 200,
+                                        label:
+                                            '${offsetC.toStringAsFixed(1)} C',
+                                        onChanged: (value) {
+                                          final deciC = (value * 10).round();
+                                          settingsProvider
+                                              .setCpuTempOffsetDeciC(deciC);
+                                        },
+                                      ),
+                                    ],
+                                  );
                                 },
                               ),
                               if (!bleProvider.isConnected)

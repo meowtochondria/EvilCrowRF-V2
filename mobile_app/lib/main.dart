@@ -83,7 +83,20 @@ class MyApp extends StatelessWidget {
         ),
         ChangeNotifierProvider(create: (context) => LogProvider()),
         ChangeNotifierProvider(create: (context) => NotificationProvider()),
-        ChangeNotifierProvider(create: (context) => SettingsProvider()),
+        ChangeNotifierProvider(create: (context) {
+          final settings = SettingsProvider(
+            messageDispatcher: context.read<MessageDispatcher>(),
+          );
+          final ble = context.read<BleProvider>();
+          // SettingsProvider owns the device settings state. The actual BLE
+          // write is delegated back to BleProvider so we keep transport code
+          // in one place. M4/M5 of refactor.md.
+          settings.sendCommand = (cmd, {bool withoutResponse = false}) async {
+            await ble.sendBinaryCommand(cmd, withoutResponse: withoutResponse);
+            return true;
+          };
+          return settings;
+        }),
         // ── Module providers (transition era — coexist with BleProvider) ──
         ChangeNotifierProvider(create: (context) {
           final p = DeviceInfoProvider(context.read<MessageDispatcher>());

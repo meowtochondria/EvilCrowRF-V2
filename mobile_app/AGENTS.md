@@ -66,8 +66,8 @@ The canonical plan lives at `mobile_app/docs/refactor.md`.
 | M1: Connection abstraction & event bus | ✅ Done |
 | M2: Module provider extraction | ✅ Done (6 of 6) |
 | M3: Update consumers | ✅ Done. record_screen fully migrated off BleProvider (3-pass strategy from §3.5). settings_screen migration deferred — still uses BleProvider for ~30 fields. |
-| M4: Screen file splitting | 🔄 Partially done. settings_screen split into `screens/settings/about_popup.dart` (612 lines) + `screens/settings/subghz_clone_dialog.dart` (530 lines). settings_screen went 4536 → 3404 lines. nrf/record/files/brute/protopirate/file_viewer splits not yet started. |
-| M5: Delete BleProvider | ❌ Not started — blocked on settings_screen migration (BleProvider still owns ~15 settings fields) |
+| M4: Screen file splitting | 🔄 Mostly done. settings_screen split into `screens/settings/about_popup.dart` (612 lines) + `screens/settings/subghz_clone_dialog.dart` (530 lines). record_screen split into `screens/record/record_file_list.dart` (160 lines). file_viewer_screen split into `screens/file_viewer/file_viewer_text_tab.dart` (77 lines). Remaining: nrf/files/brute/protopirate full splits. |
+| M5: Delete BleProvider | 🔄 In progress. Settings state (scannerRssi/bruterPower/bruterRepeats/radioPowerMod1/2/cpuTempOffsetDeciC/bruterDelayMs) migrated to SettingsProvider with own MessageDispatcher subscription. settings_screen and debug_screen updated. SettingsProvider.sendSettingsToDevice constructs the 9-byte payload + sends via BleProvider.sendBinaryCommand callback wired in main.dart. Remaining: extract BLE transport layer into BleConnectionProvider per §1.4. |
 | DevicePreferencesService (§5.4) | ✅ Done |
 | F1: Module parse fix | ✅ Done |
 | F2: Bluetooth/WiFi icon | ✅ Done — status_bar + quick_connect_widget now use ConnectionStateProvider. Disabled icons muted when the other transport is connected. |
@@ -109,8 +109,21 @@ Work completed in this session toward implementing `mobile_app/docs/refactor.md`
 - settings_screen.dart: 4536 → 3404 lines (-1132 lines).
 - Public APIs added: `AboutPopup.show(context)`, `SubGhzCloneDialog.show(context, bleProvider)`.
 
+### M4 — record_screen + file_viewer_screen split (this session)
+- New: `screens/record/record_file_list.dart` (160 lines) — `RecordFileList` widget + `openRecordedFileViewer` helper.
+- record_screen.dart: 1819 → 1702 lines (-117 lines).
+- New: `screens/file_viewer/file_viewer_text_tab.dart` (77 lines) — `FileViewerTextTab` widget.
+- file_viewer_screen.dart: 937 → 892 lines (-45 lines).
+
+### M5 — settings state migrated to SettingsProvider (this session)
+- `lib/providers/settings_provider.dart`: extended with `scannerRssi`, `bruterPower`, `bruterRepeats`, `radioPowerMod1/2`, `cpuTempOffsetDeciC` fields, plus `sendSettingsToDevice(...)` that builds the 9-byte firmware payload and `syncFromDevice(...)` for inbound SettingsSync.
+- `MessageDispatcher` subscription added to SettingsProvider — settings sync now flows through the standard dispatcher pattern.
+- main.dart: `SettingsProvider.sendCommand` callback wired to `BleProvider.sendBinaryCommand` so SettingsProvider constructs commands and delegates transport.
+- `settings_screen.dart`: bruterDelay, bruterRepeats, bruterPower, radioPowerMod1/2, scannerRssi now read from `settingsProvider` instead of `bleProvider`. `_buildRadioSettings` updated to wrap in `Consumer<SettingsProvider>`.
+- `debug_screen.dart`: CPU temp offset slider now reads/writes through `SettingsProvider`.
+- BleProvider's settings fields marked `Deprecated` with comments noting they will be removed in M5.
+
 ### Remaining (out of scope for this session)
-- M4: split nrf_screen, record_screen, files_screen, brute_screen, protopirate_screen, file_viewer_screen.
-- M4: full settings_screen provider migration (BleProvider → SettingsProvider for ~15 settings fields).
-- M5: delete `ble_provider.dart` after all consumers migrated.
+- M4: full split of nrf_screen, files_screen, brute_screen, protopirate_screen.
+- M5: extract BLE transport layer into `BleConnectionProvider` per §1.4 (currently BleProvider still owns scan/connect/MTU/notify lifecycle).
 - D5: WiFi Provisioning UI / ESP-TOUCH plugin integration.

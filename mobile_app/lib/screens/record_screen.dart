@@ -10,11 +10,10 @@ import '../services/signal_processing/signal_data.dart';
 import '../services/cc1101/cc1101_values.dart';
 import '../services/cc1101/cc1101_calculator.dart';
 import '../widgets/record_screen_widgets.dart';
-import '../widgets/file_list_widget.dart';
 import '../widgets/transmit_file_dialog.dart';
 import '../services/logger_service.dart';
 import '../theme/app_colors.dart';
-import 'file_viewer_screen.dart';
+import 'record/record_file_list.dart';
 
 /// Module action type
 enum ModuleAction {
@@ -948,7 +947,11 @@ class _RecordScreenState extends State<RecordScreen>
 
               // File list only for Recording
               if (selectedAction == ModuleAction.recording)
-                _buildModuleFilesList(moduleIndex),
+                RecordFileList(
+                  moduleIndex: moduleIndex,
+                  onOpenFile: _openFileViewer,
+                  onFileAction: _handleRecordedFileAction,
+                ),
             ],
           ),
         );
@@ -1463,139 +1466,8 @@ class _RecordScreenState extends State<RecordScreen>
     );
   }
 
-  Widget _buildModuleFilesList(int moduleIndex) {
-    return Consumer<SubGhzProvider>(
-      builder: (context, subGhz, child) {
-        // Update local list when recordedRuntimeFiles changes
-        final runtimeFiles = subGhz.recordedRuntimeFiles;
-        AppLogger.debug(
-            '_buildModuleFilesList: Module $moduleIndex, runtimeFiles count: ${runtimeFiles.length}');
-
-        // Filter files by module
-        final moduleFiles = <dynamic>[];
-
-        for (final file in runtimeFiles) {
-          // Extract filename from object
-          String fileName;
-          DateTime? dateCreated;
-
-          if (file.containsKey('filename')) {
-            fileName = file['filename'].toString();
-          } else {
-            fileName = file.toString();
-          }
-
-          // Extract creation date if present
-          if (file.containsKey('date')) {
-            try {
-              if (file['date'] is String) {
-                dateCreated = DateTime.tryParse(file['date']);
-              }
-            } catch (e) {
-              AppLogger.debug('Error parsing date for file $fileName', e);
-            }
-          }
-
-          AppLogger.debug(
-              '_buildModuleFilesList: Processing file: $fileName for module $moduleIndex');
-
-          // Check if file belongs to this module
-          if (_isFileFromModule(fileName, moduleIndex)) {
-            AppLogger.debug(
-                '_buildModuleFilesList: File $fileName belongs to module $moduleIndex');
-            final fileObject =
-                _createFileObject(fileName, dateCreated: dateCreated);
-            if (!moduleFiles.any((f) => f.name == fileName)) {
-              moduleFiles.add(fileObject);
-              AppLogger.debug(
-                  '_buildModuleFilesList: Added file $fileName to module $moduleIndex list');
-            }
-          } else {
-            AppLogger.debug(
-                '_buildModuleFilesList: File $fileName does NOT belong to module $moduleIndex');
-          }
-        }
-
-        AppLogger.debug(
-            '_buildModuleFilesList: Module $moduleIndex has ${moduleFiles.length} files');
-
-        // Debug info about files
-        for (int i = 0; i < moduleFiles.length; i++) {
-          final file = moduleFiles[i];
-          AppLogger.debug(
-              '_buildModuleFilesList: File $i: name="${file.name}", size=${file.size}, isDirectory=${file.isDirectory}');
-        }
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Header styled like settings form
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12.0),
-              child: Text(
-                AppLocalizations.of(context)!
-                    .signalsCaptured(moduleIndex + 1, moduleFiles.length),
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primaryText,
-                    ),
-              ),
-            ),
-            // File list without header
-            SizedBox(
-              height: 200,
-              child: FileListWidget(
-                files: moduleFiles,
-                mode: FileListMode.local,
-                title: AppLocalizations.of(context)!
-                    .signalsCaptured(moduleIndex + 1, moduleFiles.length),
-                showHeader: false,
-                showActions: true,
-                filterExtension: 'sub',
-                onRefresh: null, // Disable pull-to-refresh
-                onFileSelected: (file) => _openFileViewer(file),
-                onFileAction: (file, action) =>
-                    _handleRecordedFileAction(file, action),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  /// Determines if a file belongs to the specified module by filename
-  /// Filename format: m{module}_{frequency}_{modulation}_{bandwidth}_{random}.sub
-  bool _isFileFromModule(String fileName, int moduleIndex) {
-    AppLogger.debug(
-        '_isFileFromModule: Checking file "$fileName" for module $moduleIndex');
-
-    // Check filename format: m{module}_...
-    final regex = RegExp(r'^m(\d+)_');
-    final match = regex.firstMatch(fileName);
-
-    if (match != null) {
-      final fileModule = int.tryParse(match.group(1) ?? '');
-      AppLogger.debug(
-          '_isFileFromModule: File module: $fileModule, requested module: $moduleIndex');
-      return fileModule == moduleIndex;
-    }
-
-    AppLogger.debug(
-        '_isFileFromModule: File "$fileName" does not match pattern m{module}_...');
-    return false;
-  }
-
   void _openFileViewer(dynamic file) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => FileViewerScreen(
-          fileItem: file,
-          filePath: file.name,
-          pathType: 1, // SIGNALS
-        ),
-      ),
-    );
+    openRecordedFileViewer(context, file);
   }
 
   void _handleRecordedFileAction(dynamic file, String action) {

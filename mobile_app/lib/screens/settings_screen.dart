@@ -11,6 +11,7 @@ import '../providers/settings_provider.dart';
 import '../providers/firmware_protocol.dart';
 import '../services/update_service.dart';
 import '../theme/app_colors.dart';
+import '../providers/files_provider.dart';
 import 'debug_screen.dart';
 import 'files_screen.dart';
 import 'ota_screen.dart';
@@ -560,7 +561,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     runSpacing: 8,
                     children: [
                       ElevatedButton.icon(
-                        onPressed: () => bleProvider.clearFileCache(),
+                        onPressed: () =>
+                            context.read<FilesProvider>().clearFileCache(),
                         icon: const Icon(Icons.folder_delete),
                         label:
                             Text(AppLocalizations.of(context)!.clearFileCache),
@@ -730,8 +732,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 label: '${settingsProvider.bruterDelayMs} ms',
                 activeColor: AppColors.warning,
                 onChanged: (value) {
-                  settingsProvider.setBruterDelayMs(value.round());
-                  bleProvider.setBruterDelay(value.round());
+                  settingsProvider.sendSettingsToDevice(
+                      bruterDelay: value.round());
                 },
               ),
               Wrap(
@@ -742,8 +744,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     label: Text('${ms}ms'),
                     selected: isSelected,
                     onSelected: (_) {
-                      settingsProvider.setBruterDelayMs(ms);
-                      bleProvider.setBruterDelay(ms);
+                      settingsProvider.sendSettingsToDevice(bruterDelay: ms);
                     },
                     selectedColor: AppColors.warning.withValues(alpha: 0.2),
                     labelStyle: TextStyle(
@@ -770,7 +771,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       children: [
                         Text(
                           AppLocalizations.of(context)!
-                              .repeatsCount(bleProvider.bruterRepeats),
+                              .repeatsCount(settingsProvider.bruterRepeats),
                           style: const TextStyle(
                             color: AppColors.primaryText,
                             fontSize: 13,
@@ -788,14 +789,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
               Slider(
-                value: bleProvider.bruterRepeats.toDouble(),
+                value: settingsProvider.bruterRepeats.toDouble(),
                 min: 1,
                 max: 10,
                 divisions: 9,
-                label: '${bleProvider.bruterRepeats}x',
+                label: '${settingsProvider.bruterRepeats}x',
                 activeColor: AppColors.warning,
                 onChanged: (value) {
-                  bleProvider.sendSettingsToDevice(
+                  settingsProvider.sendSettingsToDevice(
                       bruterRepeats: value.round());
                 },
               ),
@@ -814,7 +815,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       children: [
                         Text(
                           AppLocalizations.of(context)!
-                              .txPowerLevel(bleProvider.bruterPower),
+                              .txPowerLevel(settingsProvider.bruterPower),
                           style: const TextStyle(
                             color: AppColors.primaryText,
                             fontSize: 13,
@@ -832,14 +833,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
               Slider(
-                value: bleProvider.bruterPower.toDouble(),
+                value: settingsProvider.bruterPower.toDouble(),
                 min: 0,
                 max: 7,
                 divisions: 7,
-                label: 'Level ${bleProvider.bruterPower}',
+                label: 'Level ${settingsProvider.bruterPower}',
                 activeColor: AppColors.warning,
                 onChanged: (value) {
-                  bleProvider.sendSettingsToDevice(bruterPower: value.round());
+                  settingsProvider.sendSettingsToDevice(
+                      bruterPower: value.round());
                 },
               ),
 
@@ -891,7 +893,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onSelectionChanged: (selected) {
                   final mod = selected.first;
                   settingsProvider.setBruterModule(mod);
-                  bleProvider.setBruterModule(mod);
                 },
                 style: ButtonStyle(
                   visualDensity: VisualDensity.compact,
@@ -906,61 +907,67 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildRadioSettings(BuildContext context, BleProvider bleProvider) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Module 1 TX Power
-          _buildModulePowerSlider(
-            label: 'CC1101 Module 1',
-            currentValue: bleProvider.radioPowerMod1,
-            moduleColor: AppColors.primaryAccent,
-            onChanged: (value) {
-              final snapped = _snapToPowerLevel(value);
-              bleProvider.sendSettingsToDevice(radioPowerMod1: snapped);
-            },
-          ),
+    return Consumer<SettingsProvider>(
+      builder: (context, settingsProvider, child) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Module 1 TX Power
+              _buildModulePowerSlider(
+                label: 'CC1101 Module 1',
+                currentValue: settingsProvider.radioPowerMod1,
+                moduleColor: AppColors.primaryAccent,
+                onChanged: (value) {
+                  final snapped = _snapToPowerLevel(value);
+                  settingsProvider.sendSettingsToDevice(
+                      radioPowerMod1: snapped);
+                },
+              ),
 
-          const SizedBox(height: 8),
+              const SizedBox(height: 8),
 
-          // Module 2 TX Power
-          _buildModulePowerSlider(
-            label: 'CC1101 Module 2',
-            currentValue: bleProvider.radioPowerMod2,
-            moduleColor: AppColors.success,
-            onChanged: (value) {
-              final snapped = _snapToPowerLevel(value);
-              bleProvider.sendSettingsToDevice(radioPowerMod2: snapped);
-            },
-          ),
+              // Module 2 TX Power
+              _buildModulePowerSlider(
+                label: 'CC1101 Module 2',
+                currentValue: settingsProvider.radioPowerMod2,
+                moduleColor: AppColors.success,
+                onChanged: (value) {
+                  final snapped = _snapToPowerLevel(value);
+                  settingsProvider.sendSettingsToDevice(
+                      radioPowerMod2: snapped);
+                },
+              ),
 
-          const SizedBox(height: 8),
+              const SizedBox(height: 8),
 
-          // Info card
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceElevated,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.info_outline,
-                    size: 16, color: AppColors.secondaryText),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    AppLocalizations.of(context)!.txPowerInfoDesc,
-                    style: const TextStyle(
-                        color: AppColors.secondaryText, fontSize: 11),
-                  ),
+              // Info card
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceElevated,
+                  borderRadius: BorderRadius.circular(8),
                 ),
-              ],
-            ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline,
+                        size: 16, color: AppColors.secondaryText),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        AppLocalizations.of(context)!.txPowerInfoDesc,
+                        style: const TextStyle(
+                            color: AppColors.secondaryText, fontSize: 11),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -1054,7 +1061,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       children: [
                         Text(
                           AppLocalizations.of(context)!
-                              .rssiThreshold(bleProvider.scannerRssi),
+                              .rssiThreshold(settingsProvider.scannerRssi),
                           style: const TextStyle(
                             color: AppColors.primaryText,
                             fontSize: 13,
@@ -1072,25 +1079,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
               Slider(
-                value: bleProvider.scannerRssi.toDouble(),
-                min: -120,
-                max: -20,
-                divisions: 100,
-                label: '${bleProvider.scannerRssi} dBm',
-                activeColor: AppColors.searching,
+                value: settingsProvider.scannerRssi.toDouble(),
+                min: -100.0,
+                max: -30.0,
+                divisions: 70,
+                label: '${settingsProvider.scannerRssi} dBm',
+                activeColor: AppColors.warning,
                 onChanged: (value) {
-                  bleProvider.sendSettingsToDevice(scannerRssi: value.round());
+                  settingsProvider.sendSettingsToDevice(
+                      scannerRssi: value.round());
                 },
               ),
               Wrap(
                 spacing: 8,
                 children: [-90, -80, -70, -60, -50].map((rssi) {
-                  final isSelected = bleProvider.scannerRssi == rssi;
+                  final isSelected = settingsProvider.scannerRssi == rssi;
                   return ChoiceChip(
-                    label: Text('$rssi'),
+                    label: Text('${rssi}dBm'),
                     selected: isSelected,
                     onSelected: (_) {
-                      bleProvider.sendSettingsToDevice(scannerRssi: rssi);
+                      settingsProvider.sendSettingsToDevice(scannerRssi: rssi);
                     },
                     selectedColor: AppColors.searching.withValues(alpha: 0.2),
                     labelStyle: TextStyle(

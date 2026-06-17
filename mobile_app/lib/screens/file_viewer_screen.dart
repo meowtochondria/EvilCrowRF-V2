@@ -16,6 +16,7 @@ import '../services/file_parsers/base_file_parser.dart';
 
 import '../widgets/transmit_file_dialog.dart';
 import '../theme/app_colors.dart';
+import 'file_viewer/file_viewer_text_tab.dart';
 
 class FileViewerScreen extends StatefulWidget {
   final dynamic fileItem;
@@ -92,8 +93,9 @@ class _FileViewerScreenState extends State<FileViewerScreen>
           'Loading file: path="$filePath", pathType=${widget.pathType}');
 
       // Read file from ESP (pathType determines how path is interpreted)
-      final content = await context.read<FilesProvider>().readFileContent(filePath,
-          pathType: widget.pathType);
+      final content = await context
+          .read<FilesProvider>()
+          .readFileContent(filePath, pathType: widget.pathType);
 
       if (mounted) {
         // Check if response is an error from ESP
@@ -351,19 +353,6 @@ class _FileViewerScreenState extends State<FileViewerScreen>
     );
   }
 
-  Widget _buildTextView(String content) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: SelectableText(
-        content,
-        style: const TextStyle(
-          fontFamily: 'monospace',
-          fontSize: 14,
-        ),
-      ),
-    );
-  }
-
   Widget _buildParsedTab() {
     if (parseResult == null || !parseResult!.success) {
       return Center(
@@ -596,46 +585,11 @@ class _FileViewerScreenState extends State<FileViewerScreen>
   }
 
   Widget _buildRawTab() {
-    if (fileContent == null) {
-      if (errorMessage != null) {
-        return Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline,
-                  size: 48, color: AppColors.secondaryText),
-              const SizedBox(height: 16),
-              Text(errorMessage!, textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: _loadFileContent,
-                icon: const Icon(Icons.refresh),
-                label: Text(AppLocalizations.of(context)!.reload),
-              ),
-            ],
-          ),
-        );
-      }
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.description_outlined,
-                size: 48, color: AppColors.secondaryText),
-            const SizedBox(height: 16),
-            Text(AppLocalizations.of(context)!.noContentAvailable),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: _loadFileContent,
-              icon: const Icon(Icons.refresh),
-              label: Text(AppLocalizations.of(context)!.reload),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return _buildTextView(fileContent!);
+    return FileViewerTextTab(
+      fileContent: fileContent,
+      errorMessage: errorMessage,
+      onRetry: _loadFileContent,
+    );
   }
 
   @override
@@ -882,7 +836,8 @@ class _FileViewerScreenState extends State<FileViewerScreen>
                       padding: const EdgeInsets.symmetric(
                           horizontal: 48, vertical: 16),
                       child: LinearProgressIndicator(
-                        value: context.read<FilesProvider>().fileContentProgress,
+                        value:
+                            context.read<FilesProvider>().fileContentProgress,
                       ),
                     ),
                 ],
