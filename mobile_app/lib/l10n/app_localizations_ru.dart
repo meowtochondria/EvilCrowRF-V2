@@ -27,6 +27,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settings => 'Настройки';
 
   @override
+  String get back => 'Назад';
+
+  @override
   String get connectionRequired => 'Требуется подключение';
 
   @override

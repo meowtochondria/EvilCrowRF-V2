@@ -134,6 +134,12 @@ abstract class AppLocalizations {
   /// **'Settings'**
   String get settings;
 
+  /// Back navigation button tooltip
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get back;
+
   /// Dialog title when connection is required
   ///
   /// In en, this message translates to:

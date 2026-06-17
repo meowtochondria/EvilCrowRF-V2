@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/ble_provider.dart';
+import '../providers/connection_state_provider.dart';
 import '../providers/log_provider.dart';
+import '../providers/notification_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/files_provider.dart';
+import '../providers/wifi_provider.dart';
 import '../widgets/log_viewer_widget.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/app_colors.dart';
@@ -37,6 +40,13 @@ class _DebugScreenState extends State<DebugScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
             child: Row(
               children: [
+                // Back button (no AppBar so this screen needs an explicit one).
+                IconButton(
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  icon: const Icon(Icons.arrow_back,
+                      color: AppColors.primaryText),
+                  tooltip: AppLocalizations.of(context)!.back,
+                ),
                 const Icon(Icons.bug_report,
                     size: 20, color: AppColors.primaryText),
                 const SizedBox(width: 8),
@@ -49,6 +59,49 @@ class _DebugScreenState extends State<DebugScreen> {
                       fontSize: 16,
                     ),
                   ),
+                ),
+                // Notification bell — mirrors the home-screen status bar
+                // so the user has a consistent way to reach the notification
+                // history from any sub-screen.
+                Consumer<NotificationProvider>(
+                  builder: (context, notificationProvider, _) {
+                    final count =
+                        notificationProvider.notificationHistory.length;
+                    return IconButton(
+                      onPressed: () => _showNotificationHistory(context),
+                      icon: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          const Icon(Icons.notifications_none,
+                              color: AppColors.primaryText),
+                          if (count > 0)
+                            Positioned(
+                              right: -2,
+                              top: -2,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 4, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: AppColors.error,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                constraints: const BoxConstraints(minWidth: 16),
+                                child: Text(
+                                  count > 9 ? '9+' : '$count',
+                                  style: const TextStyle(
+                                    color: AppColors.onButton,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      tooltip: AppLocalizations.of(context)!.notifications,
+                    );
+                  },
                 ),
                 Consumer<LogProvider>(
                   builder: (context, logProvider, child) {
@@ -65,14 +118,17 @@ class _DebugScreenState extends State<DebugScreen> {
           ),
           // Content
           Expanded(
-            child: Consumer<BleProvider>(
-              builder: (context, bleProvider, child) {
+            child: Consumer2<ConnectionStateProvider, BleProvider>(
+              builder: (context, connectionState, bleProvider, child) {
                 return SingleChildScrollView(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Connection Status Card
+                      // Connection Status Card — shows both BLE and WiFi
+                      // transports so the debug screen reflects the real
+                      // connection state regardless of which transport the
+                      // device is using.
                       Card(
                         child: Padding(
                           padding: const EdgeInsets.all(16.0),
@@ -82,10 +138,11 @@ class _DebugScreenState extends State<DebugScreen> {
                               Row(
                                 children: [
                                   Icon(
-                                    bleProvider.isConnected
-                                        ? Icons.bluetooth_connected
-                                        : Icons.bluetooth_disabled,
-                                    color: bleProvider.isConnected
+                                    connectionState.isConnected
+                                        ? _iconForTransport(
+                                            connectionState.connectedTransport)
+                                        : Icons.cloud_off,
+                                    color: connectionState.isConnected
                                         ? AppColors.success
                                         : AppColors.error,
                                   ),
@@ -102,20 +159,13 @@ class _DebugScreenState extends State<DebugScreen> {
                                 ],
                               ),
                               const SizedBox(height: 8),
-                              Text(
-                                bleProvider.statusMessage,
-                                style: TextStyle(
-                                  color: _getStatusColor(
-                                      bleProvider.statusMessage),
-                                ),
-                              ),
-                              if (bleProvider.isConnected) ...[
+                              // Transport-specific status line
+                              _buildTransportStatusLine(
+                                  context, connectionState, bleProvider),
+                              if (connectionState.isConnected) ...[
                                 const SizedBox(height: 8),
-                                Text(AppLocalizations.of(context)!
-                                    .deviceLabel(bleProvider.savedDeviceName)),
-                                Text(AppLocalizations.of(context)!
-                                    .deviceIdLabel(bleProvider.savedDeviceId ??
-                                        'Unknown')),
+                                _buildActiveDeviceLine(
+                                    context, connectionState, bleProvider),
                               ],
                             ],
                           ),
@@ -457,5 +507,150 @@ class _DebugScreenState extends State<DebugScreen> {
       return AppColors.statusBlue;
     }
     return AppColors.greyDark;
+  }
+
+  /// Pick the appropriate connection icon for the active transport.
+  static IconData _iconForTransport(String? transport) {
+    switch (transport) {
+      case 'ble':
+        return Icons.bluetooth_connected;
+      case 'wifi':
+        return Icons.wifi;
+      default:
+        return Icons.cloud_off;
+    }
+  }
+
+  /// Build a status line describing the BLE/WiFi state.
+  ///
+  /// Shows the active transport and a short descriptor (e.g. "BLE: Connected
+  /// to EvilCrow_RF2", "WiFi: 192.168.4.1", or per-transport diagnostic
+  /// messages when disconnected).
+  Widget _buildTransportStatusLine(
+    BuildContext context,
+    ConnectionStateProvider connectionState,
+    BleProvider bleProvider,
+  ) {
+    final transport = connectionState.connectedTransport;
+    final l10n = AppLocalizations.of(context)!;
+
+    String line;
+    Color color = AppColors.primaryText;
+
+    if (transport == 'ble') {
+      line = 'BLE: ${bleProvider.statusMessage}';
+      color = _getStatusColor(bleProvider.statusMessage);
+    } else if (transport == 'wifi') {
+      final wifi = context.read<WifiProvider>();
+      final host = wifi.deviceHost ?? '—';
+      line = 'WiFi: connected to $host';
+      color = AppColors.success;
+    } else {
+      // Disconnected: surface whatever the BLE provider last reported.
+      line = bleProvider.statusMessage.isEmpty
+          ? l10n.notConnectedToDevice
+          : bleProvider.statusMessage;
+      color = _getStatusColor(bleProvider.statusMessage);
+    }
+
+    return Text(
+      line,
+      style: TextStyle(color: color),
+    );
+  }
+
+  /// Show the active device's identifier (BLE name + id, or WiFi host).
+  Widget _buildActiveDeviceLine(
+    BuildContext context,
+    ConnectionStateProvider connectionState,
+    BleProvider bleProvider,
+  ) {
+    final l10n = AppLocalizations.of(context)!;
+    final transport = connectionState.connectedTransport;
+
+    if (transport == 'wifi') {
+      final wifi = context.read<WifiProvider>();
+      final host = wifi.deviceHost ?? '—';
+      return Text(l10n.deviceLabel('WiFi: $host'));
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(l10n.deviceLabel(bleProvider.savedDeviceName)),
+        Text(l10n.deviceIdLabel(bleProvider.savedDeviceId ?? 'Unknown')),
+      ],
+    );
+  }
+
+  /// Open the notification history (mirrors the home status bar behaviour).
+  void _showNotificationHistory(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => Consumer<NotificationProvider>(
+          builder: (context, provider, _) {
+            final hasHistory = provider.notificationHistory.isNotEmpty;
+            return Scaffold(
+              backgroundColor: Theme.of(context).colorScheme.surface,
+              appBar: AppBar(
+                title: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.notifications,
+                        size: 24, color: Theme.of(context).colorScheme.primary),
+                    const SizedBox(width: 8),
+                    Text(AppLocalizations.of(context)!.notifications),
+                  ],
+                ),
+                actions: [
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              body: !hasHistory
+                  ? Center(
+                      child: Text(
+                        AppLocalizations.of(context)!.noNotifications,
+                        style: TextStyle(
+                          color: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.color
+                              ?.withOpacity(0.5),
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: provider.notificationHistory.length,
+                      itemBuilder: (context, index) {
+                        final entry = provider.notificationHistory[
+                            provider.notificationHistory.length - 1 - index];
+                        return ListTile(
+                          leading: Icon(
+                            entry.icon,
+                            color: entry.color,
+                          ),
+                          title: Text(entry.message,
+                              style: TextStyle(color: entry.color)),
+                          subtitle: Text(_formatTimestamp(entry.timestamp)),
+                        );
+                      },
+                    ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  String _formatTimestamp(DateTime ts) {
+    final now = DateTime.now();
+    final diff = now.difference(ts);
+    if (diff.inSeconds < 60) return '${diff.inSeconds}s ago';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${ts.year}-${ts.month.toString().padLeft(2, '0')}-${ts.day.toString().padLeft(2, '0')} '
+        '${ts.hour.toString().padLeft(2, '0')}:${ts.minute.toString().padLeft(2, '0')}';
   }
 }

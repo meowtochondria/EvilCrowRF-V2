@@ -10,6 +10,10 @@
   "record": "Record",
   "files": "Files",
   "settings": "Settings",
+  "back": "Back",
+  "@back": {
+      "description": "Back navigation button tooltip"
+    },
 
   "connectionRequired": "Connection Required",
   "@connectionRequired": {

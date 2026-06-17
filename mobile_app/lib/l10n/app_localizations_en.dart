@@ -27,6 +27,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settings => 'Settings';
 
   @override
+  String get back => 'Back';
+
+  @override
   String get connectionRequired => 'Connection Required';
 
   @override

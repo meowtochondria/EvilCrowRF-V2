@@ -56,6 +56,16 @@ Keep it updated with any changes to how you want work done.
 6. **Don't fix unrelated bugs** — if you find a pre-existing issue, mention it but don't fix it unless asked.
 7. **Don't commit** — the user commits manually. Just make the code changes.
 
+## Localization
+
+- **Every user-facing string goes through `AppLocalizations.of(context)!`.** Never inline English (or any other language) text in widgets — tooltips, button labels, dialog titles, snackbars, headers, etc. The target audience uses multiple languages (currently `en` and `ru`); hardcoded strings silently break that.
+- The ARB files (`lib/l10n/app_en.arb`, `lib/l10n/app_ru.arb`) are the single source of truth. When you need a new key:
+  1. Add the key to **both** ARB files (English + Russian, or whatever locales the project ships).
+  2. Add the corresponding abstract `String get <key>;` to `lib/l10n/app_localizations.dart` with the standard `/// In en, this message translates to: **'…'**` docstring.
+  3. Add the `@override String get <key> => '<translation>';` to each per-locale generated file (`app_localizations_en.dart`, `app_localizations_ru.dart`).
+- Placeholders use the same shape across locales: `String greeting(String name) => 'Hi $name';`. Never build a localized string by concatenating fragments — it breaks pluralization and RTL.
+- When extending an existing screen, scan it for any literal strings and migrate them in the same change.
+
 ## Refactor Progress
 
 The canonical plan lives at `mobile_app/docs/refactor.md`.
