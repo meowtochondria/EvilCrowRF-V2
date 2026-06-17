@@ -6,6 +6,7 @@ import 'package:network_info_plus/network_info_plus.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/status.dart' as ws_status;
 import '../services/logger_service.dart';
+import '../connection/message_dispatcher.dart';
 import 'firmware_protocol.dart';
 
 /// Configuration for a discovered EvilCrowRF device.
@@ -55,6 +56,11 @@ class WifiProvider extends ChangeNotifier {
   // ── Response handler ─────────────────────────────────────────────
   Function(Map<String, dynamic>)? onJsonReceived;
   Function(Uint8List)? onBinaryReceived;
+
+  /// MessageDispatcher for forwarding parsed responses to module providers.
+  /// Set externally after construction. When set, every parsed firmware
+  /// response is dispatched here.
+  MessageDispatcher? messageDispatcher;
 
   // ── Getters ──────────────────────────────────────────────────────
   bool get isConnected => _isConnected;
@@ -303,18 +309,12 @@ class WifiProvider extends ChangeNotifier {
     final magic = data[0];
     if (magic != FirmwareBinaryProtocol.MAGIC_BYTE) return;
 
-    final dataLen = data[5] | (data[6] << 8); // Little-endian
-
-    // Extract payload
-    final payload = data.sublist(
-      FirmwareBinaryProtocol.PACKET_HEADER_SIZE,
-      FirmwareBinaryProtocol.PACKET_HEADER_SIZE + dataLen,
-    );
-
-    // Parse as response
+    // Parse as response (pass full frame — parseResponse handles header internally)
     try {
       final response =
-          FirmwareBinaryProtocol.parseResponse(Uint8List.fromList(payload));
+          FirmwareBinaryProtocol.parseResponse(Uint8List.fromList(data));
+      // Dispatch to module providers via MessageDispatcher (replaces onJsonReceived)
+      messageDispatcher?.dispatch(response);
       if (onJsonReceived != null) {
         onJsonReceived!(response);
       }
@@ -326,6 +326,8 @@ class WifiProvider extends ChangeNotifier {
   void _handleTextFrame(String data) {
     try {
       final Map<String, dynamic> json = jsonDecode(data);
+      // Dispatch to module providers
+      messageDispatcher?.dispatch(json);
       if (onJsonReceived != null) {
         onJsonReceived!(json);
       }

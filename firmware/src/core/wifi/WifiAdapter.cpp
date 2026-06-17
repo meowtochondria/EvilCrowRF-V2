@@ -72,6 +72,36 @@ void WifiAdapter::begin() {
     // ── Phase 5: Start server ───────────────────────────────────────
     server_.begin();
     ESP_LOGI(TAG, "AsyncWebServer started on port 80");
+
+    // ── Phase 6: Log connection hint ─────────────────────────────────
+    ESP_LOGI(TAG, "=== Device is reachable via SoftAP: SSID='%s', IP=192.168.4.1 ===",
+             WiFi.softAPSSID().c_str());
+    ESP_LOGI(TAG, "=== If connecting via home WiFi: check logs for STA IP and connect phone to THAT network ===");
+}
+
+// ── wifiCheck() — Called from main loop to detect STA connection transitions ──
+
+void WifiAdapter::wifiCheck() {
+    bool staConnected = WifiConfigManager::isConnected();
+    if (staConnected && !wifiConnected_) {
+        // STA just came up — start mDNS
+        wifiConnected_ = true;
+        String mdnsHostname = WifiConfigManager::getMdnsHostname();
+        const char* deviceName = ConfigManager::getDeviceName();
+        if (MDNS.begin(mdnsHostname.c_str())) {
+            MDNS.addService("_evilcrow", "_tcp", 80);
+            MDNS.addServiceTxt("_evilcrow", "_tcp", "name", deviceName);
+            MDNS.addServiceTxt("_evilcrow", "_tcp", "fw_version", FIRMWARE_VERSION_STRING);
+            MDNS.addServiceTxt("_evilcrow", "_tcp", "transport", "websocket");
+            ESP_LOGI(TAG, "=== STA CONNECTED: %s (%s) ===",
+                     mdnsHostname.c_str(), WiFi.localIP().toString().c_str());
+            ESP_LOGI(TAG, "=== Connect phone to the SAME WiFi network and use IP or mDNS ===");
+        }
+    } else if (!staConnected && wifiConnected_) {
+        // STA dropped
+        wifiConnected_ = false;
+        ESP_LOGW(TAG, "STA connection lost. SoftAP remains active at 192.168.4.1");
+    }
 }
 
 // ── notify() — Send notification via WebSocket binary frames ─────────

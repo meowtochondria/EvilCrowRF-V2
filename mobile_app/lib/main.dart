@@ -7,12 +7,19 @@ import 'l10n/app_localizations.dart';
 import 'screens/home_screen.dart';
 import 'providers/ble_provider.dart';
 import 'providers/wifi_provider.dart';
+import 'providers/connection_state_provider.dart';
 import 'providers/log_provider.dart';
 import 'providers/notification_provider.dart';
 import 'providers/locale_provider.dart';
 import 'providers/settings_provider.dart';
 import 'services/logger_service.dart';
 import 'theme/app_colors.dart';
+import 'connection/message_dispatcher.dart';
+import 'providers/device_info_provider.dart';
+import 'providers/subghz_provider.dart';
+import 'providers/nrf_provider.dart';
+import 'providers/bruter_provider.dart';
+import 'providers/ota_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -48,16 +55,84 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        // Create shared infrastructure
+        Provider<MessageDispatcher>(
+          create: (_) => MessageDispatcher(),
+        ),
         ChangeNotifierProvider(create: (context) => LocaleProvider()),
         // Always register both transport providers so the app supports
         // BLE and WiFi simultaneously. Each screen chooses which to use.
         // BleProvider handles BLE connections; on platforms without BLE
         // (e.g. Linux desktop) its init gracefully degrades.
-        ChangeNotifierProvider(create: (context) => BleProvider()),
-        ChangeNotifierProvider(create: (context) => WifiProvider()),
+        ChangeNotifierProvider(create: (context) {
+          final ble = BleProvider();
+          ble.messageDispatcher = context.read<MessageDispatcher>();
+          return ble;
+        }),
+        ChangeNotifierProvider(create: (context) {
+          final wifi = WifiProvider();
+          wifi.messageDispatcher = context.read<MessageDispatcher>();
+          return wifi;
+        }),
+        ChangeNotifierProvider(
+          create: (context) => ConnectionStateProvider(
+            context.read<BleProvider>(),
+            context.read<WifiProvider>(),
+          ),
+        ),
         ChangeNotifierProvider(create: (context) => LogProvider()),
         ChangeNotifierProvider(create: (context) => NotificationProvider()),
         ChangeNotifierProvider(create: (context) => SettingsProvider()),
+        // ── Module providers (transition era — coexist with BleProvider) ──
+        ChangeNotifierProvider(create: (context) {
+          final p = DeviceInfoProvider(context.read<MessageDispatcher>());
+          final ble = context.read<BleProvider>();
+          p.sendCommand = (cmd) async {
+            await ble.sendBinaryCommand(cmd);
+            return true;
+          };
+          return p;
+        }),
+        ChangeNotifierProvider(create: (context) {
+          final p = SubGhzProvider(context.read<MessageDispatcher>());
+          final ble = context.read<BleProvider>();
+          p.sendCommand = (cmd) async {
+            await ble.sendBinaryCommand(cmd);
+            return true;
+          };
+          p.notify = (l, m) => context.read<NotificationProvider>().showInfo(m);
+          return p;
+        }),
+        ChangeNotifierProvider(create: (context) {
+          final p = NrfProvider(context.read<MessageDispatcher>());
+          final ble = context.read<BleProvider>();
+          p.sendCommand = (cmd) async {
+            await ble.sendBinaryCommand(cmd);
+            return true;
+          };
+          p.notify = (l, m) => context.read<NotificationProvider>().showInfo(m);
+          return p;
+        }),
+        ChangeNotifierProvider(create: (context) {
+          final p = BruterProvider(context.read<MessageDispatcher>());
+          final ble = context.read<BleProvider>();
+          p.sendCommand = (cmd) async {
+            await ble.sendBinaryCommand(cmd);
+            return true;
+          };
+          p.notify = (l, m) => context.read<NotificationProvider>().showInfo(m);
+          return p;
+        }),
+        ChangeNotifierProvider(create: (context) {
+          final p = OtaProvider(context.read<MessageDispatcher>());
+          final ble = context.read<BleProvider>();
+          p.sendCommand = (cmd) async {
+            await ble.sendBinaryCommand(cmd);
+            return true;
+          };
+          p.notify = (l, m) => context.read<NotificationProvider>().showInfo(m);
+          return p;
+        }),
       ],
       child: Consumer<LocaleProvider>(
         builder: (context, localeProvider, child) {

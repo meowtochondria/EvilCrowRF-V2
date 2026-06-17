@@ -21,6 +21,7 @@ import '../services/cc1101/cc1101_values.dart';
 import '../services/binary_message_parser.dart';
 // import 'log_provider.dart'; // Unused import removed
 import '../services/logger_service.dart';
+import '../connection/message_dispatcher.dart';
 
 class BleProvider extends ChangeNotifier {
   BluetoothDevice? connectedDevice;
@@ -43,6 +44,11 @@ class BleProvider extends ChangeNotifier {
 
   // Callback for user-facing notifications (forwarded to NotificationProvider)
   Function(String level, String message)? _notificationCallback;
+
+  /// MessageDispatcher for forwarding parsed responses to module providers.
+  /// Set externally after construction. When set, every parsed firmware
+  /// response is dispatched here in addition to BleProvider's internal handling.
+  MessageDispatcher? messageDispatcher;
 
   // File reading state
   Completer<String>? _pendingFileReadCompleter;
@@ -1976,8 +1982,11 @@ class BleProvider extends ChangeNotifier {
 
   /// Handle complete responses (both chunked and single)
   void _handleCompleteResponse(dynamic data) {
-    AppLogger.debug(
-        '_handleCompleteResponse called with data type: ${data.runtimeType}');
+    // Forward to MessageDispatcher so module providers receive it too.
+    // This is the critical bridge that makes WiFi mode functional for modules.
+    if (data is Map<String, dynamic>) {
+      messageDispatcher?.dispatch(data);
+    }
     if (data is Map) {
       String type = data['type'] ?? 'unknown';
       AppLogger.debug('Processing response type: $type');

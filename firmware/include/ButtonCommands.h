@@ -6,7 +6,7 @@
  *   0x40 = HW_BUTTON_CONFIG — Set action for a physical button
  *           Payload: [buttonId: 1|2][actionId: 0-6]
  *
- * Button actions (HwButtonAction enum):
+ * Hardware button actions (HwButtonAction enum):
  *   0 = None
  *   1 = Toggle NRF Jammer
  *   2 = Toggle SubGhz Recording
@@ -14,6 +14,7 @@
  *   4 = Toggle LED
  *   5 = Deep Sleep
  *   6 = Reboot
+ *   7 = WiFi SoftAP (disconnect from STA, start SoftAP + captive portal)
  *
  * GPIO34 (BUTTON1) and GPIO35 (BUTTON2) are input-only pins on ESP32.
  * The polling function checkButtons() should be called from loop().
@@ -32,6 +33,11 @@
 #include "modules/nrf/NrfJammer.h"
 #include "modules/CC1101_driver/CC1101_Worker.h"
 
+#if EVILCROW_WIFI_MODE
+#include "core/wifi/WifiConfigManager.h"
+#include "core/wifi/WifiAdapter.h"
+#endif
+
 /// Available actions for hardware buttons.
 /// Must match the Flutter HwButtonAction enum order.
 enum class HwButtonAction : uint8_t {
@@ -42,7 +48,8 @@ enum class HwButtonAction : uint8_t {
     ToggleLed       = 4,
     DeepSleep       = 5,
     Reboot          = 6,
-    ACTION_COUNT    = 7,
+    WiFiSoftAP      = 7,
+    ACTION_COUNT    = 8,
 };
 
 class ButtonCommands {
@@ -59,9 +66,11 @@ public:
     static void loadFromConfig() {
         uint8_t a1 = ConfigManager::settings.button1Action;
         uint8_t a2 = ConfigManager::settings.button2Action;
-        if (a1 < (uint8_t)HwButtonAction::ACTION_COUNT)
+        // Only overwrite if the user explicitly set a value (> 0).
+        // Zero means "not configured via app yet" — keep the static inline default.
+        if (a1 > 0 && a1 < (uint8_t)HwButtonAction::ACTION_COUNT)
             button1Action = static_cast<HwButtonAction>(a1);
-        if (a2 < (uint8_t)HwButtonAction::ACTION_COUNT)
+        if (a2 > 0 && a2 < (uint8_t)HwButtonAction::ACTION_COUNT)
             button2Action = static_cast<HwButtonAction>(a2);
     }
 
@@ -93,7 +102,7 @@ public:
 
 private:
     static inline HwButtonAction button1Action = HwButtonAction::None;
-    static inline HwButtonAction button2Action = HwButtonAction::None;
+    static inline HwButtonAction button2Action = HwButtonAction::WiFiSoftAP;
 
     /// Handle 0x40: Set button action
     /// Payload basic: [buttonId (1|2)][actionId (0-6)]
@@ -244,6 +253,20 @@ private:
                 DeviceControls::ledBlink(5, 150);
                 DeviceControls::goDeepSleep();
                 break;
+
+#if EVILCROW_WIFI_MODE
+            case HwButtonAction::WiFiSoftAP:
+                ESP_LOGI("ButtonCmd", "Switching to SoftAP-only mode via button %u", buttonId);
+                DeviceControls::ledBlink(2, 200);
+                // Disconnect from STA, suppress all retries, stay in AP mode
+                WifiConfigManager::softAPOnly();
+                // Ensure SoftAP WiFi network is running
+                WifiConfigManager::startSoftAP();
+                ESP_LOGI("ButtonCmd", "SoftAP mode active: SSID='%s', IP=192.168.4.1",
+                         WiFi.softAPSSID().c_str());
+                DeviceControls::ledBlink(5, 100);
+                break;
+#endif
 
             case HwButtonAction::Reboot:
                 ESP_LOGI("ButtonCmd", "Rebooting via button");

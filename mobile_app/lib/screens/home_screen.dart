@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/ble_provider.dart';
 import '../providers/wifi_provider.dart';
+import '../providers/connection_state_provider.dart';
 import '../providers/log_provider.dart';
 import '../providers/notification_provider.dart';
 import '../widgets/quick_connect_widget.dart';
@@ -144,11 +145,10 @@ class _HomeScreenState extends State<HomeScreen> {
         type: BottomNavigationBarType.fixed,
         currentIndex: _currentIndex,
         onTap: (index) {
+          final connectionState =
+              Provider.of<ConnectionStateProvider>(context, listen: false);
           final bleProvider = Provider.of<BleProvider>(context, listen: false);
-          final wifiProvider =
-              Provider.of<WifiProvider>(context, listen: false);
-          final isConnected =
-              bleProvider.isConnected || wifiProvider.isConnected;
+          final isConnected = connectionState.isConnected;
 
           // Allow Home (index 0) and Settings (index 4) without connection
           // Block Sub-GHz (1), NRF (2) and Files (3) if not connected

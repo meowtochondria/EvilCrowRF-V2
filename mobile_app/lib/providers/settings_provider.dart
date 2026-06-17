@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Available actions for hardware buttons.
-/// Order matches firmware enum HwButtonAction (0-6).
+/// Order matches firmware enum HwButtonAction (0-7).
 enum HwButtonAction {
   none, // 0 — Do nothing
   toggleJammer, // 1 — Toggle NRF 2.4 GHz jammer
@@ -11,6 +11,7 @@ enum HwButtonAction {
   toggleLed, // 4 — Toggle LED on/off
   deepSleep, // 5 — Enter deep sleep
   reboot, // 6 — Reboot device
+  wifiSoftAp, // 7 — Disconnect WiFi, start SoftAP mode
 }
 
 extension HwButtonActionLabel on HwButtonAction {
@@ -30,6 +31,8 @@ extension HwButtonActionLabel on HwButtonAction {
         return 'Deep Sleep';
       case HwButtonAction.reboot:
         return 'Reboot';
+      case HwButtonAction.wifiSoftAp:
+        return 'WiFi SoftAP';
     }
   }
 
@@ -49,6 +52,8 @@ extension HwButtonActionLabel on HwButtonAction {
         return Icons.bedtime;
       case HwButtonAction.reboot:
         return Icons.restart_alt;
+      case HwButtonAction.wifiSoftAp:
+        return Icons.wifi_find;
     }
   }
 }

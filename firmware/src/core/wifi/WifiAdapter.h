@@ -45,6 +45,9 @@ public:
     // Access the web server for REST endpoint registration
     AsyncWebServer* getServer() { return &server_; }
 
+    // Called from main loop — detects STA transitions and starts mDNS
+    void wifiCheck();
+
 private:
     static WifiAdapter* instance;
 

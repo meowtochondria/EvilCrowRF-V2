@@ -81,6 +81,13 @@
 #define BUTTON1 34
 #define BUTTON2 35
 
+// NOTE: GPIO34 and GPIO35 are input-only — no internal pull-up.
+// If your PCB lacks external pull-up resistors, performance will be unreliable.
+// For prototype boards without external pull-ups, remap to GPIOs with pull-up:
+//   #define BUTTON1 16
+//   #define BUTTON2 17
+// Then change pinMode to INPUT_PULLUP in DeviceControls::setup().
+
 // SDR (Software Defined Radio) mode
 // Uses one CC1101 module for spectrum scanning, raw RX, and serial SDR interface.
 // When active, other CC1101 operations are blocked.

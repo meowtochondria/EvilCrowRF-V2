@@ -264,14 +264,10 @@ void _handleBinaryFrame(List<int> data) {
   if (data.length < FirmwareBinaryProtocol.PACKET_HEADER_SIZE + 1) return;
   if (data[0] != FirmwareBinaryProtocol.MAGIC_BYTE) return;
 
-  final dataLen = data[5] | (data[6] << 8);
-  final payload = data.sublist(
-    FirmwareBinaryProtocol.PACKET_HEADER_SIZE,
-    FirmwareBinaryProtocol.PACKET_HEADER_SIZE + dataLen,
-  );
-
-  // Parse → same format BleProvider._handleFirmwareResponse receives today
-  final parsed = FirmwareBinaryProtocol.parseResponse(Uint8List.fromList(payload));
+  // Parse → same format BleProvider._handleFirmwareResponse receives today.
+  // Pass the full frame — FirmwareBinaryProtocol.parseResponse handles
+  // header extraction internally (do NOT strip the header manually).
+  final parsed = FirmwareBinaryProtocol.parseResponse(Uint8List.fromList(data));
   // Route to all module providers (replaces onJsonReceived callback)
   _messageDispatcher.dispatch(parsed);
 }
@@ -842,3 +838,159 @@ make linux
 4. **Clean compilation**: `flutter analyze` reports zero errors.
 5. **Message routing is clean**: Raw BLE/WiFi notifications flow through `MessageDispatcher` → module providers. No direct BLE characteristic handling outside `BleConnectionProvider`.
 6. **OTAU works**: Firmware upload and reboot-reconnect works via `OtaProvider` state machine.
+
+---
+
+## 6. Fixes (Immediate Bugs & UX Improvements)
+
+### F1. Module Providers Not Receiving Responses After WiFi Connect
+
+**Symptoms:** WiFi discovery and WebSocket connection succeed, but Sub-GHz scanner shows "Module Busy", NRF scan shows no devices, and file list stays empty. BLE mode works fine.
+
+**Root cause (fixed):** `WifiProvider._handleBinaryFrame()` was manually stripping the 7-byte binary protocol header from incoming frames before calling `FirmwareBinaryProtocol.parseResponse()`. But `parseResponse()` expects the **full frame with header** — it parses the header internally. The stripped payload (starting with `{` = 0x7b for JSON responses) failed the magic-byte check inside `parseResponse`, throwing `Invalid magic byte: 0x7b`. None of the responses were reaching `MessageDispatcher`, so no module provider state was updated.
+
+**Fix:** Pass the full `data` frame to `parseResponse()` instead of the manually extracted payload, matching how `BleProvider` already calls it:
+```dart
+// Before (broken)
+final payload = data.sublist(PACKET_HEADER_SIZE, PACKET_HEADER_SIZE + dataLen);
+final parsed = FirmwareBinaryProtocol.parseResponse(Uint8List.fromList(payload));
+
+// After (fixed — pass full frame, parseResponse handles header)
+final parsed = FirmwareBinaryProtocol.parseResponse(Uint8List.fromList(data));
+```
+
+### F2. Bluetooth Icon Shown When Connected via WiFi
+
+**Symptom:** The status bar or connection indicator always shows a Bluetooth icon even when the device is connected via WiFi.
+
+**Root cause:** Several UI components hardcode the Bluetooth icon without checking which transport is active:
+
+| File | Line(s) | Problem |
+|------|---------|---------|
+| `home_screen.dart` | `HomeTab` (line ~261) | `Icon(Icons.bluetooth_connected)` always shown when connected, regardless of transport |
+| `status_bar_widget.dart` | Likely similar | Hardcoded BLE icon |
+| `quick_connect_widget.dart` | Likely | Shows BLE scan results only, no WiFi option |
+
+**Fix plan:**
+
+1. Create a helper function or widget that returns the correct icon based on `ConnectionStateProvider.connectedTransport`:
+   ```dart
+   Widget _connectionIcon(BuildContext context) {
+     final transport = context.watch<ConnectionStateProvider>().connectedTransport;
+     switch (transport) {
+       case 'ble': return const Icon(Icons.bluetooth_connected, color: AppColors.success);
+       case 'wifi': return const Icon(Icons.wifi, color: AppColors.success);
+       default: return const Icon(Icons.cloud_off, color: AppColors.error);
+     }
+   }
+   ```
+
+2. Update `home_screen.dart` HomeTab to use this instead of hardcoded `Icons.bluetooth_connected`.
+
+3. Update `status_bar_widget.dart` to show the correct transport icon.
+
+### F3. Persist Last Connection Method & Prepopulate Fields
+
+**Symptom:** Every time the user opens the app, they must re-select connection method (BLE scan vs WiFi IP). No memory of the last successful connection.
+
+**Fix plan — new `ConnectionHistoryService`:**
+
+```dart
+// services/connection_history_service.dart
+class ConnectionHistoryService {
+  static const _keyLastTransport = 'last_transport';  // 'ble' | 'wifi'
+  static const _keyWifiHost = 'last_wifi_host';        // IP or FQDN
+  static const _keyBleDeviceId = 'last_ble_device_id';
+
+  /// Save the last successful connection details.
+  static Future<void> saveConnection({
+    required String transport,
+    String? wifiHost,
+    String? bleDeviceId,
+  });
+
+  /// Load the last transport method.
+  static Future<String?> getLastTransport();
+
+  /// Load the last WiFi host (IP/FQDN/mDNS).
+  static Future<String?> getLastWifiHost();
+
+  /// Load the last BLE device ID.
+  static Future<String?> getLastBleDeviceId();
+
+  /// Clear saved connection history.
+  static Future<void> clear();
+}
+```
+
+**Widget updates:**
+
+| Widget | Change |
+|--------|--------|
+| `widgets/quick_connect_widget.dart` | On init, call `ConnectionHistoryService.getLastTransport()`. If `'wifi'`, show the IP/FQDN field prepopulated with the saved host and a "Connect" button. If `'ble'`, start BLE scan automatically. |
+| `screens/settings_screen.dart` WiFi section | Prepopulate the IP/FQDN field with `ConnectionHistoryService.getLastWifiHost()`. |
+| `WifiProvider.connect()` | On successful connection, call `ConnectionHistoryService.saveConnection(transport: 'wifi', wifiHost: host)`. |
+| `BleProvider.connectToDevice()` | On successful connection, call `ConnectionHistoryService.saveConnection(transport: 'ble', bleDeviceId: device.id)`. |
+
+**Connection button validation:**
+
+The "Connect" button in both Quick Connect and Settings > WiFi should be:
+- **Disabled** when IP/FQDN field is empty or contains only whitespace
+- **Enabled** when field is non-empty (do NOT validate IP format — let the connection attempt fail gracefully)
+
+```dart
+// Pattern for all connection buttons
+final canConnect = _hostController.text.trim().isNotEmpty;
+ElevatedButton(
+  onPressed: canConnect ? _connect : null,
+  child: Text(l10n.connect),
+)
+```
+
+### F4. Show Active Connection Details in Fields
+
+**Symptom:** When already connected, Quick Connect and Settings show empty fields or stale data instead of the active device identity.
+
+**Fix plan:**
+
+When `ConnectionStateProvider.isConnected == true`, populate the corresponding fields with live data:
+
+| Transport | Field | Value |
+|-----------|-------|-------|
+| WiFi | IP/FQDN | `WifiProvider.deviceHost` (the IP or hostname connected to) |
+| WiFi | mDNS Hostname | `evilcrow_rf2.local` or whatever the device advertises |
+| BLE | Device name | `BleProvider.deviceName` |
+
+**Quick Connect widget** should:
+1. Watch `ConnectionStateProvider.isConnected`
+2. When connected via WiFi: show the active IP/hostname in the IP field (read-only style), disable the scan button, show a green "Connected" badge
+3. When connected via BLE: show the device name, show a green "Connected" badge
+4. When disconnected: restore editable fields, enable scan/connect buttons
+
+**Settings > WiFi section** should:
+1. Watch `ConnectionStateProvider`
+2. When connected via WiFi: prepopulate IP/FQDN field with `WifiProvider.deviceHost`, show a "Connected" indicator
+3. When not connected via WiFi: show the last saved host from `ConnectionHistoryService`
+
+The pattern:
+```dart
+// Quick Connect or Settings > WiFi
+final connectionState = context.watch<ConnectionStateProvider>();
+final wifiProvider = context.watch<WifiProvider>();
+
+// Prepopulate from live connection or history
+final host = connectionState.isConnected && connectionState.connectedTransport == 'wifi'
+    ? (wifiProvider.deviceHost ?? '')
+    : _lastSavedHost;
+_hostController.text = host;
+```
+
+**Implementation order for F3 + F4:**
+```
+1. Create ConnectionHistoryService (SharedPreferences-based, ~80 lines)
+2. Wire saveConnection into WifiProvider.connect() success path
+3. Wire saveConnection into BleProvider.connectToDevice() success path
+4. Update QuickConnectWidget — prepopulate, validate, show live state
+5. Update Settings > WiFi section — prepopulate, validate, show live state
+6. Update HomeTab connection indicator — show correct transport icon
+```

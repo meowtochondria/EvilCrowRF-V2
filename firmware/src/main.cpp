@@ -823,8 +823,9 @@ void timeSyncTask(void* pvParameters) {
 void loop()
 {
 #if EVILCROW_WIFI_MODE
-    // Process WiFi provisioning (SmartConfig / SoftAP captive portal)
+    // Process WiFi provisioning (SoftAP captive portal)
     WifiConfigManager::process();
+    wifiAdapter.wifiCheck();
 #endif
 
     // Poll hardware buttons for configured actions
