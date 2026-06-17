@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
-import '../providers/ble_provider.dart';
+import '../providers/connection_state_provider.dart';
+import '../providers/device_info_provider.dart';
+import '../providers/files_provider.dart';
+import '../providers/subghz_provider.dart';
 import '../providers/notification_provider.dart';
 import '../services/signal_processing/signal_data.dart';
 import '../services/cc1101/cc1101_values.dart';
@@ -45,7 +48,7 @@ class _RecordScreenState extends State<RecordScreen>
   final List<TextEditingController> _deviationControllers = [];
   final List<TextEditingController> _bandwidthControllers = [];
 
-  // Local state for recorded files (independent of BleProvider)
+  // Local state for recorded files (independent of providers)
   final List<dynamic> _recordedFiles = [];
 
   // Files from current recording session
@@ -63,16 +66,16 @@ class _RecordScreenState extends State<RecordScreen>
   // Flag to track if auto-switch was performed on open
   bool _hasAutoSwitched = false;
 
-  BleProvider? _bleProvider;
+  SubGhzProvider? _subGhz;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Save BleProvider reference when widget is active
-    if (_bleProvider == null) {
-      _bleProvider = Provider.of<BleProvider>(context, listen: false);
-      _bleProvider?.addListener(_onRecordedFilesChanged);
-      _bleProvider?.addListener(_onModuleStateChanged);
+    // Save provider references when widget is active
+    if (_subGhz == null) {
+      _subGhz = context.read<SubGhzProvider>();
+      _subGhz?.addListener(_onRecordedFilesChanged);
+      _subGhz?.addListener(_onModuleStateChanged);
     }
 
     // Check module state on screen return
@@ -95,7 +98,7 @@ class _RecordScreenState extends State<RecordScreen>
     if (!mounted) return; // Check that widget is still active
 
     AppLogger.debug('_onRecordedFilesChanged called');
-    final runtimeFiles = _bleProvider?.recordedRuntimeFiles ?? [];
+    final runtimeFiles = _subGhz?.recordedRuntimeFiles ?? [];
     AppLogger.debug('Runtime files: $runtimeFiles');
 
     // Add new files to local recorded files list
@@ -134,9 +137,9 @@ class _RecordScreenState extends State<RecordScreen>
     // Switch only if current module is inactive and another is active
     bool currentModuleActive = false;
     if (_selectedModule < _recordConfigs.length) {
-      currentModuleActive =
-          _bleProvider?.isModuleJamming(_selectedModule) == true ||
-              _bleProvider?.isModuleRecording(_selectedModule) == true;
+      final isJamming = _subGhz?.isJamming[_selectedModule] ?? false;
+      final isRecording = _subGhz?.isRecording[_selectedModule] ?? false;
+      currentModuleActive = isJamming || isRecording;
     }
 
     // If current module is inactive, check other modules
@@ -144,13 +147,13 @@ class _RecordScreenState extends State<RecordScreen>
       _checkAndSwitchToActiveModule();
     } else {
       // Update selected action for current module
-      if (_bleProvider?.isModuleJamming(_selectedModule) == true) {
+      if (_subGhz?.isJamming[_selectedModule] == true) {
         if (_selectedActions[_selectedModule] != ModuleAction.jamming) {
           setState(() {
             _selectedActions[_selectedModule] = ModuleAction.jamming;
           });
         }
-      } else if (_bleProvider?.isModuleRecording(_selectedModule) == true) {
+      } else if (_subGhz?.isRecording[_selectedModule] == true) {
         if (_selectedActions[_selectedModule] != ModuleAction.recording) {
           setState(() {
             _selectedActions[_selectedModule] = ModuleAction.recording;
@@ -177,9 +180,9 @@ class _RecordScreenState extends State<RecordScreen>
     _disposeControllers();
 
     // Remove listeners using saved reference
-    _bleProvider?.removeListener(_onRecordedFilesChanged);
-    _bleProvider?.removeListener(_onModuleStateChanged);
-    _bleProvider = null;
+    _subGhz?.removeListener(_onRecordedFilesChanged);
+    _subGhz?.removeListener(_onModuleStateChanged);
+    _subGhz = null;
 
     super.dispose();
   }
@@ -255,12 +258,12 @@ class _RecordScreenState extends State<RecordScreen>
 
   /// Check module state and switch to active (jamming or recording)
   void _checkAndSwitchToActiveModule() {
-    if (_bleProvider == null || !_tabControllerInitialized) return;
+    if (_subGhz == null || !_tabControllerInitialized) return;
 
     // Priority: jamming > recording
     // First check jamming
     for (int i = 0; i < _recordConfigs.length; i++) {
-      if (_bleProvider!.isModuleJamming(i)) {
+      if (_subGhz!.isJamming[i] == true) {
         AppLogger.debug(
             'RecordScreen: Module $i is jamming, switching to module $i and jamming tab');
         setState(() {
@@ -275,7 +278,7 @@ class _RecordScreenState extends State<RecordScreen>
 
     // Then check recording
     for (int i = 0; i < _recordConfigs.length; i++) {
-      if (_bleProvider!.isModuleRecording(i)) {
+      if (_subGhz!.isRecording[i] == true) {
         AppLogger.debug(
             'RecordScreen: Module $i is recording, switching to module $i and recording tab');
         setState(() {
@@ -299,27 +302,29 @@ class _RecordScreenState extends State<RecordScreen>
   }
 
   /// Check if module is busy (recording, jamming, transmitting, etc.)
-  bool _isModuleBusy(int moduleIndex, BleProvider bleProvider) {
-    return bleProvider.isModuleRecording(moduleIndex) ||
-        bleProvider.isModuleJamming(moduleIndex) ||
-        !bleProvider.isModuleAvailable(moduleIndex);
+  bool _isModuleBusy(
+      int moduleIndex, SubGhzProvider subGhz, DeviceInfoProvider deviceInfo) {
+    final isRecording = subGhz.isRecording[moduleIndex] ?? false;
+    final isJamming = subGhz.isJamming[moduleIndex] ?? false;
+    final isAvailable = deviceInfo.isModuleAvailable(moduleIndex);
+    return isRecording || isJamming || !isAvailable;
   }
 
-  void _startFrequencySearch(int moduleIndex, BleProvider bleProvider) async {
+  void _startFrequencySearch(int moduleIndex, SubGhzProvider subGhz) async {
     try {
-      await bleProvider.startFrequencySearch(moduleIndex, minRssi: -65);
+      await subGhz.startFrequencySearch(moduleIndex, -65);
       _showSuccessSnackBar(AppLocalizations.of(context)!
           .frequencySearchStarted(moduleIndex + 1));
 
       // Listen for detected signals and update frequency
-      _listenForDetectedFrequency(moduleIndex, bleProvider);
+      _listenForDetectedFrequency(moduleIndex, subGhz);
     } catch (e) {
       _showErrorSnackBar(AppLocalizations.of(context)!
           .failedToStartFrequencySearch(e.toString()));
     }
   }
 
-  void _listenForDetectedFrequency(int moduleIndex, BleProvider bleProvider) {
+  void _listenForDetectedFrequency(int moduleIndex, SubGhzProvider subGhz) {
     // This will be called when a signal is detected
     // The frequency will be automatically updated in the dropdown
     // when the detectedSignals list changes
@@ -347,10 +352,10 @@ class _RecordScreenState extends State<RecordScreen>
     return closest;
   }
 
-  void _stopFrequencySearch(int moduleIndex, BleProvider bleProvider) async {
+  void _stopFrequencySearch(int moduleIndex, SubGhzProvider subGhz) async {
     try {
       // Send idle command to stop frequency search
-      await bleProvider.sendIdleCommand(moduleIndex);
+      await subGhz.sendIdleCommand(moduleIndex);
       _showSuccessSnackBar(AppLocalizations.of(context)!
           .frequencySearchStoppedForModule(moduleIndex + 1));
     } catch (e) {
@@ -360,17 +365,19 @@ class _RecordScreenState extends State<RecordScreen>
   }
 
   void _startJamming(int moduleIndex) async {
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
+    final subGhz = context.read<SubGhzProvider>();
+    final deviceInfo = context.read<DeviceInfoProvider>();
+    final connectionState = context.read<ConnectionStateProvider>();
 
     final l10n = AppLocalizations.of(context)!;
-    if (!bleProvider.isConnected) {
+    if (!connectionState.isConnected) {
       _showErrorDialog(l10n.error, l10n.deviceNotConnected);
       return;
     }
 
     // Check module availability
-    if (!bleProvider.isModuleAvailable(moduleIndex)) {
-      final status = bleProvider.getModuleStatus(moduleIndex);
+    if (!deviceInfo.isModuleAvailable(moduleIndex)) {
+      final status = deviceInfo.getModuleStatus(moduleIndex);
       _showErrorDialog(
           l10n.moduleBusy, l10n.moduleBusyMessage(moduleIndex + 1, status));
       return;
@@ -380,7 +387,7 @@ class _RecordScreenState extends State<RecordScreen>
 
     try {
       // Send jamming command with parameters from current configuration
-      await bleProvider.sendStartJamCommand(
+      await subGhz.sendStartJamCommand(
         module: moduleIndex,
         frequency: config.frequency,
         power: 7, // Maximum power by default
@@ -390,7 +397,7 @@ class _RecordScreenState extends State<RecordScreen>
       );
 
       // Request current device state
-      await bleProvider.sendGetStateCommand();
+      await deviceInfo.requestGetState();
 
       _showSuccessSnackBar(l10n.jammingStarted(moduleIndex + 1));
     } catch (e) {
@@ -400,17 +407,19 @@ class _RecordScreenState extends State<RecordScreen>
   }
 
   void _stopJamming(int moduleIndex) async {
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
+    final subGhz = context.read<SubGhzProvider>();
+    final deviceInfo = context.read<DeviceInfoProvider>();
+    final connectionState = context.read<ConnectionStateProvider>();
     final l10n = AppLocalizations.of(context)!;
 
-    if (!bleProvider.isConnected) {
+    if (!connectionState.isConnected) {
       _showErrorDialog(l10n.error, l10n.deviceNotConnected);
       return;
     }
 
     try {
-      await bleProvider.sendIdleCommand(moduleIndex);
-      await bleProvider.sendGetStateCommand();
+      await subGhz.sendIdleCommand(moduleIndex);
+      await deviceInfo.requestGetState();
       _showSuccessSnackBar(l10n.jammingStopped(moduleIndex + 1));
     } catch (e) {
       _showErrorDialog(l10n.jammingError, l10n.jammingStopFailed(e.toString()));
@@ -418,24 +427,26 @@ class _RecordScreenState extends State<RecordScreen>
   }
 
   void _startRecording(int moduleIndex) async {
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
+    final subGhz = context.read<SubGhzProvider>();
+    final deviceInfo = context.read<DeviceInfoProvider>();
+    final connectionState = context.read<ConnectionStateProvider>();
 
     final l10n = AppLocalizations.of(context)!;
-    if (!bleProvider.isConnected) {
+    if (!connectionState.isConnected) {
       _showErrorDialog(l10n.error, l10n.deviceNotConnected);
       return;
     }
 
     // Check module availability
-    if (!bleProvider.isModuleAvailable(moduleIndex)) {
-      final status = bleProvider.getModuleStatus(moduleIndex);
+    if (!deviceInfo.isModuleAvailable(moduleIndex)) {
+      final status = deviceInfo.getModuleStatus(moduleIndex);
       _showErrorDialog(
           l10n.moduleBusy, l10n.moduleBusyMessage(moduleIndex + 1, status));
       return;
     }
 
     final config = _recordConfigs[moduleIndex];
-    final errors = bleProvider.validateRecordConfig(config);
+    final errors = SubGhzProvider.validateRecordConfig(config);
 
     if (errors.isNotEmpty) {
       _showErrorDialog(l10n.validationError, errors.join('\n'));
@@ -445,7 +456,7 @@ class _RecordScreenState extends State<RecordScreen>
     try {
       // Send binary recording command via Enhanced Protocol
       // In Advanced Mode send all parameters, in Simple Mode - only preset
-      await bleProvider.sendRecordCommand(
+      await subGhz.sendRecordCommand(
         frequency: config.frequency,
         module: moduleIndex,
         preset: config.advancedMode ? null : config.preset,
@@ -457,7 +468,7 @@ class _RecordScreenState extends State<RecordScreen>
       );
 
       // Request current device state
-      await bleProvider.sendGetStateCommand();
+      await deviceInfo.requestGetState();
 
       _showSuccessSnackBar(l10n.recordingStarted(moduleIndex + 1));
     } catch (e) {
@@ -467,13 +478,14 @@ class _RecordScreenState extends State<RecordScreen>
   }
 
   void _stopRecording(int moduleIndex) async {
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
+    final subGhz = context.read<SubGhzProvider>();
+    final deviceInfo = context.read<DeviceInfoProvider>();
 
     try {
-      await bleProvider.sendIdleCommand(moduleIndex);
+      await subGhz.sendIdleCommand(moduleIndex);
 
       // Request current device state
-      await bleProvider.sendGetStateCommand();
+      await deviceInfo.requestGetState();
 
       final l10n = AppLocalizations.of(context)!;
       _showSuccessSnackBar(l10n.recordingStopped(moduleIndex + 1));
@@ -521,9 +533,9 @@ class _RecordScreenState extends State<RecordScreen>
       child: Container(
         color: AppColors.primaryBackground.withOpacity(0.9),
         child: Center(
-          child: Consumer<BleProvider>(
-            builder: (context, bleProvider, child) {
-              final status = bleProvider.getModuleStatus(_selectedModule);
+          child: Consumer<DeviceInfoProvider>(
+            builder: (context, deviceInfo, child) {
+              final status = deviceInfo.getModuleStatus(_selectedModule);
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -557,9 +569,9 @@ class _RecordScreenState extends State<RecordScreen>
   }
 
   Widget _buildRecordSettingsOverlay() {
-    return Consumer<BleProvider>(
-      builder: (context, bleProvider, child) {
-        final isRecording = bleProvider.isModuleRecording(_selectedModule);
+    return Consumer<SubGhzProvider>(
+      builder: (context, subGhz, child) {
+        final isRecording = subGhz.isRecording[_selectedModule] ?? false;
 
         // Debug info
         AppLogger.debug(
@@ -616,7 +628,7 @@ class _RecordScreenState extends State<RecordScreen>
                     ),
                     const SizedBox(height: 12),
                     // Second line: parameters with Wrap
-                    _buildStatusWidgetOverlay(bleProvider),
+                    _buildStatusWidgetOverlay(),
                   ],
                 ),
               ),
@@ -627,9 +639,9 @@ class _RecordScreenState extends State<RecordScreen>
     );
   }
 
-  Widget _buildStatusWidgetOverlay(BleProvider bleProvider) {
+  Widget _buildStatusWidgetOverlay() {
     // Get module data from cc1101Modules
-    final modules = bleProvider.cc1101Modules;
+    final modules = context.read<DeviceInfoProvider>().cc1101Modules;
     if (modules == null || _selectedModule >= modules.length) {
       return const SizedBox.shrink();
     }
@@ -802,14 +814,13 @@ class _RecordScreenState extends State<RecordScreen>
                           .withOpacity(0.6),
                       tabs: _recordConfigs.asMap().entries.map((entry) {
                         final index = entry.key;
-                        return Consumer<BleProvider>(
-                          builder: (context, bleProvider, child) {
+                        return Consumer2<SubGhzProvider, DeviceInfoProvider>(
+                          builder: (context, subGhz, deviceInfo, child) {
                             final isAvailable =
-                                bleProvider.isModuleAvailable(index);
+                                deviceInfo.isModuleAvailable(index);
                             final isRecording =
-                                bleProvider.isModuleRecording(index);
-                            final isJamming =
-                                bleProvider.isModuleJamming(index);
+                                subGhz.isRecording[index] ?? false;
+                            final isJamming = subGhz.isJamming[index] ?? false;
                             final isBusy =
                                 !isAvailable || isRecording || isJamming;
 
@@ -904,11 +915,11 @@ class _RecordScreenState extends State<RecordScreen>
   }
 
   Widget _buildModuleTab(int moduleIndex, RecordConfig config) {
-    return Consumer<BleProvider>(
-      builder: (context, bleProvider, child) {
-        final isRecording = bleProvider.isModuleRecording(moduleIndex);
-        final isJamming = bleProvider.isModuleJamming(moduleIndex);
-        final isBusy = _isModuleBusy(moduleIndex, bleProvider);
+    return Consumer2<SubGhzProvider, DeviceInfoProvider>(
+      builder: (context, subGhz, deviceInfo, child) {
+        final isRecording = subGhz.isRecording[moduleIndex] ?? false;
+        final isJamming = subGhz.isJamming[moduleIndex] ?? false;
+        final isBusy = _isModuleBusy(moduleIndex, subGhz, deviceInfo);
 
         final selectedAction = _selectedActions[moduleIndex];
         AppLogger.debug(
@@ -947,12 +958,13 @@ class _RecordScreenState extends State<RecordScreen>
 
   Widget _buildBottomButton() {
     // Determine button state outside Consumer for proper animation
-    final bleProvider = Provider.of<BleProvider>(context, listen: true);
-    final isRecording = bleProvider.isModuleRecording(_selectedModule);
-    final isJamming = bleProvider.isModuleJamming(_selectedModule);
-    final isAvailable = bleProvider.isModuleAvailable(_selectedModule);
+    final subGhz = Provider.of<SubGhzProvider>(context, listen: true);
+    final deviceInfo = Provider.of<DeviceInfoProvider>(context, listen: true);
+    final isRecording = subGhz.isRecording[_selectedModule] ?? false;
+    final isJamming = subGhz.isJamming[_selectedModule] ?? false;
+    final isAvailable = deviceInfo.isModuleAvailable(_selectedModule);
     final isFrequencySearching =
-        bleProvider.isModuleFrequencySearching(_selectedModule);
+        subGhz.isFrequencySearching[_selectedModule] ?? false;
 
     final selectedAction = _selectedActions[_selectedModule];
     final l10n = AppLocalizations.of(context)!;
@@ -974,8 +986,7 @@ class _RecordScreenState extends State<RecordScreen>
           child: SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: () =>
-                  _stopFrequencySearch(_selectedModule, bleProvider),
+              onPressed: () => _stopFrequencySearch(_selectedModule, subGhz),
               icon: const Icon(Icons.stop, color: AppColors.primaryBackground),
               label: Text(
                   '${l10n.stopFrequencySearch} (${l10n.module(_selectedModule + 1)})'),
@@ -1151,8 +1162,8 @@ class _RecordScreenState extends State<RecordScreen>
             Row(
               children: [
                 Expanded(
-                  child: Consumer<BleProvider>(
-                    builder: (context, bleProvider, child) {
+                  child: Consumer<SubGhzProvider>(
+                    builder: (context, subGhz, child) {
                       // Find current frequency string from list, or use config frequency
                       String? currentFrequencyString =
                           _findClosestFrequencyString(config.frequency);
@@ -1160,7 +1171,7 @@ class _RecordScreenState extends State<RecordScreen>
                           config.frequency.toStringAsFixed(2);
 
                       // Get signals for this module, sorted by timestamp (newest first)
-                      final moduleSignals = bleProvider.detectedSignals
+                      final moduleSignals = subGhz.detectedSignals
                           .where((signal) => signal.module == moduleIndex)
                           .where((signal) => signal.timestamp.isAfter(
                               DateTime.now()
@@ -1173,7 +1184,7 @@ class _RecordScreenState extends State<RecordScreen>
 
                       // Check if frequency search is active - if so, don't update the dropdown
                       final isFrequencySearching =
-                          bleProvider.isModuleFrequencySearching(moduleIndex);
+                          subGhz.isFrequencySearching[moduleIndex] ?? false;
 
                       if (moduleSignals.isNotEmpty && !isFrequencySearching) {
                         // Use the most recent detected frequency (first after sort)
@@ -1257,9 +1268,7 @@ class _RecordScreenState extends State<RecordScreen>
                         key: ValueKey(
                             'freq_dropdown_${moduleIndex}_$latestSignalKey'),
                         initialValue: currentFrequency,
-                        onChanged: (!isBusy &&
-                                !bleProvider
-                                    .isModuleFrequencySearching(moduleIndex))
+                        onChanged: (!isBusy && !isFrequencySearching)
                             ? (value) {
                                 if (value != null) {
                                   final frequency = double.tryParse(value);
@@ -1304,15 +1313,14 @@ class _RecordScreenState extends State<RecordScreen>
                   ),
                 ),
                 const SizedBox(width: 8),
-                Consumer<BleProvider>(
-                  builder: (context, bleProvider, child) {
+                Consumer<SubGhzProvider>(
+                  builder: (context, subGhz, child) {
                     final isSearching =
-                        bleProvider.isModuleFrequencySearching(moduleIndex);
+                        subGhz.isFrequencySearching[moduleIndex] ?? false;
                     return IconButton(
                       onPressed: isSearching
-                          ? () => _stopFrequencySearch(moduleIndex, bleProvider)
-                          : () =>
-                              _startFrequencySearch(moduleIndex, bleProvider),
+                          ? () => _stopFrequencySearch(moduleIndex, subGhz)
+                          : () => _startFrequencySearch(moduleIndex, subGhz),
                       icon: Icon(
                         isSearching ? Icons.stop : Icons.search,
                         color: isSearching ? AppColors.error : null,
@@ -1358,10 +1366,10 @@ class _RecordScreenState extends State<RecordScreen>
 
   Widget _buildSimpleSettings(
       int moduleIndex, RecordConfig config, bool isBusy) {
-    return Consumer<BleProvider>(
-      builder: (context, bleProvider, child) {
+    return Consumer<SubGhzProvider>(
+      builder: (context, subGhz, child) {
         final isFrequencySearching =
-            bleProvider.isModuleFrequencySearching(moduleIndex);
+            subGhz.isFrequencySearching[moduleIndex] ?? false;
         return PresetSelector(
           value: config.preset,
           onChanged: (isBusy || isFrequencySearching)
@@ -1378,10 +1386,10 @@ class _RecordScreenState extends State<RecordScreen>
 
   Widget _buildAdvancedSettings(
       int moduleIndex, RecordConfig config, bool isBusy) {
-    return Consumer<BleProvider>(
-      builder: (context, bleProvider, child) {
+    return Consumer<SubGhzProvider>(
+      builder: (context, subGhz, child) {
         final isFrequencySearching =
-            bleProvider.isModuleFrequencySearching(moduleIndex);
+            subGhz.isFrequencySearching[moduleIndex] ?? false;
         return Column(
           children: [
             // Bandwidth
@@ -1456,10 +1464,10 @@ class _RecordScreenState extends State<RecordScreen>
   }
 
   Widget _buildModuleFilesList(int moduleIndex) {
-    return Consumer<BleProvider>(
-      builder: (context, bleProvider, child) {
+    return Consumer<SubGhzProvider>(
+      builder: (context, subGhz, child) {
         // Update local list when recordedRuntimeFiles changes
-        final runtimeFiles = bleProvider.recordedRuntimeFiles;
+        final runtimeFiles = subGhz.recordedRuntimeFiles;
         AppLogger.debug(
             '_buildModuleFilesList: Module $moduleIndex, runtimeFiles count: ${runtimeFiles.length}');
 
@@ -1591,11 +1599,12 @@ class _RecordScreenState extends State<RecordScreen>
   }
 
   void _handleRecordedFileAction(dynamic file, String action) {
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
+    final subGhz = context.read<SubGhzProvider>();
+    final filesProvider = context.read<FilesProvider>();
 
     switch (action) {
       case 'transmit':
-        _transmitRecordedFile(file.name, bleProvider);
+        _transmitRecordedFile(file.name);
         break;
       case 'save_to_signals':
         // Get date from file object
@@ -1609,7 +1618,7 @@ class _RecordScreenState extends State<RecordScreen>
         }
         // If date not found in object, look in recordedRuntimeFiles
         if (fileDate == null) {
-          final runtimeFiles = bleProvider.recordedRuntimeFiles;
+          final runtimeFiles = subGhz.recordedRuntimeFiles;
           for (final runtimeFile in runtimeFiles) {
             String fileName;
             if (runtimeFile.containsKey('filename')) {
@@ -1624,14 +1633,15 @@ class _RecordScreenState extends State<RecordScreen>
                         runtimeFile['date'] * 1000);
                   }
                 } catch (e) {
-                  AppLogger.debug('Error parsing date for file ${file.name}', e);
+                  AppLogger.debug(
+                      'Error parsing date for file ${file.name}', e);
                 }
                 break;
               }
             }
           }
         }
-        _saveToSignalsDirectory(file.name, bleProvider, fileDate: fileDate);
+        _saveToSignalsDirectory(file.name, filesProvider, fileDate: fileDate);
         break;
       case 'download':
         // TODO: Implement file download
@@ -1639,12 +1649,12 @@ class _RecordScreenState extends State<RecordScreen>
             AppLocalizations.of(context)!.downloadingFile(file.name));
         break;
       case 'delete':
-        _showDeleteConfirmation(file.name, bleProvider);
+        _showDeleteConfirmation(file.name, filesProvider, subGhz);
         break;
     }
   }
 
-  void _transmitRecordedFile(String filename, BleProvider bleProvider) async {
+  void _transmitRecordedFile(String filename) async {
     final confirmed = await TransmitFileDialog.showAndTransmit(
       context,
       fileName: filename,
@@ -1656,7 +1666,7 @@ class _RecordScreenState extends State<RecordScreen>
     }
   }
 
-  void _saveToSignalsDirectory(String filename, BleProvider bleProvider,
+  void _saveToSignalsDirectory(String filename, FilesProvider filesProvider,
       {DateTime? fileDate}) async {
     // Show dialog to choose filename
     final TextEditingController nameController = TextEditingController();
@@ -1734,7 +1744,7 @@ class _RecordScreenState extends State<RecordScreen>
 
         // Save with chosen name to SIGNALS directory (pathType = 1)
         // so the renamed file appears in the same file list the user sees
-        await bleProvider.saveFileToSignalsWithName(
+        await filesProvider.saveFileToSignalsWithName(
           sourcePath,
           targetName,
           pathType: 1,
@@ -1749,7 +1759,8 @@ class _RecordScreenState extends State<RecordScreen>
     }
   }
 
-  void _showDeleteConfirmation(String filename, BleProvider bleProvider) async {
+  void _showDeleteConfirmation(String filename, FilesProvider filesProvider,
+      [SubGhzProvider? subGhz]) async {
     final result = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
@@ -1778,15 +1789,15 @@ class _RecordScreenState extends State<RecordScreen>
     if (result == true) {
       try {
         // Delete file from SIGNALS
-        await bleProvider.deleteFile(filename, pathType: 1); // SIGNALS
+        await filesProvider.deleteFile(filename, pathType: 1); // SIGNALS
         _showSuccessSnackBar(
             AppLocalizations.of(context)!.fileDeleted(filename));
 
         // Delete file from local recorded files list
-        bleProvider.removeRecordedFile(filename);
+        subGhz?.removeRecordedFile(filename);
 
         // Update overall file list
-        await bleProvider.refreshFileList(forceRefresh: true);
+        await filesProvider.refreshFileList(forceRefresh: true);
       } catch (e) {
         _showErrorSnackBar(
             AppLocalizations.of(context)!.failedToDeleteFile(e.toString()));

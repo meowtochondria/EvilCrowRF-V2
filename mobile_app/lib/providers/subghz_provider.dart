@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../connection/message_dispatcher.dart';
 import '../models/detected_signal.dart';
+import '../services/cc1101/cc1101_values.dart';
+import '../services/signal_processing/signal_data.dart';
 import '../services/logger_service.dart';
 import 'firmware_protocol.dart';
 
@@ -249,6 +251,46 @@ class SubGhzProvider extends ChangeNotifier {
   Future<void> sendSetTimeCommand() async {
     final cmd = FirmwareBinaryProtocol.createSetTimeCommand(DateTime.now());
     await sendCommand?.call(cmd);
+  }
+
+  /// Validate a recording configuration (frequency, module, advanced params).
+  /// Returns a list of error strings (empty list = valid).
+  ///
+  /// Extracted from [BleProvider] for use in [RecordScreen]. Pure function —
+  /// does not touch provider state.
+  static List<String> validateRecordConfig(RecordConfig config) {
+    final errors = <String>[];
+
+    if (!CC1101Values.isValidFrequency(config.frequency)) {
+      final closest = CC1101Values.getClosestValidFrequency(config.frequency);
+      if (closest != null) {
+        errors.add(
+            'Invalid frequency ${config.frequency.toStringAsFixed(2)} MHz. Closest valid: ${closest.toStringAsFixed(2)} MHz');
+      } else {
+        errors.add(
+            'Invalid frequency ${config.frequency.toStringAsFixed(2)} MHz');
+      }
+    }
+
+    if (config.module < 0) {
+      errors.add('Invalid module number: ${config.module}');
+    }
+
+    if (config.advancedMode) {
+      if (config.dataRate != null &&
+          !CC1101Values.isValidDataRate(config.dataRate!)) {
+        errors.add(
+            'Invalid data rate ${config.dataRate!.toStringAsFixed(2)} kBaud');
+      }
+
+      if (config.deviation != null &&
+          !CC1101Values.isValidDeviation(config.deviation!)) {
+        errors.add(
+            'Invalid deviation ${config.deviation!.toStringAsFixed(2)} kHz');
+      }
+    }
+
+    return errors;
   }
 
   // ══════════════════════════════════════════════════════════════

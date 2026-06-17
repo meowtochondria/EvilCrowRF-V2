@@ -435,6 +435,23 @@ class FilesProvider extends ChangeNotifier {
     return result['success'] == true;
   }
 
+  /// Save a file to a specific path with a chosen name. Used by the recording
+  /// flow to persist captured signals.
+  Future<void> saveFileToSignalsWithName(
+    String sourcePath,
+    String targetName, {
+    int pathType = 1,
+    DateTime? preserveDate,
+  }) async {
+    final cmd = FirmwareBinaryProtocol.createSaveToSignalsWithNameCommand(
+      sourcePath,
+      targetName,
+      pathType: pathType,
+      preserveDate: preserveDate,
+    );
+    await sendCommand?.call(cmd);
+  }
+
   Future<bool> moveFile(String sourcePath, String destinationPath,
       {int? sourcePathType, int? destPathType}) async {
     _pendingMoveCompleter = Completer<Map<String, dynamic>>();

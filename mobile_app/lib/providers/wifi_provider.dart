@@ -6,6 +6,7 @@ import 'package:network_info_plus/network_info_plus.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/status.dart' as ws_status;
 import '../services/logger_service.dart';
+import '../services/connection_history_service.dart';
 import '../connection/message_dispatcher.dart';
 import 'firmware_protocol.dart';
 
@@ -180,6 +181,15 @@ class WifiProvider extends ChangeNotifier {
 
       _isConnected = true;
       _isConnecting = false;
+
+      // Persist successful connection (F3 of refactor.md).
+      // Fire-and-forget — failure here must not block connection.
+      // ignore: discarded_futures
+      ConnectionHistoryService.saveConnection(
+        transport: 'wifi',
+        wifiHost: host,
+      );
+
       notifyListeners();
 
       // 3. Start listening

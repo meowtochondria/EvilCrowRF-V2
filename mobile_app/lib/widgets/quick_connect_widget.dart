@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/ble_provider.dart';
+import '../providers/connection_state_provider.dart';
 import '../providers/wifi_provider.dart';
+import '../services/connection_history_service.dart';
 import '../services/logger_service.dart';
 import '../theme/app_colors.dart';
 
@@ -25,6 +27,23 @@ class _QuickConnectWidgetState extends State<QuickConnectWidget> {
     super.initState();
     // Listen for IP text changes so Connect button updates reactively
     _wifiIpController.addListener(_onIpTextChanged);
+
+    // F3/F4: prepopulate the IP field with the last successfully connected
+    // host (or the live `deviceHost` if already connected via WiFi).
+    _prepopulateFromHistory();
+  }
+
+  Future<void> _prepopulateFromHistory() async {
+    final lastHost = await ConnectionHistoryService.getLastWifiHost();
+    if (lastHost != null && lastHost.isNotEmpty && mounted) {
+      // Only set if user hasn't typed anything yet.
+      if (_wifiIpController.text.isEmpty) {
+        setState(() {
+          _wifiIpController.text = lastHost;
+        });
+        _onIpTextChanged();
+      }
+    }
   }
 
   /// Validate the IP/FQDN field value.
@@ -432,8 +451,19 @@ class _QuickConnectWidgetState extends State<QuickConnectWidget> {
   // ── WiFi Panel ─────────────────────────────────────────────────────
 
   Widget _buildWifiSection(BuildContext context) {
-    return Consumer<WifiProvider>(
-      builder: (context, wifiProvider, child) {
+    return Consumer2<WifiProvider, ConnectionStateProvider>(
+      builder: (context, wifiProvider, connectionState, child) {
+        // F4: when actively connected via WiFi, show the live host in the
+        // IP field (read-only style) — disable the field so the user cannot
+        // accidentally edit the active address.
+        if (connectionState.isConnected &&
+            connectionState.connectedTransport == 'wifi' &&
+            (wifiProvider.deviceHost ?? '').isNotEmpty &&
+            _wifiIpController.text != wifiProvider.deviceHost) {
+          _wifiIpController.text = wifiProvider.deviceHost!;
+          _onIpTextChanged();
+        }
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -488,6 +518,7 @@ class _QuickConnectWidgetState extends State<QuickConnectWidget> {
               ),
               style: Theme.of(context).textTheme.bodyMedium,
               enabled: !wifiProvider.isConnected && !wifiProvider.isConnecting,
+              readOnly: wifiProvider.isConnected,
             ),
             const SizedBox(height: 8),
 
@@ -508,6 +539,7 @@ class _QuickConnectWidgetState extends State<QuickConnectWidget> {
               ),
               style: Theme.of(context).textTheme.bodyMedium,
               enabled: !wifiProvider.isConnected && !wifiProvider.isConnecting,
+              readOnly: wifiProvider.isConnected,
             ),
             const SizedBox(height: 12),
 

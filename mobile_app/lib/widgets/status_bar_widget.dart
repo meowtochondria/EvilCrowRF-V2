@@ -162,6 +162,10 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
       builder: (context, bleProvider, wifiProvider, _) {
         final bleConnected = bleProvider.isConnected;
         final wifiConnected = wifiProvider.isConnected;
+        // F2 (refactor.md): when the *other* transport is connected, show the
+        // disabled icon in a muted (non-error) color so the user is not
+        // mislead into thinking something is wrong.
+        final otherTransportConnected = bleConnected || wifiConnected;
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0),
           child: Row(
@@ -169,10 +173,12 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
             children: [
               // 1. WiFi Connection Status
               _StatusIcon(
-                icon: Icons.wifi,
+                icon: wifiConnected ? Icons.wifi : Icons.wifi_off,
                 color: wifiConnected
                     ? AppColors.success
-                    : const Color(0xFFEF5350).withOpacity(0.5),
+                    : (otherTransportConnected
+                        ? AppColors.disabledText
+                        : const Color(0xFFEF5350).withOpacity(0.5)),
                 tooltip: wifiConnected
                     ? 'WiFi: Connected to ${wifiProvider.deviceHost ?? "device"}'
                     : 'WiFi: Not connected',
@@ -187,7 +193,9 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
                     : Icons.bluetooth_disabled,
                 color: bleConnected
                     ? const Color(0xFF42A5F5)
-                    : const Color(0xFFEF5350).withOpacity(0.5),
+                    : (otherTransportConnected
+                        ? AppColors.disabledText
+                        : const Color(0xFFEF5350).withOpacity(0.5)),
                 tooltip: bleConnected
                     ? AppLocalizations.of(context)!.connectedToDevice(
                         bleProvider.connectedDevice?.platformName ??

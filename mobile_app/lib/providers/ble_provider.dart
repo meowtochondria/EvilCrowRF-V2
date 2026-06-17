@@ -21,6 +21,7 @@ import '../services/cc1101/cc1101_values.dart';
 import '../services/binary_message_parser.dart';
 // import 'log_provider.dart'; // Unused import removed
 import '../services/logger_service.dart';
+import '../services/connection_history_service.dart';
 import '../connection/message_dispatcher.dart';
 
 class BleProvider extends ChangeNotifier {
@@ -671,6 +672,13 @@ class BleProvider extends ChangeNotifier {
 
           // Save this device for future quick connections
           await saveKnownDevice(device.id.toString());
+
+          // Persist successful connection (F3 of refactor.md).
+          // ignore: discarded_futures
+          ConnectionHistoryService.saveConnection(
+            transport: 'ble',
+            bleDeviceId: device.id.toString(),
+          );
 
           // IMPORTANT: Request MTU increase BEFORE enabling notifications.
           // Many Android BLE stacks require the MTU exchange to complete
