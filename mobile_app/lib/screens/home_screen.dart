@@ -245,11 +245,10 @@ class HomeTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<BleProvider, WifiProvider>(
-      builder: (context, bleProvider, wifiProvider, child) {
-        final isConnected = bleProvider.isConnected || wifiProvider.isConnected;
+    return Consumer<ConnectionStateProvider>(
+      builder: (context, connectionState, child) {
         // When connected, show scanner as main home content
-        if (isConnected) {
+        if (connectionState.isConnected) {
           return Column(
             children: [
               // Compact connection status bar
@@ -258,8 +257,7 @@ class HomeTab extends StatelessWidget {
                     const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
                 child: Row(
                   children: [
-                    const Icon(Icons.bluetooth_connected,
-                        size: 16, color: AppColors.success),
+                    _connectionIcon(connectionState.connectedTransport),
                     const SizedBox(width: 6),
                     Text(
                       'Connected',

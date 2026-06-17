@@ -20,6 +20,7 @@ import 'providers/subghz_provider.dart';
 import 'providers/nrf_provider.dart';
 import 'providers/bruter_provider.dart';
 import 'providers/ota_provider.dart';
+import 'providers/files_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -125,6 +126,16 @@ class MyApp extends StatelessWidget {
         }),
         ChangeNotifierProvider(create: (context) {
           final p = OtaProvider(context.read<MessageDispatcher>());
+          final ble = context.read<BleProvider>();
+          p.sendCommand = (cmd) async {
+            await ble.sendBinaryCommand(cmd);
+            return true;
+          };
+          p.notify = (l, m) => context.read<NotificationProvider>().showInfo(m);
+          return p;
+        }),
+        ChangeNotifierProvider(create: (context) {
+          final p = FilesProvider(context.read<MessageDispatcher>());
           final ble = context.read<BleProvider>();
           p.sendCommand = (cmd) async {
             await ble.sendBinaryCommand(cmd);
