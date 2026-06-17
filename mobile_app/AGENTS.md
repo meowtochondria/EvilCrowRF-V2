@@ -66,7 +66,7 @@ The canonical plan lives at `mobile_app/docs/refactor.md`.
 | M1: Connection abstraction & event bus | ✅ Done |
 | M2: Module provider extraction | ✅ Done (6 of 6) |
 | M3: Update consumers | ✅ Done. record_screen fully migrated off BleProvider (3-pass strategy from §3.5). settings_screen migration deferred — still uses BleProvider for ~30 fields. |
-| M4: Screen file splitting | 🔄 Mostly done. settings_screen split into `screens/settings/about_popup.dart` (612 lines) + `screens/settings/subghz_clone_dialog.dart` (530 lines). record_screen split into `screens/record/record_file_list.dart` (160 lines). file_viewer_screen split into `screens/file_viewer/file_viewer_text_tab.dart` (77 lines). Remaining: nrf/files/brute/protopirate full splits. |
+| M4: Screen file splitting | ✅ Mostly done. Extracts by screen: settings → about_popup.dart (612) + subghz_clone_dialog.dart (530); record → record_file_list.dart (160); file_viewer → file_viewer_text_tab.dart (77); nrf → nrf_mousejack_tab.dart (355) + nrf_spectrum_tab.dart (164) + nrf_section_card.dart (55) helper; brute → bruter_protocol.dart (526) model; protopirate → protopirate_result_card.dart (608); files → files_actions.dart (236). Models extracted: nrf_target.dart (29), bruter_protocol.dart (526). Net main-file reduction: -1700 lines across 6 screens. |
 | M5: Delete BleProvider | 🔄 In progress. Settings state (scannerRssi/bruterPower/bruterRepeats/radioPowerMod1/2/cpuTempOffsetDeciC/bruterDelayMs) migrated to SettingsProvider with own MessageDispatcher subscription. settings_screen and debug_screen updated. SettingsProvider.sendSettingsToDevice constructs the 9-byte payload + sends via BleProvider.sendBinaryCommand callback wired in main.dart. Remaining: extract BLE transport layer into BleConnectionProvider per §1.4. |
 | DevicePreferencesService (§5.4) | ✅ Done |
 | F1: Module parse fix | ✅ Done |
@@ -109,11 +109,19 @@ Work completed in this session toward implementing `mobile_app/docs/refactor.md`
 - settings_screen.dart: 4536 → 3404 lines (-1132 lines).
 - Public APIs added: `AboutPopup.show(context)`, `SubGhzCloneDialog.show(context, bleProvider)`.
 
-### M4 — record_screen + file_viewer_screen split (this session)
-- New: `screens/record/record_file_list.dart` (160 lines) — `RecordFileList` widget + `openRecordedFileViewer` helper.
-- record_screen.dart: 1819 → 1702 lines (-117 lines).
-- New: `screens/file_viewer/file_viewer_text_tab.dart` (77 lines) — `FileViewerTextTab` widget.
-- file_viewer_screen.dart: 937 → 892 lines (-45 lines).
+### M4 — nrf / brute / protopirate / files splits (this session)
+- **nrf_screen.dart**: 1546 → 1103 lines (-443)
+  - New: `screens/nrf/nrf_mousejack_tab.dart` (355) — `NrfMouseJackTab` StatefulWidget owning its own state (target selection, hide-unknown toggle, text controllers). Action callbacks now take `(targetIndex, text)` / `(targetIndex, path)`.
+  - New: `screens/nrf/nrf_spectrum_tab.dart` (164) — `NrfSpectrumTab` + private `_SpectrumPainter`.
+  - New: `widgets/nrf_section_card.dart` (55) — shared themed card container.
+  - New: `models/nrf_target.dart` (29) — `NrfTarget` data class.
+  - `NrfScreenState` lost `_hideUnknown`, `_selectedTargetIndex`, `_stringController`, `_duckyPathController` (now owned by the new tab widget).
+- **brute_screen.dart**: 1362 → 852 lines (-510)
+  - New: `models/bruter_protocol.dart` (526) — `BruterProtocol` data class + `bruterProtocols` const list + `getBruterCategories()` helper.
+- **protopirate_screen.dart**: 1315 → 721 lines (-594)
+  - New: `screens/protopirate/protopirate_result_card.dart` (608) — `ResultCard` + `ProtoBadge` widgets (made public so the screen's empty state can reference `ProtoBadge`).
+- **files_screen.dart**: 1370 → 1181 lines (-189)
+  - New: `screens/files/files_actions.dart` (236) — `FilesActions` static helpers for `showCreateDirectoryDialog` and `uploadFileFromDevice` (with success/error snackbar callbacks).
 
 ### M5 — settings state migrated to SettingsProvider (this session)
 - `lib/providers/settings_provider.dart`: extended with `scannerRssi`, `bruterPower`, `bruterRepeats`, `radioPowerMod1/2`, `cpuTempOffsetDeciC` fields, plus `sendSettingsToDevice(...)` that builds the 9-byte firmware payload and `syncFromDevice(...)` for inbound SettingsSync.

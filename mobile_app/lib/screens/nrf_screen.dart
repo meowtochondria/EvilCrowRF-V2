@@ -8,33 +8,8 @@ import '../providers/connection_state_provider.dart';
 import '../providers/firmware_protocol.dart';
 import '../models/nrf_jam_mode.dart';
 import '../theme/app_colors.dart';
-
-/// NRF target model for scanned devices
-class NrfTarget {
-  final String type;
-  final int channel;
-  final List<int> address;
-
-  NrfTarget({required this.type, required this.channel, required this.address});
-
-  String get addressHex => address
-      .map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase())
-      .join(':');
-
-  /// Convert device type code from firmware to human-readable string
-  static String typeFromCode(int code) {
-    switch (code) {
-      case 1:
-        return 'Microsoft';
-      case 2:
-        return 'MS Encrypted';
-      case 3:
-        return 'Logitech';
-      default:
-        return 'Unknown';
-    }
-  }
-}
+import 'nrf/nrf_mousejack_tab.dart';
+import 'nrf/nrf_spectrum_tab.dart';
 
 /// Full NRF24 screen with three tabs: MouseJack, Spectrum, Jammer.
 class NrfScreen extends StatefulWidget {
@@ -50,11 +25,6 @@ class _NrfScreenState extends State<NrfScreen>
   bool _initializing = false;
   bool _initFailed = false;
 
-  // Local UI state (not data)
-  int _selectedTargetIndex = -1;
-  final TextEditingController _stringController = TextEditingController();
-  final TextEditingController _duckyPathController = TextEditingController();
-
   // Jammer UI controls (local until sent to firmware)
   int _jamMode = 0;
   int _jamChannel = 50;
@@ -62,9 +32,6 @@ class _NrfScreenState extends State<NrfScreen>
   int _hopStop = 80;
   int _hopStep = 2;
   int _liveDwellMs = 0; // Live dwell slider value (0=turbo)
-
-  // MouseJack filter
-  bool _hideUnknown = false;
 
   @override
   void initState() {
@@ -78,8 +45,6 @@ class _NrfScreenState extends State<NrfScreen>
     // when user navigates away from NRF screen
     _cleanupNrf();
     _tabController.dispose();
-    _stringController.dispose();
-    _duckyPathController.dispose();
     super.dispose();
   }
 
@@ -153,24 +118,24 @@ class _NrfScreenState extends State<NrfScreen>
     nrf.nrfNotify();
   }
 
-  Future<void> _attackString(int targetIndex) async {
-    if (_stringController.text.isEmpty) return;
+  Future<void> _attackString(int targetIndex, String text) async {
+    if (text.isEmpty) return;
     final nrf = context.read<NrfProvider>();
     final cmd = FirmwareBinaryProtocol.createNrfAttackStringCommand(
       targetIndex,
-      _stringController.text,
+      text,
     );
     await nrf.sendCommand!(cmd);
     nrf.nrfAttacking = true;
     nrf.nrfNotify();
   }
 
-  Future<void> _attackDucky(int targetIndex) async {
-    if (_duckyPathController.text.isEmpty) return;
+  Future<void> _attackDucky(int targetIndex, String path) async {
+    if (path.isEmpty) return;
     final nrf = context.read<NrfProvider>();
     final cmd = FirmwareBinaryProtocol.createNrfAttackDuckyCommand(
       targetIndex,
-      _duckyPathController.text,
+      path,
     );
     await nrf.sendCommand!(cmd);
     nrf.nrfAttacking = true;
@@ -426,382 +391,30 @@ class _NrfScreenState extends State<NrfScreen>
   // ── MouseJack Tab ───────────────────────────────────────────
 
   Widget _buildMouseJackTab(NrfProvider nrf) {
-    final allTargets = nrf.nrfTargets;
-    final targets = _hideUnknown
-        ? allTargets.where((t) {
-            final code = t['deviceType'] ?? 0;
-            return NrfTarget.typeFromCode(code) != 'Unknown';
-          }).toList()
-        : allTargets;
-    final isScanning = nrf.nrfScanning;
-    final isAttacking = nrf.nrfAttacking;
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Scan controls
-          _buildSectionCard(
-            title: 'Scan',
-            icon: Icons.radar,
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: isScanning ? _stopScan : _startScan,
-                        icon: Icon(isScanning ? Icons.stop : Icons.play_arrow),
-                        label: Text(isScanning ? 'Stop Scan' : 'Start Scan'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: isScanning
-                              ? AppColors.error
-                              : AppColors.primaryAccent,
-                          foregroundColor: isScanning
-                              ? AppColors.onButton
-                              : AppColors.primaryBackground,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      onPressed: _requestScanStatus,
-                      icon: const Icon(Icons.refresh,
-                          color: AppColors.primaryAccent),
-                      tooltip: 'Refresh targets',
-                    ),
-                  ],
-                ),
-                // Hide Unknown toggle
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        height: 24,
-                        width: 36,
-                        child: Transform.scale(
-                          scale: 0.75,
-                          child: Switch(
-                            value: _hideUnknown,
-                            onChanged: (v) => setState(() {
-                              _hideUnknown = v;
-                              _selectedTargetIndex = -1;
-                            }),
-                            activeTrackColor:
-                                AppColors.primaryAccent.withValues(alpha: 0.5),
-                            activeThumbColor: AppColors.primaryAccent,
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Text('Hide Unknown',
-                          style: TextStyle(
-                              color: AppColors.secondaryText, fontSize: 12)),
-                      if (_hideUnknown && allTargets.length != targets.length)
-                        Text(
-                          '  (${allTargets.length - targets.length} hidden)',
-                          style: TextStyle(
-                              color: AppColors.disabledText, fontSize: 11),
-                        ),
-                    ],
-                  ),
-                ),
-                if (isScanning)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: LinearProgressIndicator(
-                      color: AppColors.primaryAccent,
-                      backgroundColor:
-                          AppColors.primaryAccent.withValues(alpha: 0.2),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Targets list
-          _buildSectionCard(
-            title: 'Targets (${targets.length})',
-            icon: Icons.devices,
-            child: targets.isEmpty
-                ? Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text('No devices found yet',
-                        style: TextStyle(
-                            color: AppColors.disabledText, fontSize: 13)),
-                  )
-                : ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: targets.length,
-                    itemBuilder: (ctx, idx) => _buildTargetTile(idx, targets),
-                  ),
-          ),
-          const SizedBox(height: 12),
-
-          // Attack controls (visible when target selected)
-          if (_selectedTargetIndex >= 0 &&
-              _selectedTargetIndex < targets.length)
-            _buildAttackSection(isAttacking),
-        ],
-      ),
+    return NrfMouseJackTab(
+      targets: nrf.nrfTargets,
+      scanning: nrf.nrfScanning,
+      attacking: nrf.nrfAttacking,
+      onStartScan: _startScan,
+      onStopScan: _stopScan,
+      onRefresh: _requestScanStatus,
+      onAttackString: _attackString,
+      onAttackDucky: _attackDucky,
+      onStopAttack: _stopAttack,
     );
   }
 
-  Widget _buildTargetTile(int index, List<Map<String, dynamic>> targets) {
-    final t = targets[index];
-    final typeName = NrfTarget.typeFromCode(t['deviceType'] ?? 0);
-    final channel = t['channel'] ?? 0;
-    final address = t['address'] as List? ?? [];
-    final addressHex = address
-        .map((b) => (b as int).toRadixString(16).padLeft(2, '0').toUpperCase())
-        .join(':');
-    final isSelected = _selectedTargetIndex == index;
-    return GestureDetector(
-      onTap: () => setState(() => _selectedTargetIndex = index),
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? AppColors.primaryAccent.withValues(alpha: 0.1)
-              : AppColors.surfaceElevated,
-          border: Border.all(
-            color:
-                isSelected ? AppColors.primaryAccent : AppColors.borderDefault,
-          ),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              typeName == 'Microsoft' || typeName == 'MS Encrypted'
-                  ? Icons.window
-                  : typeName == 'Logitech'
-                      ? Icons.keyboard
-                      : Icons.device_unknown,
-              color: AppColors.primaryAccent,
-              size: 28,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(typeName,
-                      style: TextStyle(
-                          color: AppColors.primaryText,
-                          fontWeight: FontWeight.bold)),
-                  Text('CH: $channel  Addr: $addressHex',
-                      style: TextStyle(
-                          color: AppColors.secondaryText, fontSize: 12)),
-                ],
-              ),
-            ),
-            if (isSelected)
-              const Icon(Icons.check_circle, color: AppColors.primaryAccent),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAttackSection(bool isAttacking) {
-    return _buildSectionCard(
-      title: 'Attack',
-      icon: Icons.bolt,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // String injection
-          Text('Inject Text',
-              style: TextStyle(
-                  color: AppColors.primaryText,
-                  fontWeight: FontWeight.w500,
-                  fontSize: 13)),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _stringController,
-                  style: const TextStyle(color: AppColors.primaryText),
-                  decoration: InputDecoration(
-                    hintText: 'Text to inject...',
-                    hintStyle: TextStyle(color: AppColors.disabledText),
-                    filled: true,
-                    fillColor: AppColors.primaryBackground,
-                    border: OutlineInputBorder(
-                      borderSide: BorderSide(color: AppColors.borderDefault),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              ElevatedButton(
-                onPressed: isAttacking
-                    ? null
-                    : () => _attackString(_selectedTargetIndex),
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryAccent,
-                    foregroundColor: AppColors.primaryBackground),
-                child: const Text('Send'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // DuckyScript
-          Text('DuckyScript',
-              style: TextStyle(
-                  color: AppColors.primaryText,
-                  fontWeight: FontWeight.w500,
-                  fontSize: 13)),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _duckyPathController,
-                  style: const TextStyle(color: AppColors.primaryText),
-                  decoration: InputDecoration(
-                    hintText: '/DATA/DUCKY/payload.txt',
-                    hintStyle: TextStyle(color: AppColors.disabledText),
-                    filled: true,
-                    fillColor: AppColors.primaryBackground,
-                    border: OutlineInputBorder(
-                      borderSide: BorderSide(color: AppColors.borderDefault),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              ElevatedButton(
-                onPressed: isAttacking
-                    ? null
-                    : () => _attackDucky(_selectedTargetIndex),
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.warning,
-                    foregroundColor: AppColors.primaryBackground),
-                child: const Text('Run'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // Stop button
-          if (isAttacking)
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _stopAttack,
-                icon: const Icon(Icons.stop),
-                label: const Text('Stop Attack'),
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.error,
-                    foregroundColor: AppColors.onButton),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
+  // _buildTargetTile + _buildAttackSection were extracted to
+  // NrfMouseJackTab (M4 of refactor.md).
 
   // ── Spectrum Tab ────────────────────────────────────────────
 
   Widget _buildSpectrumTab(NrfProvider nrf) {
-    final spectrumRunning = nrf.nrfSpectrumRunning;
-    final spectrumLevels = nrf.nrfSpectrumLevels;
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: spectrumRunning ? _stopSpectrum : _startSpectrum,
-                  icon: Icon(spectrumRunning ? Icons.stop : Icons.play_arrow),
-                  label: Text(spectrumRunning ? 'Stop' : 'Start Analyzer'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: spectrumRunning
-                        ? AppColors.error
-                        : AppColors.primaryAccent,
-                    foregroundColor: spectrumRunning
-                        ? AppColors.onButton
-                        : AppColors.primaryBackground,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          // Frequency labels
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('2.400 GHz',
-                  style:
-                      TextStyle(color: AppColors.secondaryText, fontSize: 11)),
-              Text('2.462 GHz',
-                  style:
-                      TextStyle(color: AppColors.secondaryText, fontSize: 11)),
-              Text('2.525 GHz',
-                  style:
-                      TextStyle(color: AppColors.secondaryText, fontSize: 11)),
-            ],
-          ),
-          const SizedBox(height: 4),
-          // Spectrum bar chart
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: AppColors.primaryBackground,
-                border: Border.all(color: AppColors.borderDefault),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: CustomPaint(
-                painter: _SpectrumPainter(spectrumLevels),
-                size: Size.infinite,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('CH 0',
-                  style:
-                      TextStyle(color: AppColors.disabledText, fontSize: 10)),
-              Text('CH 25',
-                  style:
-                      TextStyle(color: AppColors.disabledText, fontSize: 10)),
-              Text('CH 50',
-                  style:
-                      TextStyle(color: AppColors.disabledText, fontSize: 10)),
-              Text('CH 75',
-                  style:
-                      TextStyle(color: AppColors.disabledText, fontSize: 10)),
-              Text('CH 100',
-                  style:
-                      TextStyle(color: AppColors.disabledText, fontSize: 10)),
-              Text('CH 125',
-                  style:
-                      TextStyle(color: AppColors.disabledText, fontSize: 10)),
-            ],
-          ),
-        ],
-      ),
+    return NrfSpectrumTab(
+      running: nrf.nrfSpectrumRunning,
+      levels: nrf.nrfSpectrumLevels,
+      onStart: _startSpectrum,
+      onStop: _stopSpectrum,
     );
   }
 
@@ -1487,60 +1100,4 @@ class _ModeActionButton extends StatelessWidget {
   }
 }
 
-// ── Spectrum bar-chart painter ────────────────────────────────────
-
-class _SpectrumPainter extends CustomPainter {
-  final List<int> levels;
-  _SpectrumPainter(this.levels);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (levels.isEmpty) return;
-
-    final barWidth = size.width / levels.length;
-    // EMA max output is 100 (hit_pct capped at 100, EMA converges to it).
-    // Using 100.0 so a fully saturated channel fills the entire height.
-    const maxLevel = 100.0;
-
-    for (int i = 0; i < levels.length; i++) {
-      final level = levels[i].toDouble().clamp(0.0, maxLevel);
-      final barHeight = (level / maxLevel) * size.height;
-      final x = i * barWidth;
-
-      // Gradient color depending on energy level
-      final t = level / maxLevel;
-      final color = Color.lerp(
-        AppColors.primaryAccent.withValues(alpha: 0.4),
-        AppColors.primaryAccent,
-        t,
-      )!;
-
-      canvas.drawRect(
-        Rect.fromLTWH(x, size.height - barHeight, barWidth - 1, barHeight),
-        Paint()..color = color,
-      );
-
-      // Grid lines every 10 channels
-      if (i % 10 == 0) {
-        canvas.drawLine(
-          Offset(x, 0),
-          Offset(x, size.height),
-          Paint()
-            ..color = AppColors.borderDefault.withValues(alpha: 0.5)
-            ..strokeWidth = 0.5,
-        );
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _SpectrumPainter oldDelegate) {
-    // Avoid unnecessary repaints when levels haven't changed
-    if (identical(levels, oldDelegate.levels)) return false;
-    if (levels.length != oldDelegate.levels.length) return true;
-    for (int i = 0; i < levels.length; i++) {
-      if (levels[i] != oldDelegate.levels[i]) return true;
-    }
-    return false;
-  }
-}
+// _SpectrumPainter extracted to screens/nrf/nrf_spectrum_tab.dart (M4 of refactor.md).
