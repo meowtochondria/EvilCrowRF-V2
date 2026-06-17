@@ -7,7 +7,9 @@ import 'package:crypto/crypto.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:flutter/services.dart';
-import '../providers/ble_provider.dart';
+import '../providers/ota_provider.dart';
+import '../providers/connection_state_provider.dart';
+import '../providers/device_info_provider.dart';
 import '../providers/firmware_protocol.dart';
 import '../services/update_service.dart';
 import '../l10n/app_localizations.dart';
@@ -89,8 +91,7 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
   }
 
   void _loadCurrentVersion() {
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
-    final version = bleProvider.firmwareVersion;
+    final version = context.read<DeviceInfoProvider>().firmwareVersion;
     if (version.isNotEmpty) {
       setState(() => _currentVersion = version);
     }
@@ -221,8 +222,8 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
   Future<void> _startOtaTransfer() async {
     if (_firmwareBin == null) return;
 
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
-    if (!bleProvider.isConnected) return;
+    final otaProvider = context.read<OtaProvider>();
+    if (!context.read<ConnectionStateProvider>().isConnected) return;
 
     // Keep screen on during transfer
     WakelockPlus.enable();
@@ -244,7 +245,7 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
         _firmwareBin!.length,
         md5Str,
       );
-      await bleProvider.sendBinaryCommand(beginCmd);
+      await otaProvider.sendCommand!(beginCmd);
       await Future.delayed(const Duration(milliseconds: 300));
 
       // Step 2: Send firmware data in chunks using writeWithoutResponse for speed
@@ -261,7 +262,7 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
           Uint8List.fromList(chunk),
         );
         // Use writeWithoutResponse for much faster throughput
-        await bleProvider.sendBinaryCommand(dataCmd, withoutResponse: true);
+        await otaProvider.sendCommand!(dataCmd, withoutResponse: true);
 
         // Update UI every 20 chunks to reduce setState overhead
         if (i % 20 == 0 || i == totalChunks - 1) {
@@ -291,7 +292,7 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
 
       // Step 3: Send OTA_END (with response for reliability)
       final endCmd = FirmwareBinaryProtocol.createOtaEndCommand();
-      await bleProvider.sendBinaryCommand(endCmd);
+      await otaProvider.sendCommand!(endCmd);
 
       final totalTime = DateTime.now().difference(_transferStartTime!);
       setState(() {
@@ -313,7 +314,7 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
       // Send abort to firmware
       try {
         final abortCmd = FirmwareBinaryProtocol.createOtaAbortCommand();
-        await bleProvider.sendBinaryCommand(abortCmd);
+        await otaProvider.sendCommand!(abortCmd);
       } catch (_) {}
     } finally {
       // Release wake lock
@@ -351,8 +352,8 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
   Future<void> _flashLocalBinary() async {
     if (_localBin == null) return;
 
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
-    if (!bleProvider.isConnected) return;
+    final otaProvider = context.read<OtaProvider>();
+    if (!context.read<ConnectionStateProvider>().isConnected) return;
 
     // Keep screen on during transfer
     WakelockPlus.enable();
@@ -376,7 +377,7 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
         _localBin!.length,
         localMd5,
       );
-      await bleProvider.sendBinaryCommand(beginCmd);
+      await otaProvider.sendCommand!(beginCmd);
       await Future.delayed(const Duration(milliseconds: 300));
 
       // Step 2: Send firmware data in chunks using writeWithoutResponse
@@ -392,7 +393,7 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
         final dataCmd = FirmwareBinaryProtocol.createOtaDataCommand(
           Uint8List.fromList(chunk),
         );
-        await bleProvider.sendBinaryCommand(dataCmd, withoutResponse: true);
+        await otaProvider.sendCommand!(dataCmd, withoutResponse: true);
 
         // Update UI every 20 chunks
         if (i % 20 == 0 || i == totalChunks - 1) {
@@ -419,7 +420,7 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
 
       // Step 3: Send OTA_END
       final endCmd = FirmwareBinaryProtocol.createOtaEndCommand();
-      await bleProvider.sendBinaryCommand(endCmd);
+      await otaProvider.sendCommand!(endCmd);
 
       final totalTime = DateTime.now().difference(startTime);
       setState(() {
@@ -439,7 +440,7 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
 
       try {
         final abortCmd = FirmwareBinaryProtocol.createOtaAbortCommand();
-        await bleProvider.sendBinaryCommand(abortCmd);
+        await otaProvider.sendCommand!(abortCmd);
       } catch (_) {}
     } finally {
       WakelockPlus.disable();
@@ -447,14 +448,14 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
   }
 
   Future<void> _rebootDevice() async {
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
-    if (!bleProvider.isConnected) return;
+    final otaProvider = context.read<OtaProvider>();
+    if (!context.read<ConnectionStateProvider>().isConnected) return;
 
     // Notify BLE provider to auto-reconnect after reboot
-    bleProvider.notifyOtaReboot();
+    otaProvider.notifyOtaReboot(_currentVersion);
 
     final cmd = FirmwareBinaryProtocol.createOtaRebootCommand();
-    await bleProvider.sendBinaryCommand(cmd);
+    await otaProvider.sendCommand!(cmd);
 
     if (!mounted) return;
 
@@ -474,12 +475,12 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<BleProvider>(
-      builder: (context, bleProvider, _) {
+    return Consumer<OtaProvider>(
+      builder: (context, otaProvider, _) {
         // Keep current version in sync with BLE provider
-        if (bleProvider.firmwareVersion.isNotEmpty &&
+        if (context.read<DeviceInfoProvider>().firmwareVersion.isNotEmpty &&
             _currentVersion == 'Unknown') {
-          _currentVersion = bleProvider.firmwareVersion;
+          _currentVersion = context.read<DeviceInfoProvider>().firmwareVersion;
         }
         return Scaffold(
           backgroundColor: AppColors.primaryBackground,
@@ -494,7 +495,7 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildVersionCard(bleProvider),
+                _buildVersionCard(otaProvider),
                 const SizedBox(height: 16),
                 _buildUpdateCheckCard(),
                 if (_updateAvailable && _latestChangelog != null) ...[
@@ -512,7 +513,7 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
                   _buildErrorCard(),
                 ],
                 const SizedBox(height: 24),
-                _buildLocalFlashCard(bleProvider),
+                _buildLocalFlashCard(otaProvider),
               ],
             ),
           ),
@@ -521,7 +522,7 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildVersionCard(BleProvider bleProvider) {
+  Widget _buildVersionCard(OtaProvider _unused) {
     return _buildCard(
       title: AppLocalizations.of(context)!.deviceInfo,
       icon: Icons.info_outline,
@@ -530,11 +531,12 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
         children: [
           _buildInfoRow(
               AppLocalizations.of(context)!.currentFirmware, _currentVersion),
-          if (bleProvider.freeHeap != null)
-            _buildInfoRow('Free Heap', '${bleProvider.freeHeap} bytes'),
+          if (context.read<DeviceInfoProvider>().freeHeap != null)
+            _buildInfoRow('Free Heap',
+                '${context.read<DeviceInfoProvider>().freeHeap} bytes'),
           _buildInfoRow(
               AppLocalizations.of(context)!.connection,
-              bleProvider.isConnected
+              context.read<ConnectionStateProvider>().isConnected
                   ? AppLocalizations.of(context)!.connectedStatus
                   : AppLocalizations.of(context)!.disconnectedStatus),
         ],
@@ -819,7 +821,7 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
   // ── Helpers ─────────────────────────────────────────────────
 
   /// Debug-only card: pick a local .bin file and flash via BLE OTA.
-  Widget _buildLocalFlashCard(BleProvider bleProvider) {
+  Widget _buildLocalFlashCard(OtaProvider _unused) {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -890,7 +892,9 @@ class _OtaScreenState extends State<OtaScreen> with TickerProviderStateMixin {
                       const SizedBox(width: 8),
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: bleProvider.isConnected
+                          onPressed: context
+                                  .read<ConnectionStateProvider>()
+                                  .isConnected
                               ? _flashLocalBinary
                               : null,
                           icon: const Icon(Icons.flash_on),
@@ -1207,12 +1211,13 @@ class _RebootDialogState extends State<_RebootDialog>
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<BleProvider>(
-      builder: (context, bleProvider, _) {
+    return Consumer<OtaProvider>(
+      builder: (context, otaProvider, _) {
         // Consider reconnected after at least 3 seconds and firmware version is available
-        final isReconnected = bleProvider.isConnected &&
-            bleProvider.firmwareVersion.isNotEmpty &&
-            _elapsed > 3;
+        final isReconnected =
+            context.read<ConnectionStateProvider>().isConnected &&
+                context.read<DeviceInfoProvider>().firmwareVersion.isNotEmpty &&
+                _elapsed > 3;
 
         return AlertDialog(
           backgroundColor: AppColors.secondaryBackground,
@@ -1253,7 +1258,7 @@ class _RebootDialogState extends State<_RebootDialog>
                     size: 56, color: AppColors.success),
                 const SizedBox(height: 16),
                 Text(
-                  'Firmware updated to\nv${bleProvider.firmwareVersion}',
+                  'Firmware updated to\nv${context.read<DeviceInfoProvider>().firmwareVersion}',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     color: AppColors.success,

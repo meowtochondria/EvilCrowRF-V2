@@ -25,6 +25,7 @@ Keep it updated with any changes to how you want work done.
 - BleProvider is a legacy god-object (5124 lines) being phased out. It coexists during transition (Option A). New code should use the new providers.
 - BleProvider has a `messageDispatcher` field set externally. When set, `_handleCompleteResponse` forwards parsed responses to it.
 - WifiProvider similarly has a `messageDispatcher` field. Its `_handleBinaryFrame` dispatches through it.
+- All module providers have a `sendCommand` callback typed as `Future<bool> Function(Uint8List command, {bool withoutResponse})?`. Supports `withoutResponse: true` for fast BLE writes (OTA, chunked uploads).
 - `ConnectionStateProvider` wraps both BleProvider and WifiProvider for unified `isConnected` / `connectedTransport`.
 
 ## Architecture (Firmware)
@@ -64,7 +65,7 @@ The canonical plan lives at `mobile_app/docs/refactor.md`.
 | M0: HomeScreen bug fix | ✅ Done |
 | M1: Connection abstraction & event bus | ✅ Done |
 | M2: Module provider extraction | ✅ Done (6 of 6) |
-| M3: Update consumers | ✅ signal_scanner, transmit, file_viewer, brute, protopirate, nrf, home, files migrated. Widgets (status_bar, module_status, record_screen_widgets) already decoupled. record_screen and ota_screen deferred — tightly coupled to BLE-specific features (withoutResponse, addListener). Will migrate when BleConnectionProvider exists (M5). settings_screen (4,536 lines) deferred — will be split in M4 first. |
+| M3: Update consumers | ✅ signal_scanner, transmit, file_viewer, brute, protopirate, nrf, home, files, ota migrated. record_screen deferred — uses addListener pattern. settings_screen deferred — will be split in M4 first. Widgets (status_bar, module_status, record_screen_widgets) already decoupled. |
 | M4: Screen file splitting | ❌ Not started |
 | M5: Delete BleProvider | ❌ Not started |
 | DevicePreferencesService (§5.4) | ✅ Done |

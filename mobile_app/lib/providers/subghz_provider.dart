@@ -15,7 +15,7 @@ class SubGhzProvider extends ChangeNotifier {
   StreamSubscription<Map<String, dynamic>>? _subscription;
 
   /// Callback set by owner to send a raw binary command to the device.
-  Future<bool> Function(Uint8List)? sendCommand;
+  Future<bool> Function(Uint8List command, {bool withoutResponse})? sendCommand;
 
   /// Callback for user-facing notifications.
   void Function(String level, String message)? notify;

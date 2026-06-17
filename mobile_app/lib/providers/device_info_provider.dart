@@ -13,7 +13,7 @@ class DeviceInfoProvider extends ChangeNotifier {
   StreamSubscription<Map<String, dynamic>>? _subscription;
 
   // ── Connection to transport (set externally for sendCommand) ──
-  Future<bool> Function(Uint8List)? sendCommand;
+  Future<bool> Function(Uint8List command, {bool withoutResponse})? sendCommand;
 
   DeviceInfoProvider(this._messageDispatcher) {
     _subscription = _messageDispatcher.messages.listen(_dispatch);

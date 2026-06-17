@@ -88,8 +88,8 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (context) {
           final p = DeviceInfoProvider(context.read<MessageDispatcher>());
           final ble = context.read<BleProvider>();
-          p.sendCommand = (cmd) async {
-            await ble.sendBinaryCommand(cmd);
+          p.sendCommand = (cmd, {bool withoutResponse = false}) async {
+            await ble.sendBinaryCommand(cmd, withoutResponse: withoutResponse);
             return true;
           };
           return p;
@@ -97,8 +97,8 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (context) {
           final p = SubGhzProvider(context.read<MessageDispatcher>());
           final ble = context.read<BleProvider>();
-          p.sendCommand = (cmd) async {
-            await ble.sendBinaryCommand(cmd);
+          p.sendCommand = (cmd, {bool withoutResponse = false}) async {
+            await ble.sendBinaryCommand(cmd, withoutResponse: withoutResponse);
             return true;
           };
           p.notify = (l, m) => context.read<NotificationProvider>().showInfo(m);
@@ -107,8 +107,8 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (context) {
           final p = NrfProvider(context.read<MessageDispatcher>());
           final ble = context.read<BleProvider>();
-          p.sendCommand = (cmd) async {
-            await ble.sendBinaryCommand(cmd);
+          p.sendCommand = (cmd, {bool withoutResponse = false}) async {
+            await ble.sendBinaryCommand(cmd, withoutResponse: withoutResponse);
             return true;
           };
           p.notify = (l, m) => context.read<NotificationProvider>().showInfo(m);
@@ -117,8 +117,8 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (context) {
           final p = BruterProvider(context.read<MessageDispatcher>());
           final ble = context.read<BleProvider>();
-          p.sendCommand = (cmd) async {
-            await ble.sendBinaryCommand(cmd);
+          p.sendCommand = (cmd, {bool withoutResponse = false}) async {
+            await ble.sendBinaryCommand(cmd, withoutResponse: withoutResponse);
             return true;
           };
           p.notify = (l, m) => context.read<NotificationProvider>().showInfo(m);
@@ -127,8 +127,8 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (context) {
           final p = OtaProvider(context.read<MessageDispatcher>());
           final ble = context.read<BleProvider>();
-          p.sendCommand = (cmd) async {
-            await ble.sendBinaryCommand(cmd);
+          p.sendCommand = (cmd, {bool withoutResponse = false}) async {
+            await ble.sendBinaryCommand(cmd, withoutResponse: withoutResponse);
             return true;
           };
           p.notify = (l, m) => context.read<NotificationProvider>().showInfo(m);
@@ -137,8 +137,8 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (context) {
           final p = FilesProvider(context.read<MessageDispatcher>());
           final ble = context.read<BleProvider>();
-          p.sendCommand = (cmd) async {
-            await ble.sendBinaryCommand(cmd);
+          p.sendCommand = (cmd, {bool withoutResponse = false}) async {
+            await ble.sendBinaryCommand(cmd, withoutResponse: withoutResponse);
             return true;
           };
           p.notify = (l, m) => context.read<NotificationProvider>().showInfo(m);

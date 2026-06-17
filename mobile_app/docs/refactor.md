@@ -503,6 +503,77 @@ ChangeNotifierProvider(create: (context) => WifiProvider()),
 
 With all new providers registered in `MultiProvider`. The `ConnectionStateProvider` should be constructed with references to `BleConnectionProvider` and `WifiConnectionProvider` (or the existing `BleProvider`/`WifiProvider` if they're kept as-is during transition).
 
+### 3.4 Migration Status — Screens
+
+| File | Status | Provider(s) Used |
+|------|--------|-----------------|
+| `signal_scanner_screen.dart` | ✅ Done | `SubGhzProvider` |
+| `transmit_screen.dart` | ✅ Done | `SubGhzProvider` + `DeviceInfoProvider` + `ConnectionStateProvider` |
+| `file_viewer_screen.dart` | ✅ Done | `FilesProvider` + `ConnectionStateProvider` |
+| `brute_screen.dart` | ✅ Done | `BruterProvider` + `SettingsProvider` |
+| `protopirate_screen.dart` | ✅ Done | `NrfProvider` + `ConnectionStateProvider` |
+| `nrf_screen.dart` | ✅ Done | `NrfProvider` + `DeviceInfoProvider` + `ConnectionStateProvider` |
+| `home_screen.dart` | ✅ Done | `ConnectionStateProvider` + `BleProvider` (status only) |
+| `files_screen.dart` | ✅ Done | `FilesProvider` + `ConnectionStateProvider` |
+| `ota_screen.dart` | ✅ Done | `OtaProvider` + `ConnectionStateProvider` + `DeviceInfoProvider` |
+| `directory_picker_dialog.dart` | ✅ Done | `FilesProvider` |
+| `record_screen.dart` | ⏳ Blocked — see §3.5 | — |
+| `settings_screen.dart` | ⏳ Deferred to M4 | — |
+
+### 3.5 `record_screen.dart` Migration — Blocking Issues
+
+**17 distinct `BleProvider` coupling points:**
+
+| # | Pattern | Occurrences | Target |
+|---|---------|-------------|--------|
+| 1 | `BleProvider? _bleProvider` field | 1 | `SubGhzProvider? _subGhz` |
+| 2 | `Provider.of<BleProvider>(context, listen: false)` in `didChangeDependencies` | 1 | `context.read<SubGhzProvider>()` |
+| 3 | `_bleProvider?.addListener` / `.removeListener` | 4 | `_subGhz?.addListener` (ChangeNotifier supports it) |
+| 4 | `_bleProvider?.recordedRuntimeFiles` | 1 | `_subGhz?.recordedRuntimeFiles` (same field name) |
+| 5 | `bleProvider.isModuleJamming(i)` — method call | 8 | `subGhz.isJamming[i]` — map access |
+| 6 | `bleProvider.isModuleRecording(i)` — method call | 8 | `subGhz.isRecording[i]` — map access |
+| 7 | `bleProvider.isModuleAvailable(i)` | 5 | `context.read<DeviceInfoProvider>().isModuleAvailable(i)` |
+| 8 | `bleProvider.getModuleStatus(i)` | 4 | `context.read<DeviceInfoProvider>().getModuleStatus(i)` |
+| 9 | `bleProvider.sendStartJamCommand(...)` | 1 | `subGhz.sendStartJamCommand(...)` |
+| 10 | `bleProvider.sendIdleCommand(...)` | 2 | `subGhz.sendIdleCommand(...)` |
+| 11 | `bleProvider.sendRecordCommand(...)` | 1 | `subGhz.sendRecordCommand(...)` |
+| 12 | `bleProvider.sendGetStateCommand()` | 3 | `context.read<DeviceInfoProvider>().requestGetState()` |
+| 13 | `bleProvider.isConnected` | 5 | `context.read<ConnectionStateProvider>().isConnected` |
+| 14 | `bleProvider.validateRecordConfig(config)` | 1 | Not on `SubGhzProvider` — needs inlining or adding |
+| 15 | `final bleProvider = Provider.of<BleProvider>(...)` in action methods | 6 | `final subGhz = context.read<SubGhzProvider>()` |
+| 16 | `Consumer<BleProvider>` in widget tree | ~15 | `Consumer<SubGhzProvider>` |
+| 17 | Function signatures `(BleProvider bleProvider)` | 6 | `(SubGhzProvider subGhz)` |
+
+**Root cause of previous failed attempt:** Blind `sed` replacement of `bleProvider` → `subGhz` throughout the 1,819-line file corrupted the Dart AST. The widget tree has ~15 `Consumer<BleProvider>` blocks where `bleProvider` is the **builder parameter name** used both for reading state AND as the variable name in surrounding widget expression code (lines 1300-1360). The replacement turned widget tree expressions into class-level declarations.
+
+**Safe migration plan (3 passes):**
+
+Pass 1 — **Field + lifecycle** (6 edits, low risk):
+- Change `BleProvider? _bleProvider` to `SubGhzProvider? _subGhz`
+- Update `didChangeDependencies`: `Provider.of<BleProvider>(...)` → `context.read<SubGhzProvider>()`
+- Update `dispose`: `_bleProvider?.removeListener(...)` → `_subGhz?.removeListener(...)`
+- Update listener methods: `_bleProvider?.recordedRuntimeFiles` → `_subGhz?.recordedRuntimeFiles`
+- Update `_onModuleStateChanged`: `_bleProvider?.isModuleJamming(...)` → `_subGhz?.isJamming[...]`
+
+Pass 2 — **Action methods** (~50 lines, medium risk):
+- `_isModuleBusy`: `BleProvider` param → `SubGhzProvider` param, method calls → field/map access + `DeviceInfoProvider`
+- `_startJamming`: `Provider.of<BleProvider>` → `context.read<SubGhzProvider>()`, `isConnected` → `ConnectionStateProvider`, `isModuleAvailable` → `DeviceInfoProvider`, `sendGetStateCommand` → `DeviceInfoProvider.requestGetState`
+- `_startRecording`: Same pattern as `_startJamming` + `validateRecordConfig` inline
+- `_stopJamming`: Same pattern
+- `_startFrequencySearch` / `_stopFrequencySearch`: Same pattern
+
+Pass 3 — **Widget tree** (~300 lines across 15+ consumers, high risk):
+- Change `Consumer<BleProvider>` to `Consumer<SubGhzProvider>`
+- Rename builder parameter from `bleProvider` to `subGhz`
+- Replace `bleProvider.isModuleRecording(i)` with `subGhz.isRecording[i] ?? false`
+- Replace `bleProvider.isModuleJamming(i)` with `subGhz.isJamming[i] ?? false`
+- Replace `bleProvider.isModuleFrequencySearching(i)` with `subGhz.isFrequencySearching[i] ?? false`
+- Replace `bleProvider.getModuleStatus(i)` with `context.read<DeviceInfoProvider>().getModuleStatus(i)`
+- Replace `bleProvider.cc1101Modules` with `context.read<DeviceInfoProvider>().cc1101Modules`
+- Replace `bleProvider.recordedRuntimeFiles` with `subGhz.recordedRuntimeFiles`
+- Replace `bleProvider.detectedSignals` with `subGhz.detectedSignals`
+- Replace `bleProvider.isConnected` with `context.read<ConnectionStateProvider>().isConnected`
+
 ---
 
 ## 4. Milestone: Screen File Splitting (Pragmatic, Not Dogmatic)
