@@ -15,6 +15,7 @@ import 'providers/settings_provider.dart';
 import 'services/logger_service.dart';
 import 'theme/app_colors.dart';
 import 'connection/message_dispatcher.dart';
+import 'connection/ble_connection_provider.dart';
 import 'providers/device_info_provider.dart';
 import 'providers/subghz_provider.dart';
 import 'providers/nrf_provider.dart';
@@ -66,6 +67,14 @@ class MyApp extends StatelessWidget {
         // BleProvider handles BLE connections; on platforms without BLE
         // (e.g. Linux desktop) its init gracefully degrades.
         ChangeNotifierProvider(create: (context) {
+          final ble = BleConnectionProvider();
+          ble.messageDispatcher = context.read<MessageDispatcher>();
+          ble.init();
+          return ble;
+        }),
+        // Legacy BleProvider delegates transport to BleConnectionProvider.
+        // Kept during M5 transition for consumers not yet migrated.
+        ChangeNotifierProvider(create: (context) {
           final ble = BleProvider();
           ble.messageDispatcher = context.read<MessageDispatcher>();
           return ble;
@@ -77,6 +86,7 @@ class MyApp extends StatelessWidget {
         }),
         ChangeNotifierProvider(
           create: (context) => ConnectionStateProvider(
+            context.read<BleConnectionProvider>(),
             context.read<BleProvider>(),
             context.read<WifiProvider>(),
           ),
@@ -87,31 +97,32 @@ class MyApp extends StatelessWidget {
           final settings = SettingsProvider(
             messageDispatcher: context.read<MessageDispatcher>(),
           );
-          final ble = context.read<BleProvider>();
-          // SettingsProvider owns the device settings state. The actual BLE
-          // write is delegated back to BleProvider so we keep transport code
-          // in one place. M4/M5 of refactor.md.
+          final bleConn = context.read<BleConnectionProvider>();
+          // Send commands via the new transport provider.
           settings.sendCommand = (cmd, {bool withoutResponse = false}) async {
-            await ble.sendBinaryCommand(cmd, withoutResponse: withoutResponse);
+            await bleConn.sendBinaryCommand(cmd,
+                withoutResponse: withoutResponse);
             return true;
           };
           return settings;
         }),
-        // ── Module providers (transition era — coexist with BleProvider) ──
+        // ── Module providers (transition era — use BleConnectionProvider) ──
         ChangeNotifierProvider(create: (context) {
           final p = DeviceInfoProvider(context.read<MessageDispatcher>());
-          final ble = context.read<BleProvider>();
+          final bleConn = context.read<BleConnectionProvider>();
           p.sendCommand = (cmd, {bool withoutResponse = false}) async {
-            await ble.sendBinaryCommand(cmd, withoutResponse: withoutResponse);
+            await bleConn.sendBinaryCommand(cmd,
+                withoutResponse: withoutResponse);
             return true;
           };
           return p;
         }),
         ChangeNotifierProvider(create: (context) {
           final p = SubGhzProvider(context.read<MessageDispatcher>());
-          final ble = context.read<BleProvider>();
+          final bleConn = context.read<BleConnectionProvider>();
           p.sendCommand = (cmd, {bool withoutResponse = false}) async {
-            await ble.sendBinaryCommand(cmd, withoutResponse: withoutResponse);
+            await bleConn.sendBinaryCommand(cmd,
+                withoutResponse: withoutResponse);
             return true;
           };
           p.notify = (l, m) => context.read<NotificationProvider>().showInfo(m);
@@ -119,9 +130,10 @@ class MyApp extends StatelessWidget {
         }),
         ChangeNotifierProvider(create: (context) {
           final p = NrfProvider(context.read<MessageDispatcher>());
-          final ble = context.read<BleProvider>();
+          final bleConn = context.read<BleConnectionProvider>();
           p.sendCommand = (cmd, {bool withoutResponse = false}) async {
-            await ble.sendBinaryCommand(cmd, withoutResponse: withoutResponse);
+            await bleConn.sendBinaryCommand(cmd,
+                withoutResponse: withoutResponse);
             return true;
           };
           p.notify = (l, m) => context.read<NotificationProvider>().showInfo(m);
@@ -129,9 +141,10 @@ class MyApp extends StatelessWidget {
         }),
         ChangeNotifierProvider(create: (context) {
           final p = BruterProvider(context.read<MessageDispatcher>());
-          final ble = context.read<BleProvider>();
+          final bleConn = context.read<BleConnectionProvider>();
           p.sendCommand = (cmd, {bool withoutResponse = false}) async {
-            await ble.sendBinaryCommand(cmd, withoutResponse: withoutResponse);
+            await bleConn.sendBinaryCommand(cmd,
+                withoutResponse: withoutResponse);
             return true;
           };
           p.notify = (l, m) => context.read<NotificationProvider>().showInfo(m);
@@ -139,9 +152,10 @@ class MyApp extends StatelessWidget {
         }),
         ChangeNotifierProvider(create: (context) {
           final p = OtaProvider(context.read<MessageDispatcher>());
-          final ble = context.read<BleProvider>();
+          final bleConn = context.read<BleConnectionProvider>();
           p.sendCommand = (cmd, {bool withoutResponse = false}) async {
-            await ble.sendBinaryCommand(cmd, withoutResponse: withoutResponse);
+            await bleConn.sendBinaryCommand(cmd,
+                withoutResponse: withoutResponse);
             return true;
           };
           p.notify = (l, m) => context.read<NotificationProvider>().showInfo(m);
@@ -149,9 +163,10 @@ class MyApp extends StatelessWidget {
         }),
         ChangeNotifierProvider(create: (context) {
           final p = FilesProvider(context.read<MessageDispatcher>());
-          final ble = context.read<BleProvider>();
+          final bleConn = context.read<BleConnectionProvider>();
           p.sendCommand = (cmd, {bool withoutResponse = false}) async {
-            await ble.sendBinaryCommand(cmd, withoutResponse: withoutResponse);
+            await bleConn.sendBinaryCommand(cmd,
+                withoutResponse: withoutResponse);
             return true;
           };
           p.notify = (l, m) => context.read<NotificationProvider>().showInfo(m);
