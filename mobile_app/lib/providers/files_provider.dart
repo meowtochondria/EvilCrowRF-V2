@@ -101,6 +101,8 @@ class FilesProvider extends ChangeNotifier {
           fileList.add(FileItem.fromJson(Map<String, dynamic>.from(item)));
         }
       }
+      isLoadingFiles = false;
+      fileListProgress = 0.0;
       notifyListeners();
     }
   }
