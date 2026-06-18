@@ -8,6 +8,7 @@ import '../providers/notification_provider.dart';
 import '../providers/firmware_protocol.dart';
 import '../models/detected_signal.dart';
 import '../services/logger_service.dart';
+import '../providers/device_info_provider.dart';
 import '../theme/app_colors.dart';
 
 class SignalScannerScreen extends StatefulWidget {
@@ -63,6 +64,9 @@ class _SignalScannerScreenState extends State<SignalScannerScreen>
   void initState() {
     super.initState();
     _subGhz = context.read<SubGhzProvider>();
+    // Restore scanning state from device module status — if a module is
+    // in DetectSignal mode, the scan was left running across a tab switch.
+    _restoreScanningState();
     // Initialize spectrum levels
     for (final freq in _scanFrequencies) {
       _spectrumLevels[freq] = -120.0;
@@ -77,10 +81,9 @@ class _SignalScannerScreenState extends State<SignalScannerScreen>
 
   @override
   void dispose() {
-    // Stop scanning on the firmware when leaving this screen
-    if (_isScanning) {
-      _stopScanning();
-    }
+    // Don't stop scanning on dispose — scanning state is preserved across
+    // tab switches so the firmware keeps detecting signals in the background
+    // and UI state can be restored when the user returns.
     _decayTimer?.cancel();
     _spectrumAnimationController.dispose();
     super.dispose();
@@ -121,6 +124,28 @@ class _SignalScannerScreenState extends State<SignalScannerScreen>
       if (mounted) {
         Provider.of<NotificationProvider>(context, listen: false)
             .showError(AppLocalizations.of(context)!.errorStartingScan('$e'));
+      }
+    }
+  }
+
+  /// Check device module state and restore scanning UI if a module is
+  /// actively detecting. Called once during initState.
+  void _restoreScanningState() {
+    final devInfo = context.read<DeviceInfoProvider>();
+    final modules = devInfo.cc1101Modules;
+    if (modules == null || modules.isEmpty) return;
+
+    for (int i = 0; i < modules.length; i++) {
+      final mode = (modules[i]['mode'] as String?)?.toLowerCase() ?? '';
+      if (mode == 'detectsignal') {
+        _isScanning = true;
+        _selectedModule = i;
+        // Restart animation
+        if (_viewMode != 0) {
+          _spectrumAnimationController.repeat();
+        }
+        _startDecayTimer();
+        break;
       }
     }
   }
