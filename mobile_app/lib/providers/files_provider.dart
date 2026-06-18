@@ -124,14 +124,21 @@ class FilesProvider extends ChangeNotifier {
   void _handleFileSystem(dynamic data) {
     AppLogger.debug('File system response: $data');
     if (data is Map<String, dynamic>) {
-      // BinaryFileList.toJson() produces action: 'list' — route to files list handler
+      // Route binary protocol actions to their respective handlers
       final dataField = data['data'];
-      if (dataField is Map && dataField['action'] == 'list') {
-        final listData = dataField['files'];
-        if (listData is List) {
-          _handleFilesList(listData);
+      if (dataField is Map) {
+        final action = dataField['action'];
+        if (action == 'list') {
+          final listData = dataField['files'];
+          if (listData is List) {
+            _handleFilesList(listData);
+          }
+          return;
         }
-        return;
+        if (action == 'load') {
+          _handleFileData(Map<String, dynamic>.from(dataField));
+          return;
+        }
       }
 
       // Handle DirectoryTree
