@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
-import '../../providers/ble_provider.dart';
+import 'package:provider/provider.dart';
+import '../../providers/files_provider.dart';
 import '../../services/flipper_subdb_service.dart';
 import '../../services/logger_service.dart';
 import '../../theme/app_colors.dart';
@@ -10,18 +11,19 @@ import '../../theme/app_colors.dart';
 /// Extracted from `settings_screen.dart` as part of Milestone 4 (M4) of
 /// `docs/refactor.md` — see the file-splitting plan there.
 class SubGhzCloneDialog extends StatefulWidget {
-  final BleProvider bleProvider;
-  const SubGhzCloneDialog({super.key, required this.bleProvider});
+  final FilesProvider filesProvider;
+  const SubGhzCloneDialog({super.key, required this.filesProvider});
 
   @override
   State<SubGhzCloneDialog> createState() => _SubGhzCloneDialogState();
 
   /// Convenience entry point used from `SettingsScreen`.
-  static Future<void> show(BuildContext context, BleProvider bleProvider) {
+  static Future<void> show(BuildContext context) {
+    final filesProvider = context.read<FilesProvider>();
     return showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => SubGhzCloneDialog(bleProvider: bleProvider),
+      builder: (_) => SubGhzCloneDialog(filesProvider: filesProvider),
     );
   }
 }
@@ -178,7 +180,7 @@ class _SubGhzCloneDialogState extends State<SubGhzCloneDialog> {
         _progress = _completedPaths.length / _totalFiles;
       });
 
-      await widget.bleProvider
+      await widget.filesProvider
           .createDirectory(FlipperSubDbService.sdTargetFolder, pathType: 5);
       await Future.delayed(const Duration(milliseconds: 200));
 
@@ -204,7 +206,7 @@ class _SubGhzCloneDialogState extends State<SubGhzCloneDialog> {
           _statusText = 'Creating folder: $dir';
         });
         try {
-          await widget.bleProvider.createDirectory(dir, pathType: 5);
+          await widget.filesProvider.createDirectory(dir, pathType: 5);
           await Future.delayed(const Duration(milliseconds: 100));
         } catch (e) {
           // Directory might already exist, continue
@@ -247,7 +249,7 @@ class _SubGhzCloneDialogState extends State<SubGhzCloneDialog> {
         }
 
         try {
-          await widget.bleProvider.uploadFileFromBytes(
+          await widget.filesProvider.uploadFileFromBytes(
             file.content,
             targetPath,
             pathType: 5,

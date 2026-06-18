@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
-import '../providers/ble_provider.dart';
+import '../connection/ble_connection_provider.dart';
 import '../providers/connection_state_provider.dart';
 import '../providers/wifi_provider.dart';
 import '../services/connection_history_service.dart';
@@ -121,10 +121,9 @@ class _QuickConnectWidgetState extends State<QuickConnectWidget> {
   // ── BLE Panel ─────────────────────────────────────────────────────
 
   Widget _buildBleSection(BuildContext context) {
-    return Consumer<BleProvider>(
-      builder: (context, bleProvider, child) {
-        final bool bleUnavailable =
-            _isBleUnavailable(bleProvider.statusMessage);
+    return Consumer<BleConnectionProvider>(
+      builder: (context, bleConn, child) {
+        final bool bleUnavailable = _isBleUnavailable(bleConn.statusMessage);
 
         return Opacity(
           opacity: bleUnavailable ? 0.4 : 1.0,
@@ -147,7 +146,7 @@ class _QuickConnectWidgetState extends State<QuickConnectWidget> {
                             color: AppColors.primaryText,
                           ),
                     ),
-                    if (bleProvider.isConnected)
+                    if (bleConn.isConnected)
                       Container(
                         margin: const EdgeInsets.only(left: 8),
                         padding: const EdgeInsets.symmetric(
@@ -186,7 +185,7 @@ class _QuickConnectWidgetState extends State<QuickConnectWidget> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                _buildBleDeviceList(context, bleProvider),
+                _buildBleDeviceList(context, bleConn),
               ],
             ),
           ),
@@ -201,8 +200,9 @@ class _QuickConnectWidgetState extends State<QuickConnectWidget> {
         status.contains('Bluetooth not available');
   }
 
-  Widget _buildBleDeviceList(BuildContext context, BleProvider bleProvider) {
-    if (bleProvider.isConnected) {
+  Widget _buildBleDeviceList(
+      BuildContext context, BleConnectionProvider bleConn) {
+    if (bleConn.isConnected) {
       return Row(
         children: [
           const Icon(Icons.bluetooth_connected,
@@ -210,8 +210,7 @@ class _QuickConnectWidgetState extends State<QuickConnectWidget> {
           const SizedBox(width: 6),
           Expanded(
             child: Text(
-              AppLocalizations.of(context)!
-                  .connected(bleProvider.savedDeviceName),
+              AppLocalizations.of(context)!.connected(bleConn.savedDeviceName),
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: AppColors.success,
                     fontWeight: FontWeight.w500,
@@ -219,7 +218,7 @@ class _QuickConnectWidgetState extends State<QuickConnectWidget> {
             ),
           ),
           IconButton(
-            onPressed: () => bleProvider.disconnect(),
+            onPressed: () => bleConn.disconnect(),
             icon: const Icon(Icons.bluetooth_disabled),
             iconSize: 20,
             tooltip: AppLocalizations.of(context)!.disconnect,
@@ -234,7 +233,7 @@ class _QuickConnectWidgetState extends State<QuickConnectWidget> {
       );
     }
 
-    if (bleProvider.isScanning) {
+    if (bleConn.isScanning) {
       return SizedBox(
         width: double.infinity,
         child: ElevatedButton.icon(
@@ -249,25 +248,24 @@ class _QuickConnectWidgetState extends State<QuickConnectWidget> {
       );
     }
 
-    if (bleProvider.savedDeviceId != null) {
+    if (bleConn.savedDeviceId != null) {
       return Column(
         children: [
           _buildBleDeviceTile(
             context,
-            bleProvider.savedDeviceName,
-            bleProvider.savedDeviceId!,
-            () => bleProvider.quickConnect(),
+            bleConn.savedDeviceName,
+            bleConn.savedDeviceId!,
+            () => bleConn.quickConnect(),
             () {
-              bleProvider.clearDeviceCache();
-              bleProvider.statusMessage = '';
-              bleProvider.nrfNotify();
+              bleConn.clearDeviceCache();
+              bleConn.statusMessage = '';
             },
           ),
           const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: () => bleProvider.startScan(),
+              onPressed: () => bleConn.startScan(),
               icon: const Icon(Icons.bluetooth_searching),
               label: Text(AppLocalizations.of(context)!.scanForNewDevices),
             ),
@@ -277,10 +275,9 @@ class _QuickConnectWidgetState extends State<QuickConnectWidget> {
     }
 
     // No saved devices — scan results
-    final supported = bleProvider.supportedScanResults;
-    final bool isFallback =
-        supported.isEmpty && bleProvider.scanResults.isNotEmpty;
-    final devices = isFallback ? bleProvider.scanResults : supported;
+    final supported = bleConn.supportedScanResults;
+    final bool isFallback = supported.isEmpty && bleConn.scanResults.isNotEmpty;
+    final devices = isFallback ? bleConn.scanResults : supported;
     if (devices.isNotEmpty) {
       return Column(
         children: [
@@ -295,13 +292,13 @@ class _QuickConnectWidgetState extends State<QuickConnectWidget> {
                 ),
           ),
           const SizedBox(height: 8),
-          ...devices.map((result) => _buildBleScanResultTile(
-              context, bleProvider, result, isFallback)),
+          ...devices.map((result) =>
+              _buildBleScanResultTile(context, bleConn, result, isFallback)),
           const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: () => bleProvider.startScan(),
+              onPressed: () => bleConn.startScan(),
               icon: const Icon(Icons.refresh),
               label: Text(AppLocalizations.of(context)!.scanAgain),
             ),
@@ -314,7 +311,7 @@ class _QuickConnectWidgetState extends State<QuickConnectWidget> {
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton.icon(
-        onPressed: () => bleProvider.startScan(),
+        onPressed: () => bleConn.startScan(),
         icon: const Icon(Icons.bluetooth_searching),
         label: Text(AppLocalizations.of(context)!.scanForDevices),
         style: ElevatedButton.styleFrom(
@@ -384,8 +381,8 @@ class _QuickConnectWidgetState extends State<QuickConnectWidget> {
     );
   }
 
-  Widget _buildBleScanResultTile(BuildContext context, BleProvider bleProvider,
-      dynamic result, bool isFallback) {
+  Widget _buildBleScanResultTile(BuildContext context,
+      BleConnectionProvider bleConn, dynamic result, bool isFallback) {
     final deviceId = result.device.id.toString();
     final deviceName = result.device.name.isNotEmpty
         ? result.device.name
@@ -424,7 +421,7 @@ class _QuickConnectWidgetState extends State<QuickConnectWidget> {
             ),
           ),
           ElevatedButton(
-            onPressed: () => _connectToBleDevice(bleProvider, result.device),
+            onPressed: () => _connectToBleDevice(bleConn, result.device),
             style: ElevatedButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.primary,
               foregroundColor: AppColors.primaryBackground,
@@ -439,10 +436,10 @@ class _QuickConnectWidgetState extends State<QuickConnectWidget> {
   }
 
   Future<void> _connectToBleDevice(
-      BleProvider bleProvider, dynamic device) async {
+      BleConnectionProvider bleConn, dynamic device) async {
     try {
-      await bleProvider.connectToDevice(device);
-      await bleProvider.saveKnownDevice(device.id.toString());
+      await bleConn.connectToDevice(device);
+      await bleConn.saveKnownDevice(device.id.toString());
     } catch (e) {
       AppLogger.severe('Connection failed', e);
     }

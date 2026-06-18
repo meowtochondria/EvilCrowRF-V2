@@ -350,7 +350,6 @@ class _FileViewerScreenState extends State<FileViewerScreen>
       context,
       fileName: widget.fileItem.name,
       filePath: widget.filePath,
-      pathType: widget.pathType,
     );
   }
 

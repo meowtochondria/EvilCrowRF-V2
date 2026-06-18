@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../l10n/app_localizations.dart';
-import '../providers/ble_provider.dart';
+import '../connection/ble_connection_provider.dart';
 import '../providers/connection_state_provider.dart';
 import '../providers/device_info_provider.dart';
 import '../providers/wifi_provider.dart';
@@ -313,10 +313,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           // Content
           Expanded(
-            child: Consumer3<ConnectionStateProvider, DeviceInfoProvider,
-                BleProvider>(
-              builder:
-                  (context, connectionState, deviceInfo, bleProvider, child) {
+            child: Consumer2<ConnectionStateProvider, DeviceInfoProvider>(
+              builder: (context, connectionState, deviceInfo, child) {
                 // Sync AP fields from device when config arrives on connect
                 _syncApControllersFromDevice(deviceInfo);
                 return SingleChildScrollView(
@@ -326,47 +324,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     children: [
                       // ===== SDR MODE (prominent toggle) =====
                       _buildSdrModeSection(
-                          context, deviceInfo, connectionState, bleProvider),
+                          context, deviceInfo, connectionState),
                       const SizedBox(height: 12),
 
                       // ===== App Settings (Expandable, collapsed) =====
-                      _buildAppSettingsSection(
-                          context, connectionState, bleProvider),
+                      _buildAppSettingsSection(context, connectionState),
                       const SizedBox(height: 12),
 
                       // ===== RF Settings (Expandable, collapsed) =====
-                      _buildRFSettingsSection(
-                          context, connectionState, bleProvider),
+                      _buildRFSettingsSection(context, connectionState),
                       const SizedBox(height: 12),
 
                       // ===== HW Buttons (Expandable, collapsed) =====
                       _buildHwButtonsSection(
-                          context, deviceInfo, connectionState, bleProvider),
+                          context, deviceInfo, connectionState),
                       const SizedBox(height: 12),
 
                       // ===== nRF24 Settings (Expandable, collapsed) =====
-                      _buildNrfSettingsSection(
-                          context, connectionState, bleProvider),
+                      _buildNrfSettingsSection(context, connectionState),
                       const SizedBox(height: 12),
 
                       // ===== Firmware Update (Expandable, collapsed) =====
                       _buildFirmwareUpdateSection(
-                          context, deviceInfo, connectionState, bleProvider),
+                          context, deviceInfo, connectionState),
                       const SizedBox(height: 12),
 
                       // ===== Connection (WiFi + Bluetooth) =====
                       _buildConnectionSection(
-                          context, deviceInfo, connectionState, bleProvider),
+                          context, deviceInfo, connectionState),
                       const SizedBox(height: 12),
 
                       // ===== Others (Expandable, collapsed) =====
-                      _buildOthersSection(
-                          context, deviceInfo, connectionState, bleProvider),
+                      _buildOthersSection(context, deviceInfo, connectionState),
                       const SizedBox(height: 12),
 
                       // ===== Device Management (factory reset, format SD) =====
                       _buildDeviceManagementSection(
-                          context, connectionState, bleProvider),
+                          context, deviceInfo, connectionState),
                     ],
                   ),
                 );
@@ -385,7 +379,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     BuildContext context,
     DeviceInfoProvider deviceInfo,
     ConnectionStateProvider connectionState,
-    BleProvider bleProvider,
   ) {
     final isActive = deviceInfo.sdrModeActive;
     final isConnected = connectionState.isConnected;
@@ -451,7 +444,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               ? FirmwareBinaryProtocol.createSdrEnableCommand()
                               : FirmwareBinaryProtocol
                                   .createSdrDisableCommand();
-                          await bleProvider.sendBinaryCommand(cmd);
+                          await context
+                              .read<BleConnectionProvider>()
+                              .sendBinaryCommand(cmd);
                           // Status update will arrive via MSG_SDR_STATUS (0xC4)
                         }
                       : null,
@@ -519,7 +514,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildAppSettingsSection(
     BuildContext context,
     ConnectionStateProvider connectionState,
-    BleProvider bleProvider,
   ) {
     return Card(
       child: Theme(
@@ -586,8 +580,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                       ElevatedButton.icon(
-                        onPressed: () =>
-                            _showClearDeviceCacheDialog(context, bleProvider),
+                        onPressed: () => _showClearDeviceCacheDialog(context),
                         icon: const Icon(Icons.bluetooth_disabled),
                         label: Text(
                             AppLocalizations.of(context)!.clearDeviceCache),
@@ -598,7 +591,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       ElevatedButton.icon(
                         onPressed: connectionState.isConnected
-                            ? () => bleProvider.rebootDevice()
+                            ? () => context
+                                .read<DeviceInfoProvider>()
+                                .rebootDevice()
                             : null,
                         icon: const Icon(Icons.restart_alt),
                         label: Text(AppLocalizations.of(context)!.rebootDevice),
@@ -622,7 +617,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildRFSettingsSection(
     BuildContext context,
     ConnectionStateProvider connectionState,
-    BleProvider bleProvider,
   ) {
     return Card(
       child: Theme(
@@ -653,7 +647,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Icons.flash_on,
                 AppLocalizations.of(context)!.bruteforceSettings,
                 AppColors.warning),
-            _buildBruteforceSettings(context, bleProvider),
+            _buildBruteforceSettings(context),
 
             const SizedBox(height: 8),
             const Divider(color: AppColors.divider, indent: 16, endIndent: 16),
@@ -663,7 +657,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Icons.cell_tower,
                 AppLocalizations.of(context)!.radioSettings,
                 AppColors.primaryAccent),
-            _buildRadioSettings(context, bleProvider),
+            _buildRadioSettings(context),
 
             const SizedBox(height: 8),
             const Divider(color: AppColors.divider, indent: 16, endIndent: 16),
@@ -673,7 +667,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Icons.search,
                 AppLocalizations.of(context)!.scannerSettings,
                 AppColors.searching),
-            _buildScannerSettings(context, bleProvider),
+            _buildScannerSettings(context),
 
             const SizedBox(height: 16),
           ],
@@ -702,8 +696,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildBruteforceSettings(
-      BuildContext context, BleProvider bleProvider) {
+  Widget _buildBruteforceSettings(BuildContext context) {
     return Consumer<SettingsProvider>(
       builder: (context, settingsProvider, child) {
         return Padding(
@@ -923,7 +916,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildRadioSettings(BuildContext context, BleProvider bleProvider) {
+  Widget _buildRadioSettings(BuildContext context) {
     return Consumer<SettingsProvider>(
       builder: (context, settingsProvider, child) {
         return Padding(
@@ -1058,7 +1051,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildScannerSettings(BuildContext context, BleProvider bleProvider) {
+  Widget _buildScannerSettings(BuildContext context) {
     return Consumer<SettingsProvider>(
       builder: (context, settingsProvider, child) {
         return Padding(
@@ -1139,7 +1132,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildNrfSettingsSection(
     BuildContext context,
     ConnectionStateProvider connectionState,
-    BleProvider bleProvider,
   ) {
     return Card(
       child: Theme(
@@ -1226,8 +1218,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             selected: isSelected,
                             onSelected: (_) {
                               settingsProvider.setNrfPaLevel(lvl);
-                              _sendNrfSettings(
-                                  context, bleProvider, settingsProvider);
+                              _sendNrfSettings(context, settingsProvider);
                             },
                             selectedColor:
                                 AppColors.nrfAccent.withValues(alpha: 0.2),
@@ -1280,8 +1271,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             selected: isSelected,
                             onSelected: (_) {
                               settingsProvider.setNrfDataRate(dr);
-                              _sendNrfSettings(
-                                  context, bleProvider, settingsProvider);
+                              _sendNrfSettings(context, settingsProvider);
                             },
                             selectedColor:
                                 AppColors.nrfAccent.withValues(alpha: 0.2),
@@ -1341,8 +1331,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         activeColor: AppColors.nrfAccent,
                         onChanged: (value) {
                           settingsProvider.setNrfChannel(value.round());
-                          _debouncedSendNrfSettings(
-                              context, bleProvider, settingsProvider);
+                          _debouncedSendNrfSettings(context, settingsProvider);
                         },
                       ),
 
@@ -1388,8 +1377,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         activeColor: AppColors.nrfAccent,
                         onChanged: (value) {
                           settingsProvider.setNrfAutoRetransmit(value.round());
-                          _debouncedSendNrfSettings(
-                              context, bleProvider, settingsProvider);
+                          _debouncedSendNrfSettings(context, settingsProvider);
                         },
                       ),
                     ],
@@ -1432,16 +1420,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   /// Debounced auto-send for nRF slider changes (500ms).
-  void _debouncedSendNrfSettings(BuildContext context, BleProvider bleProvider,
-      SettingsProvider settingsProvider) {
+  void _debouncedSendNrfSettings(
+      BuildContext context, SettingsProvider settingsProvider) {
     _nrfDebounceTimer?.cancel();
     _nrfDebounceTimer = Timer(const Duration(milliseconds: 500), () {
-      _sendNrfSettings(context, bleProvider, settingsProvider);
+      _sendNrfSettings(context, settingsProvider);
     });
   }
 
-  void _sendNrfSettings(BuildContext context, BleProvider bleProvider,
-      SettingsProvider settingsProvider) async {
+  void _sendNrfSettings(
+      BuildContext context, SettingsProvider settingsProvider) async {
     if (!context.read<ConnectionStateProvider>().isConnected) return;
     try {
       // Send NRF settings as a settings sync command
@@ -1452,7 +1440,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         settingsProvider.nrfChannel,
         settingsProvider.nrfAutoRetransmit,
       );
-      await bleProvider.sendBinaryCommand(cmd);
+      await context.read<BleConnectionProvider>().sendBinaryCommand(cmd);
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1481,7 +1469,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     BuildContext context,
     DeviceInfoProvider deviceInfo,
     ConnectionStateProvider connectionState,
-    BleProvider bleProvider,
   ) {
     return Card(
       child: Theme(
@@ -1588,7 +1575,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     width: double.infinity,
                     child: ElevatedButton.icon(
                       onPressed: connectionState.isConnected
-                          ? () => _checkFirmwareVersion(context, bleProvider)
+                          ? () => _checkFirmwareVersion(context)
                           : null,
                       icon: const Icon(Icons.refresh),
                       label: Text(AppLocalizations.of(context)!.checkFwVersion),
@@ -1642,7 +1629,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     BuildContext context,
     DeviceInfoProvider deviceInfo,
     ConnectionStateProvider connectionState,
-    BleProvider bleProvider,
   ) {
     return Card(
       child: Theme(
@@ -1674,7 +1660,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   // FlipperZero SubGHz DB Cloning
                   _buildSubGhzDbCloneButton(
-                      context, deviceInfo, connectionState, bleProvider),
+                      context, deviceInfo, connectionState),
                   const SizedBox(height: 16),
                   // Debug logs
                   _buildDebugButton(context),
@@ -1716,7 +1702,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     BuildContext context,
     DeviceInfoProvider deviceInfo,
     ConnectionStateProvider connectionState,
-    BleProvider bleProvider,
   ) {
     return Card(
       color: AppColors.secondaryBackground,
@@ -1761,7 +1746,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: connectionState.isConnected
-                    ? () => _startSubGhzDbCloning(context, bleProvider)
+                    ? () => _startSubGhzDbCloning(context)
                     : null,
                 icon: const Icon(Icons.download, size: 18),
                 label: Text('Clone SubGHz DB to SDCard'),
@@ -1791,8 +1776,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Future<void> _startSubGhzDbCloning(
-      BuildContext context, BleProvider bleProvider) async {
+  Future<void> _startSubGhzDbCloning(BuildContext context) async {
     // Show confirmation dialog first
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1859,7 +1843,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (confirmed != true || !context.mounted) return;
 
     // Show progress dialog
-    _showSubGhzCloneProgress(context, bleProvider);
+    _showSubGhzCloneProgress(context);
   }
 
   Widget _cloneInfoRow(String number, String text) {
@@ -1885,8 +1869,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  void _showSubGhzCloneProgress(BuildContext context, BleProvider bleProvider) {
-    SubGhzCloneDialog.show(context, bleProvider);
+  void _showSubGhzCloneProgress(BuildContext context) {
+    SubGhzCloneDialog.show(context);
   }
 
   /// Build the Connection section with WiFi and Bluetooth sub-sections.
@@ -1894,16 +1878,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     BuildContext context,
     DeviceInfoProvider deviceInfo,
     ConnectionStateProvider connectionState,
-    BleProvider bleProvider,
   ) {
     return Column(
       children: [
         // ── WiFi expandable section ──
-        _buildWifiSection(context, deviceInfo, connectionState, bleProvider),
+        _buildWifiSection(context, deviceInfo, connectionState),
         const SizedBox(height: 12),
         // ── Bluetooth expandable section ──
-        _buildBluetoothSection(
-            context, deviceInfo, connectionState, bleProvider),
+        _buildBluetoothSection(context, deviceInfo, connectionState),
       ],
     );
   }
@@ -1913,7 +1895,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     BuildContext context,
     DeviceInfoProvider deviceInfo,
     ConnectionStateProvider connectionState,
-    BleProvider bleProvider,
   ) {
     return Consumer<WifiProvider>(
       builder: (context, wifiProvider, child) {
@@ -1979,7 +1960,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                       const SizedBox(height: 12),
                       _buildAccessPointContent(
-                          context, wifiProvider, bleProvider),
+                          context, wifiProvider, deviceInfo),
                     ],
                   ),
                 ),
@@ -1992,7 +1973,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildAccessPointContent(BuildContext context,
-      WifiProvider wifiProvider, BleProvider bleProvider) {
+      WifiProvider wifiProvider, DeviceInfoProvider deviceInfo) {
     void _showApplyResultDialog(bool sent) {
       showDialog(
         context: context,
@@ -2127,7 +2108,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 .read<ConnectionStateProvider>()
                                 .connectedTransport ==
                             'ble') {
-                          success = await bleProvider.setWifiApConfig(
+                          success = await deviceInfo.applyWifiConfig(
                             name,
                             _apPasswordController.text.trim(),
                           );
@@ -2202,7 +2183,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           final cmd =
                               FirmwareBinaryProtocol.createApplyWifiCommand(
                                   ssid, password);
-                          sent = await bleProvider
+                          sent = await context
+                              .read<BleConnectionProvider>()
                               .sendBinaryCommand(cmd)
                               .then((_) => true)
                               .catchError((_) => false);
@@ -2233,7 +2215,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     BuildContext context,
     DeviceInfoProvider deviceInfo,
     ConnectionStateProvider connectionState,
-    BleProvider bleProvider,
   ) {
     return Card(
       child: Theme(
@@ -2307,7 +2288,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       const SizedBox(width: 8),
                       ElevatedButton(
                         onPressed: connectionState.isConnected
-                            ? () => _showChangeNameDialog(context, bleProvider)
+                            ? () => _showChangeNameDialog(context)
                             : null,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primaryAccent,
@@ -2331,8 +2312,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// Build Device Management section (Format SD, Factory Reset).
   Widget _buildDeviceManagementSection(
     BuildContext context,
+    DeviceInfoProvider deviceInfo,
     ConnectionStateProvider connectionState,
-    BleProvider bleProvider,
   ) {
     return Card(
       child: Theme(
@@ -2405,8 +2386,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           width: double.infinity,
                           child: ElevatedButton.icon(
                             onPressed: connectionState.isConnected
-                                ? () =>
-                                    _showFormatSDDialog(context, bleProvider)
+                                ? () => _showFormatSDDialog(context)
                                 : null,
                             icon: const Icon(Icons.sd_card),
                             label: const Text('Format SD Card'),
@@ -2463,8 +2443,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           width: double.infinity,
                           child: ElevatedButton.icon(
                             onPressed: connectionState.isConnected
-                                ? () => _showFactoryResetDialog(
-                                    context, bleProvider)
+                                ? () =>
+                                    _showFactoryResetDialog(context, deviceInfo)
                                 : null,
                             icon: const Icon(Icons.delete_forever),
                             label: const Text('Factory Reset'),
@@ -2712,7 +2692,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   /// Show dialog to change BLE device name.
-  void _showChangeNameDialog(BuildContext context, BleProvider bleProvider) {
+  void _showChangeNameDialog(BuildContext context) {
     final controller = TextEditingController(
         text: context.read<DeviceInfoProvider>().deviceName);
     showDialog(
@@ -2757,7 +2737,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               final name = controller.text.trim();
               if (name.isEmpty || name.length > 20) return;
               Navigator.of(ctx).pop();
-              final success = await bleProvider.setDeviceName(name);
+              final success =
+                  await context.read<DeviceInfoProvider>().setDeviceName(name);
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -2782,7 +2763,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   /// Show factory reset confirmation dialog with Yes/No.
-  void _showFactoryResetDialog(BuildContext context, BleProvider bleProvider) {
+  void _showFactoryResetDialog(
+      BuildContext context, DeviceInfoProvider deviceInfo) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -2813,7 +2795,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ElevatedButton(
             onPressed: () async {
               Navigator.of(ctx).pop();
-              final success = await bleProvider.factoryReset();
+              final success = await deviceInfo.factoryReset();
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -2839,7 +2821,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   /// Show Format SD Card confirmation dialog, then a non-dismissible
   /// progress dialog that auto-closes when the firmware sends the result.
-  void _showFormatSDDialog(BuildContext context, BleProvider bleProvider) {
+  void _showFormatSDDialog(BuildContext context) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -2869,7 +2851,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ElevatedButton(
             onPressed: () async {
               Navigator.of(ctx).pop();
-              final sent = await bleProvider.formatSDCard();
+              final sent = await context.read<FilesProvider>().formatSDCard();
               if (!context.mounted) return;
               if (!sent) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -2894,7 +2876,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  /// Non-dismissible progress dialog that listens to BleProvider.isFormattingSD
+  /// Non-dismissible progress dialog that listens to FilesProvider.isFormattingSD
   /// and closes automatically when the firmware result arrives.
   void _showSDFormatProgressDialog(BuildContext context) {
     bool closed = false;
@@ -2905,21 +2887,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
       barrierDismissible: false,
       builder: (ctx) => PopScope(
         canPop: false,
-        child: Consumer<BleProvider>(
-          builder: (context, ble, _) {
+        child: Consumer<FilesProvider>(
+          builder: (context, fs, _) {
             // Close as soon as formatting is done, regardless of whether
             // intermediate progress messages were received (BLE can drop them).
-            if (!ble.isFormattingSD && !closed) {
+            if (!fs.isFormattingSD && !closed) {
               closed = true;
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (ctx.mounted) Navigator.of(ctx).pop();
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text(ble.sdFormatSuccess
+                      content: Text(fs.sdFormatSuccess
                           ? 'SD card formatted successfully.'
                           : 'SD card format failed.'),
-                      backgroundColor: ble.sdFormatSuccess
+                      backgroundColor: fs.sdFormatSuccess
                           ? AppColors.success
                           : AppColors.error,
                       duration: const Duration(seconds: 3),
@@ -2930,7 +2912,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             }
 
             // Safety timeout — only start ONCE
-            if (ble.isFormattingSD && !timeoutStarted) {
+            if (fs.isFormattingSD && !timeoutStarted) {
               timeoutStarted = true;
               Future.delayed(const Duration(seconds: 30), () {
                 if (ctx.mounted && !closed) {
@@ -2966,8 +2948,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const CircularProgressIndicator(),
                   const SizedBox(height: 16),
                   Text(
-                    ble.sdFormatProgress.isNotEmpty
-                        ? ble.sdFormatProgress
+                    fs.sdFormatProgress.isNotEmpty
+                        ? fs.sdFormatProgress
                         : 'Formatting SD card, please wait.',
                     style: const TextStyle(color: AppColors.primaryText),
                     textAlign: TextAlign.center,
@@ -2995,7 +2977,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     BuildContext context,
     DeviceInfoProvider deviceInfo,
     ConnectionStateProvider connectionState,
-    BleProvider bleProvider,
   ) {
     return Card(
       child: Theme(
@@ -3076,13 +3057,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           await _pickReplaySubFile(
                               context, settingsProvider, 1);
                           if (!context.mounted) return;
-                          _sendButtonConfig(
-                              context, bleProvider, settingsProvider);
+                          _sendButtonConfig(context, settingsProvider);
                         },
                         onChanged: (action) {
                           settingsProvider.setButton1Action(action);
-                          _sendButtonConfig(
-                              context, bleProvider, settingsProvider);
+                          _sendButtonConfig(context, settingsProvider);
                         },
                       ),
 
@@ -3098,13 +3077,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           await _pickReplaySubFile(
                               context, settingsProvider, 2);
                           if (!context.mounted) return;
-                          _sendButtonConfig(
-                              context, bleProvider, settingsProvider);
+                          _sendButtonConfig(context, settingsProvider);
                         },
                         onChanged: (action) {
                           settingsProvider.setButton2Action(action);
-                          _sendButtonConfig(
-                              context, bleProvider, settingsProvider);
+                          _sendButtonConfig(context, settingsProvider);
                         },
                       ),
                     ],
@@ -3245,8 +3222,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  void _sendButtonConfig(BuildContext context, BleProvider bleProvider,
-      SettingsProvider settingsProvider) async {
+  void _sendButtonConfig(
+      BuildContext context, SettingsProvider settingsProvider) async {
     try {
       final cmd1 = FirmwareBinaryProtocol.createHwButtonConfigCommand(
         1,
@@ -3259,7 +3236,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ? settingsProvider.button1ReplayPath
             : null,
       );
-      await bleProvider.sendBinaryCommand(cmd1);
+      await context.read<BleConnectionProvider>().sendBinaryCommand(cmd1);
 
       final cmd2 = FirmwareBinaryProtocol.createHwButtonConfigCommand(
         2,
@@ -3272,7 +3249,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ? settingsProvider.button2ReplayPath
             : null,
       );
-      await bleProvider.sendBinaryCommand(cmd2);
+      await context.read<BleConnectionProvider>().sendBinaryCommand(cmd2);
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -3296,9 +3273,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   /// Request firmware version from device and show popup.
-  void _checkFirmwareVersion(BuildContext context, BleProvider bleProvider) {
+  void _checkFirmwareVersion(BuildContext context) {
     // The FW sends version on getState; request state refresh
-    bleProvider.sendGetStateCommand();
+    context.read<DeviceInfoProvider>().requestGetState();
 
     // Show current info (may already be populated from initial connect)
     final version = context.read<DeviceInfoProvider>().firmwareVersion;
@@ -3436,8 +3413,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  void _showClearDeviceCacheDialog(
-      BuildContext context, BleProvider bleProvider) {
+  void _showClearDeviceCacheDialog(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     showDialog(
       context: context,

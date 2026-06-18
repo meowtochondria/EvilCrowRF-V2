@@ -1136,7 +1136,6 @@ class _RecordScreenState extends State<RecordScreen>
       context,
       fileName: filename,
       filePath: filename,
-      pathType: 1, // SIGNALS
     );
     if (!confirmed) {
       return;

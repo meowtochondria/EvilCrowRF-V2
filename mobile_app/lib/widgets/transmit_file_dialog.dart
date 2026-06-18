@@ -2,68 +2,76 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../l10n/app_localizations.dart';
-import '../providers/ble_provider.dart';
+import '../providers/connection_state_provider.dart';
+import '../providers/subghz_provider.dart';
 import '../providers/notification_provider.dart';
 import '../theme/app_colors.dart';
 
 /// Widget for confirming and transmitting signal from file
 class TransmitFileDialog {
-  static const String _dontShowAgainKey = 'transmit_file_dialog_dont_show_again';
-  
+  static const String _dontShowAgainKey =
+      'transmit_file_dialog_dont_show_again';
+
   /// Checks if confirmation dialog should be shown
   static Future<bool> shouldShowDialog() async {
     final prefs = await SharedPreferences.getInstance();
     return !(prefs.getBool(_dontShowAgainKey) ?? false);
   }
-  
+
   /// Resets the "don't show again" setting
   static Future<void> resetDontShowAgain() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_dontShowAgainKey);
   }
-  
+
   /// Shows confirmation dialog and transmits signal
-  /// 
+  ///
   /// [context] - context for showing dialog
   /// [fileName] - filename for display
   /// [filePath] - file path for transmission
-  /// [pathType] - path type (0=RECORDS, 1=SIGNALS, 2=PRESETS, 3=TEMP)
-  /// 
+  ///
   /// Returns true if transmission started successfully, false if cancelled
   static Future<bool> showAndTransmit(
     BuildContext context, {
     required String fileName,
     required String filePath,
-    int pathType = 0,
   }) async {
-    final bleProvider = Provider.of<BleProvider>(context, listen: false);
-    
-    if (!bleProvider.isConnected) {
-      final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
-      notificationProvider.showError(AppLocalizations.of(context)!.notConnectedToDevice);
+    final connectionState =
+        Provider.of<ConnectionStateProvider>(context, listen: false);
+    final subghzProvider = Provider.of<SubGhzProvider>(context, listen: false);
+
+    if (!connectionState.isConnected) {
+      final notificationProvider =
+          Provider.of<NotificationProvider>(context, listen: false);
+      notificationProvider
+          .showError(AppLocalizations.of(context)!.notConnectedToDevice);
       return false;
     }
-    
+
     // Check if dialog needs to be shown
     final shouldShow = await shouldShowDialog();
     if (!shouldShow) {
       // Skip dialog and transmit immediately
       try {
-        await bleProvider.transmitFromFile(filePath, pathType: pathType);
+        await subghzProvider.sendTransmitFromFile(filePath);
         if (context.mounted) {
-          final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
-          notificationProvider.showSuccess(AppLocalizations.of(context)!.signalTransmissionStarted(fileName));
+          final notificationProvider =
+              Provider.of<NotificationProvider>(context, listen: false);
+          notificationProvider.showSuccess(AppLocalizations.of(context)!
+              .signalTransmissionStarted(fileName));
         }
         return true;
       } catch (e) {
         if (context.mounted) {
-          final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
-          notificationProvider.showError(AppLocalizations.of(context)!.transmissionError(e.toString()));
+          final notificationProvider =
+              Provider.of<NotificationProvider>(context, listen: false);
+          notificationProvider.showError(
+              AppLocalizations.of(context)!.transmissionError(e.toString()));
         }
         return false;
       }
     }
-    
+
     // Show confirmation dialog
     bool dontShowAgain = false;
     final confirmed = await showDialog<bool>(
@@ -106,11 +114,13 @@ class TransmitFileDialog {
                     decoration: BoxDecoration(
                       color: AppColors.warning.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+                      border: Border.all(
+                          color: AppColors.warning.withValues(alpha: 0.3)),
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.info_outline, size: 20, color: AppColors.warning),
+                        const Icon(Icons.info_outline,
+                            size: 20, color: AppColors.warning),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -149,7 +159,8 @@ class TransmitFileDialog {
                 ),
                 ElevatedButton.icon(
                   onPressed: () => Navigator.of(context).pop(true),
-                  icon: const Icon(Icons.send, color: AppColors.primaryBackground),
+                  icon: const Icon(Icons.send,
+                      color: AppColors.primaryBackground),
                   label: Text(AppLocalizations.of(context)!.transmit),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.warning,
@@ -162,31 +173,34 @@ class TransmitFileDialog {
         );
       },
     );
-    
+
     if (confirmed != true) return false;
-    
+
     // Save the "don't show again" setting
     if (dontShowAgain) {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_dontShowAgainKey, true);
     }
-    
+
     try {
       // Use full file path with directory
-      await bleProvider.transmitFromFile(filePath, pathType: pathType);
-      
+      await subghzProvider.sendTransmitFromFile(filePath);
+
       if (context.mounted) {
-        final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
-        notificationProvider.showSuccess(AppLocalizations.of(context)!.signalTransmissionStarted(fileName));
+        final notificationProvider =
+            Provider.of<NotificationProvider>(context, listen: false);
+        notificationProvider.showSuccess(
+            AppLocalizations.of(context)!.signalTransmissionStarted(fileName));
       }
       return true;
     } catch (e) {
       if (context.mounted) {
-        final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
-        notificationProvider.showError(AppLocalizations.of(context)!.transmissionError(e.toString()));
+        final notificationProvider =
+            Provider.of<NotificationProvider>(context, listen: false);
+        notificationProvider.showError(
+            AppLocalizations.of(context)!.transmissionError(e.toString()));
       }
       return false;
     }
   }
 }
-

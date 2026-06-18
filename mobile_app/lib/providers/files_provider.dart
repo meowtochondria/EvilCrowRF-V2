@@ -578,6 +578,27 @@ class FilesProvider extends ChangeNotifier {
     return {'success': true};
   }
 
+  /// Upload raw bytes as a file to the device SDCard.
+  /// Writes to a temp file first, then uploads via the standard pipeline.
+  Future<Map<String, dynamic>> uploadFileFromBytes(
+    Uint8List bytes,
+    String targetPath, {
+    int pathType = 0,
+    Function(double progress)? onProgress,
+  }) async {
+    final tempFile = File(
+        '${Directory.systemTemp.path}/_upload_tmp_${DateTime.now().millisecondsSinceEpoch}');
+    try {
+      await tempFile.writeAsBytes(bytes);
+      return await uploadFile(tempFile, targetPath,
+          pathType: pathType, onProgress: onProgress);
+    } finally {
+      try {
+        await tempFile.delete();
+      } catch (_) {}
+    }
+  }
+
   // ══════════════════════════════════════════════════════════════
   //  Lifecycle
   // ══════════════════════════════════════════════════════════════

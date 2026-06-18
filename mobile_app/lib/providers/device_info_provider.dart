@@ -306,6 +306,31 @@ class DeviceInfoProvider extends ChangeNotifier {
     return true;
   }
 
+  /// Reboot the device.
+  Future<bool> rebootDevice() async {
+    if (sendCommand == null) return false;
+    final cmd = FirmwareBinaryProtocol.createRebootCommand();
+    await sendCommand!(cmd);
+    return true;
+  }
+
+  /// Factory reset the device.
+  Future<bool> factoryReset() async {
+    if (sendCommand == null) return false;
+    final cmd = FirmwareBinaryProtocol.createFactoryResetCommand();
+    await sendCommand!(cmd);
+    return true;
+  }
+
+  /// Format the SD card.
+  Future<bool> formatSDCard() async {
+    if (sendCommand == null) return false;
+    final cmd = FirmwareBinaryProtocol.createFormatSDCommand();
+    await sendCommand!(cmd);
+    await sendCommand!(FirmwareBinaryProtocol.createGetStateCommand());
+    return true;
+  }
+
   // ══════════════════════════════════════════════════════════════
   //  Lifecycle
   // ══════════════════════════════════════════════════════════════

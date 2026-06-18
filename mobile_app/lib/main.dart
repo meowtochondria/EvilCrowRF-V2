@@ -5,7 +5,6 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'l10n/app_localizations.dart';
 import 'screens/home_screen.dart';
-import 'providers/ble_provider.dart';
 import 'providers/wifi_provider.dart';
 import 'providers/connection_state_provider.dart';
 import 'providers/log_provider.dart';
@@ -62,21 +61,14 @@ class MyApp extends StatelessWidget {
           create: (_) => MessageDispatcher(),
         ),
         ChangeNotifierProvider(create: (context) => LocaleProvider()),
-        // Always register both transport providers so the app supports
-        // BLE and WiFi simultaneously. Each screen chooses which to use.
-        // BleProvider handles BLE connections; on platforms without BLE
-        // (e.g. Linux desktop) its init gracefully degrades.
+        // BLE transport provider. Handles scan, connect, disconnect,
+        // characteristic discovery, and binary command sending.
+        // On platforms without BLE (e.g. Linux desktop) its init gracefully
+        // degrades.
         ChangeNotifierProvider(create: (context) {
           final ble = BleConnectionProvider();
           ble.messageDispatcher = context.read<MessageDispatcher>();
           ble.init();
-          return ble;
-        }),
-        // Legacy BleProvider delegates transport to BleConnectionProvider.
-        // Kept during M5 transition for consumers not yet migrated.
-        ChangeNotifierProvider(create: (context) {
-          final ble = BleProvider();
-          ble.messageDispatcher = context.read<MessageDispatcher>();
           return ble;
         }),
         ChangeNotifierProvider(create: (context) {
@@ -87,7 +79,6 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(
           create: (context) => ConnectionStateProvider(
             context.read<BleConnectionProvider>(),
-            context.read<BleProvider>(),
             context.read<WifiProvider>(),
           ),
         ),

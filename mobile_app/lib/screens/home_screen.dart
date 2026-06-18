@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
-import '../providers/ble_provider.dart';
+import '../connection/ble_connection_provider.dart';
+import '../providers/device_info_provider.dart';
 import '../providers/connection_state_provider.dart';
-import '../providers/log_provider.dart';
-import '../providers/notification_provider.dart';
 import '../widgets/quick_connect_widget.dart';
 
 import '../widgets/status_bar_widget.dart';
@@ -26,7 +25,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
-  BleProvider? _bleProvider; // Saved reference for safe dispose
+  BleConnectionProvider? _bleProvider; // Saved reference for safe dispose
 
   final List<Widget> _screens = [
     const HomeTab(),
@@ -41,48 +40,10 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     // Set callback for logging
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _bleProvider = Provider.of<BleProvider>(context, listen: false);
-      final logProvider = Provider.of<LogProvider>(context, listen: false);
-      final notificationProvider =
-          Provider.of<NotificationProvider>(context, listen: false);
+      _bleProvider = Provider.of<BleConnectionProvider>(context, listen: false);
 
       // Listen for connection state changes
       _bleProvider!.addListener(_onConnectionStateChanged);
-
-      // Forward BLE events to notification provider (status bar feedback)
-      _bleProvider!.setNotificationCallback((level, message) {
-        switch (level) {
-          case 'success':
-            notificationProvider.showSuccess(message);
-            break;
-          case 'error':
-            notificationProvider.showError(message);
-            break;
-          case 'warning':
-            notificationProvider.showWarning(message);
-            break;
-          default:
-            notificationProvider.showInfo(message);
-            break;
-        }
-      });
-
-      _bleProvider!.setLogCallback((level, message, {details}) {
-        switch (level) {
-          case 'command':
-            logProvider.addCommandLog(message);
-            break;
-          case 'response':
-            logProvider.addResponseLog(message);
-            break;
-          case 'info':
-            logProvider.addInfoLog(message);
-            break;
-          case 'error':
-            logProvider.addErrorLog(message);
-            break;
-        }
-      });
     });
   }
 
@@ -99,7 +60,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final ble = _bleProvider;
     if (ble != null) {
       // Show a SnackBar once when settings are synced after BLE connect
-      if (ble.settingsSynced && !_settingsSyncShown) {
+      if (context.read<DeviceInfoProvider>().settingsSynced &&
+          !_settingsSyncShown) {
         _settingsSyncShown = true;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -116,7 +78,7 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
       // Reset flag when disconnected so it shows again on next connect
-      if (!ble.isConnected) {
+      if (!context.read<ConnectionStateProvider>().isConnected) {
         _settingsSyncShown = false;
       }
     }
@@ -146,7 +108,8 @@ class _HomeScreenState extends State<HomeScreen> {
         onTap: (index) {
           final connectionState =
               Provider.of<ConnectionStateProvider>(context, listen: false);
-          final bleProvider = Provider.of<BleProvider>(context, listen: false);
+          final deviceInfoProvider =
+              Provider.of<DeviceInfoProvider>(context, listen: false);
           final isConnected = connectionState.isConnected;
 
           // Allow Home (index 0) and Settings (index 4) without connection
@@ -177,7 +140,7 @@ class _HomeScreenState extends State<HomeScreen> {
           }
 
           // Block NRF tab (index 2) if nRF module is not present
-          if (index == 2 && !bleProvider.nrfPresent) {
+          if (index == 2 && !deviceInfoProvider.nrfPresent) {
             final l10n = AppLocalizations.of(context)!;
             showDialog(
               context: context,
@@ -215,10 +178,10 @@ class _HomeScreenState extends State<HomeScreen> {
             label: AppLocalizations.of(context)!.subGhzTab,
           ),
           BottomNavigationBarItem(
-            icon: Consumer<BleProvider>(
-              builder: (context, ble, _) => Icon(
+            icon: Consumer2<ConnectionStateProvider, DeviceInfoProvider>(
+              builder: (context, connectionState, deviceInfo, _) => Icon(
                 Icons.wifi_tethering,
-                color: (ble.isConnected && !ble.nrfPresent)
+                color: (connectionState.isConnected && !deviceInfo.nrfPresent)
                     ? AppColors.greyDark
                     : null,
               ),
@@ -293,7 +256,7 @@ class HomeTab extends StatelessWidget {
 
               // Permissions Status (only show if there are errors)
               if (_isPermissionError(
-                  context.read<BleProvider>().statusMessage)) ...[
+                  context.read<BleConnectionProvider>().statusMessage)) ...[
                 Card(
                   color: AppColors.error,
                   child: Padding(
@@ -323,8 +286,11 @@ class HomeTab extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          _getLocalizedStatusMessage(context,
-                              context.read<BleProvider>().statusMessage),
+                          _getLocalizedStatusMessage(
+                              context,
+                              context
+                                  .read<BleConnectionProvider>()
+                                  .statusMessage),
                           style:
                               Theme.of(context).textTheme.bodyMedium?.copyWith(
                                     color: AppColors.primaryText,

@@ -408,7 +408,6 @@ class _FilesScreenState extends State<FilesScreen> {
       context,
       fileName: file.name,
       filePath: fullPath,
-      pathType: filesProvider.currentPathType,
     );
   }
 

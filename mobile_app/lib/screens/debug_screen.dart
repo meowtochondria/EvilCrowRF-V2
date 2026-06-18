@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/ble_provider.dart';
+import '../connection/ble_connection_provider.dart';
 import '../providers/connection_state_provider.dart';
 import '../providers/log_provider.dart';
 import '../providers/notification_provider.dart';
@@ -118,8 +118,10 @@ class _DebugScreenState extends State<DebugScreen> {
           ),
           // Content
           Expanded(
-            child: Consumer2<ConnectionStateProvider, BleProvider>(
-              builder: (context, connectionState, bleProvider, child) {
+            child: Consumer<ConnectionStateProvider>(
+              builder: (context, connectionState, child) {
+                final bleConnection = context.watch<BleConnectionProvider>();
+                final filesProvider = context.watch<FilesProvider>();
                 return SingleChildScrollView(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
@@ -161,11 +163,11 @@ class _DebugScreenState extends State<DebugScreen> {
                               const SizedBox(height: 8),
                               // Transport-specific status line
                               _buildTransportStatusLine(
-                                  context, connectionState, bleProvider),
+                                  context, connectionState),
                               if (connectionState.isConnected) ...[
                                 const SizedBox(height: 8),
                                 _buildActiveDeviceLine(
-                                    context, connectionState, bleProvider),
+                                    context, connectionState),
                               ],
                             ],
                           ),
@@ -206,18 +208,18 @@ class _DebugScreenState extends State<DebugScreen> {
                                   ),
                                   const SizedBox(width: 8),
                                   ElevatedButton(
-                                    onPressed: bleProvider.isConnected &&
-                                            !bleProvider.isLoadingFiles
+                                    onPressed: connectionState.isConnected &&
+                                            !filesProvider.isLoadingFiles
                                         ? () {
                                             if (_commandController
                                                 .text.isNotEmpty) {
-                                              bleProvider.sendCommand(
+                                              bleConnection.sendTextCommand(
                                                   _commandController.text);
                                               _commandController.clear();
                                             }
                                           }
                                         : null,
-                                    child: bleProvider.isLoadingFiles
+                                    child: filesProvider.isLoadingFiles
                                         ? const SizedBox(
                                             width: 16,
                                             height: 16,
@@ -259,8 +261,8 @@ class _DebugScreenState extends State<DebugScreen> {
                                 runSpacing: 8,
                                 children: [
                                   ElevatedButton.icon(
-                                    onPressed: bleProvider.isConnected
-                                        ? () => bleProvider.disconnect()
+                                    onPressed: connectionState.isConnected
+                                        ? () => bleConnection.disconnect()
                                         : null,
                                     icon: const Icon(Icons.bluetooth_disabled),
                                     label: Text(AppLocalizations.of(context)!
@@ -272,7 +274,7 @@ class _DebugScreenState extends State<DebugScreen> {
                                   ),
                                   ElevatedButton.icon(
                                     onPressed: () =>
-                                        bleProvider.clearKnownDevice(),
+                                        bleConnection.clearDeviceCache(),
                                     icon: const Icon(Icons.clear_all),
                                     label: Text(AppLocalizations.of(context)!
                                         .clearCachedDevice),
@@ -295,7 +297,7 @@ class _DebugScreenState extends State<DebugScreen> {
                                   ),
                                   ElevatedButton.icon(
                                     onPressed: () =>
-                                        bleProvider.requestPermissions(),
+                                        bleConnection.requestPermissions(),
                                     icon: const Icon(Icons.security),
                                     label: Text(AppLocalizations.of(context)!
                                         .requestPermissions),
@@ -321,49 +323,52 @@ class _DebugScreenState extends State<DebugScreen> {
                                 runSpacing: 8,
                                 children: [
                                   ElevatedButton(
-                                    onPressed: bleProvider.isConnected &&
-                                            !bleProvider.isLoadingFiles
-                                        ? () => bleProvider.sendCommand('SCAN')
+                                    onPressed: connectionState.isConnected &&
+                                            !filesProvider.isLoadingFiles
+                                        ? () => bleConnection
+                                            .sendTextCommand('SCAN')
                                         : null,
                                     child: const Text('SCAN'),
                                   ),
                                   ElevatedButton(
-                                    onPressed: bleProvider.isConnected &&
-                                            !bleProvider.isLoadingFiles
-                                        ? () =>
-                                            bleProvider.sendCommand('RECORD')
+                                    onPressed: connectionState.isConnected &&
+                                            !filesProvider.isLoadingFiles
+                                        ? () => bleConnection
+                                            .sendTextCommand('RECORD')
                                         : null,
                                     child: const Text('RECORD'),
                                   ),
                                   ElevatedButton(
-                                    onPressed: bleProvider.isConnected &&
-                                            !bleProvider.isLoadingFiles
-                                        ? () => bleProvider.sendCommand('PLAY')
+                                    onPressed: connectionState.isConnected &&
+                                            !filesProvider.isLoadingFiles
+                                        ? () => bleConnection
+                                            .sendTextCommand('PLAY')
                                         : null,
                                     child: const Text('PLAY'),
                                   ),
                                   ElevatedButton(
-                                    onPressed: bleProvider.isConnected &&
-                                            !bleProvider.isLoadingFiles
-                                        ? () => bleProvider.sendCommand('STOP')
+                                    onPressed: connectionState.isConnected &&
+                                            !filesProvider.isLoadingFiles
+                                        ? () => bleConnection
+                                            .sendTextCommand('STOP')
                                         : null,
                                     child: const Text('STOP'),
                                   ),
                                   ElevatedButton(
-                                    onPressed: bleProvider.isConnected &&
-                                            !bleProvider.isLoadingFiles
-                                        ? () =>
-                                            bleProvider.sendCommand('REBOOT')
+                                    onPressed: connectionState.isConnected &&
+                                            !filesProvider.isLoadingFiles
+                                        ? () => bleConnection
+                                            .sendTextCommand('REBOOT')
                                         : null,
                                     child: Text(AppLocalizations.of(context)!
                                         .rebootDevice),
                                   ),
                                   ElevatedButton(
-                                    onPressed: bleProvider.isConnected &&
-                                            !bleProvider.isLoadingFiles
-                                        ? () => bleProvider.refreshFileList()
+                                    onPressed: connectionState.isConnected &&
+                                            !filesProvider.isLoadingFiles
+                                        ? () => filesProvider.refreshFileList()
                                         : null,
-                                    child: bleProvider.isLoadingFiles
+                                    child: filesProvider.isLoadingFiles
                                         ? const SizedBox(
                                             width: 16,
                                             height: 16,
@@ -443,7 +448,7 @@ class _DebugScreenState extends State<DebugScreen> {
                                   );
                                 },
                               ),
-                              if (!bleProvider.isConnected)
+                              if (!connectionState.isConnected)
                                 Text(
                                   AppLocalizations.of(context)!
                                       .connectToDeviceToApply,
@@ -529,8 +534,8 @@ class _DebugScreenState extends State<DebugScreen> {
   Widget _buildTransportStatusLine(
     BuildContext context,
     ConnectionStateProvider connectionState,
-    BleProvider bleProvider,
   ) {
+    final bleConnection = context.read<BleConnectionProvider>();
     final transport = connectionState.connectedTransport;
     final l10n = AppLocalizations.of(context)!;
 
@@ -538,8 +543,8 @@ class _DebugScreenState extends State<DebugScreen> {
     Color color = AppColors.primaryText;
 
     if (transport == 'ble') {
-      line = l10n.bleStatusLabel(bleProvider.statusMessage);
-      color = _getStatusColor(bleProvider.statusMessage);
+      line = l10n.bleStatusLabel(bleConnection.statusMessage);
+      color = _getStatusColor(bleConnection.statusMessage);
     } else if (transport == 'wifi') {
       final wifi = context.read<WifiProvider>();
       final host = wifi.deviceHost ?? l10n.unknown;
@@ -547,10 +552,10 @@ class _DebugScreenState extends State<DebugScreen> {
       color = AppColors.success;
     } else {
       // Disconnected: surface whatever the BLE provider last reported.
-      line = bleProvider.statusMessage.isEmpty
+      line = bleConnection.statusMessage.isEmpty
           ? l10n.notConnectedToDevice
-          : bleProvider.statusMessage;
-      color = _getStatusColor(bleProvider.statusMessage);
+          : bleConnection.statusMessage;
+      color = _getStatusColor(bleConnection.statusMessage);
     }
 
     return Text(
@@ -563,8 +568,8 @@ class _DebugScreenState extends State<DebugScreen> {
   Widget _buildActiveDeviceLine(
     BuildContext context,
     ConnectionStateProvider connectionState,
-    BleProvider bleProvider,
   ) {
+    final bleConnection = context.read<BleConnectionProvider>();
     final l10n = AppLocalizations.of(context)!;
     final transport = connectionState.connectedTransport;
 
@@ -576,8 +581,8 @@ class _DebugScreenState extends State<DebugScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(l10n.deviceLabel(bleProvider.savedDeviceName)),
-        Text(l10n.deviceIdLabel(bleProvider.savedDeviceId ?? l10n.unknown)),
+        Text(l10n.deviceLabel(bleConnection.savedDeviceName)),
+        Text(l10n.deviceIdLabel(bleConnection.savedDeviceId ?? l10n.unknown)),
       ],
     );
   }
