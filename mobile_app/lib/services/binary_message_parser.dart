@@ -336,10 +336,10 @@ class BinarySignalDetected {
 
   Map<String, dynamic> toJson() {
     return {
-      'module': module.toString(),
+      'module': module,
       'frequency': (frequency / 1000000).toStringAsFixed(2),
-      'rssi': rssi.toString(),
-      'isBackgroundScanner': 'false', // Default for now
+      'rssi': rssi,
+      'isBackgroundScanner': false,
     };
   }
 }
