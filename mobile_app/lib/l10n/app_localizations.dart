@@ -3494,6 +3494,24 @@ abstract class AppLocalizations {
   /// **'ID: {id}'**
   String deviceIdLabel(String id);
 
+  /// No description provided for @invalidSettingsFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid settings format'**
+  String get invalidSettingsFormat;
+
+  /// No description provided for @modulationFsk2.
+  ///
+  /// In en, this message translates to:
+  /// **'2-FSK'**
+  String get modulationFsk2;
+
+  /// No description provided for @modulationFsk4.
+  ///
+  /// In en, this message translates to:
+  /// **'4-FSK'**
+  String get modulationFsk4;
+
   /// No description provided for @stateIdle.
   ///
   /// In en, this message translates to:
@@ -3842,6 +3860,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'ProtoPirate error: {error}'**
   String ppError(String error);
+
+  /// No description provided for @secondsAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'s ago'**
+  String get secondsAgo;
+
+  /// No description provided for @bleStatusLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'BLE: {status}'**
+  String bleStatusLabel(String status);
+
+  /// No description provided for @wifiConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'WiFi: connected to {host}'**
+  String wifiConnected(String host);
+
+  /// No description provided for @wifiHostLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'WiFi: {host}'**
+  String wifiHostLabel(String host);
+
+  /// No description provided for @wifiNotConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'WiFi: Not connected'**
+  String get wifiNotConnected;
+
+  /// No description provided for @bleNotConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'BLE: Not connected'**
+  String get bleNotConnected;
+
+  /// No description provided for @cpuTempUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'--°C'**
+  String get cpuTempUnknown;
+
+  /// No description provided for @cpuTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'CPU {temp}'**
+  String cpuTooltip(String temp);
+
+  /// No description provided for @cpuCoreInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'C0: {c0}MHz C1: {c1}MHz'**
+  String cpuCoreInfo(int c0, int c1);
+
+  /// No description provided for @connectedToHost.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected to {host}'**
+  String connectedToHost(String host);
 }
 
 class _AppLocalizationsDelegate

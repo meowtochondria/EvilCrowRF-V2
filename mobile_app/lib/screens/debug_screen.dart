@@ -42,7 +42,7 @@ class _DebugScreenState extends State<DebugScreen> {
               children: [
                 // Back button (no AppBar so this screen needs an explicit one).
                 IconButton(
-                  onPressed: () => Navigator.of(context).maybePop(),
+                  onPressed: () => Navigator.of(context).pop(),
                   icon: const Icon(Icons.arrow_back,
                       color: AppColors.primaryText),
                   tooltip: AppLocalizations.of(context)!.back,
@@ -538,12 +538,12 @@ class _DebugScreenState extends State<DebugScreen> {
     Color color = AppColors.primaryText;
 
     if (transport == 'ble') {
-      line = 'BLE: ${bleProvider.statusMessage}';
+      line = l10n.bleStatusLabel(bleProvider.statusMessage);
       color = _getStatusColor(bleProvider.statusMessage);
     } else if (transport == 'wifi') {
       final wifi = context.read<WifiProvider>();
-      final host = wifi.deviceHost ?? '—';
-      line = 'WiFi: connected to $host';
+      final host = wifi.deviceHost ?? l10n.unknown;
+      line = l10n.wifiConnected(host);
       color = AppColors.success;
     } else {
       // Disconnected: surface whatever the BLE provider last reported.
@@ -570,14 +570,14 @@ class _DebugScreenState extends State<DebugScreen> {
 
     if (transport == 'wifi') {
       final wifi = context.read<WifiProvider>();
-      final host = wifi.deviceHost ?? '—';
-      return Text(l10n.deviceLabel('WiFi: $host'));
+      final host = wifi.deviceHost ?? l10n.unknown;
+      return Text(l10n.wifiHostLabel(host));
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(l10n.deviceLabel(bleProvider.savedDeviceName)),
-        Text(l10n.deviceIdLabel(bleProvider.savedDeviceId ?? 'Unknown')),
+        Text(l10n.deviceIdLabel(bleProvider.savedDeviceId ?? l10n.unknown)),
       ],
     );
   }
@@ -617,7 +617,7 @@ class _DebugScreenState extends State<DebugScreen> {
                               .textTheme
                               .bodyMedium
                               ?.color
-                              ?.withOpacity(0.5),
+                              ?.withValues(alpha: 0.5),
                         ),
                       ),
                     )
@@ -645,11 +645,13 @@ class _DebugScreenState extends State<DebugScreen> {
   }
 
   String _formatTimestamp(DateTime ts) {
+    final l10n = AppLocalizations.of(context);
+    if (l10n == null) return ''; // fallback for tests
     final now = DateTime.now();
     final diff = now.difference(ts);
-    if (diff.inSeconds < 60) return '${diff.inSeconds}s ago';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inSeconds < 10) return l10n.justNow;
+    if (diff.inMinutes < 60) return '${diff.inMinutes}${l10n.minutesAgo}';
+    if (diff.inHours < 24) return '${diff.inHours}${l10n.hoursAgo}';
     return '${ts.year}-${ts.month.toString().padLeft(2, '0')}-${ts.day.toString().padLeft(2, '0')} '
         '${ts.hour.toString().padLeft(2, '0')}:${ts.minute.toString().padLeft(2, '0')}';
   }

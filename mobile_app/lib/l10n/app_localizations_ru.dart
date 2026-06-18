@@ -2000,6 +2000,15 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get invalidSettingsFormat => 'Неверный формат настроек';
+
+  @override
+  String get modulationFsk2 => '2-FSK';
+
+  @override
+  String get modulationFsk4 => '4-FSK';
+
+  @override
   String get stateIdle => 'Ожидание';
 
   @override
@@ -2199,5 +2208,47 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String ppError(String error) {
     return 'Ошибка ProtoPirate: $error';
+  }
+
+  @override
+  String get secondsAgo => 'с назад';
+
+  @override
+  String bleStatusLabel(String status) {
+    return 'BLE: $status';
+  }
+
+  @override
+  String wifiConnected(String host) {
+    return 'WiFi: подключено к $host';
+  }
+
+  @override
+  String wifiHostLabel(String host) {
+    return 'WiFi: $host';
+  }
+
+  @override
+  String get wifiNotConnected => 'WiFi: Не подключено';
+
+  @override
+  String get bleNotConnected => 'BLE: Не подключено';
+
+  @override
+  String get cpuTempUnknown => '--°C';
+
+  @override
+  String cpuTooltip(String temp) {
+    return 'CPU $temp';
+  }
+
+  @override
+  String cpuCoreInfo(int c0, int c1) {
+    return 'C0: $c0МГц C1: $c1МГц';
+  }
+
+  @override
+  String connectedToHost(String host) {
+    return 'Подключено к $host';
   }
 }

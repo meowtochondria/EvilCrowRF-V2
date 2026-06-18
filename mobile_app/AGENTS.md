@@ -9,6 +9,12 @@ Keep it updated with any changes to how you want work done.
 - **Mobile app**: `/mobile_app/` — Flutter/Dart
 - **All code lives in this single repo** — no separate submodules or external SDK paths
 
+## Localization
+
+- **All user-facing strings MUST use `AppLocalizations.of(context)!`** — never hardcode English or any other language.
+- `.arb` files are in `mobile_app/lib/l10n/`. When adding new UI text, add keys to both `app_en.arb` and `app_ru.arb`, then run `flutter gen-l10n`.
+- Use `withValues(alpha: ...)` instead of deprecated `withOpacity(...)`.
+
 ## Communication Style
 
 - Be concise and direct. Skip intros, summaries, and explanations of what you're about to do — just do it.

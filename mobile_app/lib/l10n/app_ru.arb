@@ -1230,6 +1230,10 @@
   "deviceIdLabel": "ID: {id}",
   "@deviceIdLabel": { "placeholders": { "id": { "type": "String" } } },
 
+  "invalidSettingsFormat": "Неверный формат настроек",
+  "modulationFsk2": "2-FSK",
+  "modulationFsk4": "4-FSK",
+
   "stateIdle": "Ожидание",
   "stateDetecting": "Обнаружение",
   "stateRecording": "Запись",
@@ -1304,5 +1308,48 @@
   "ppStopped": "ProtoPirate остановлен",
   "ppHistoryCleared": "История очищена",
   "ppError": "Ошибка ProtoPirate: {error}",
-  "@ppError": { "placeholders": { "error": { "type": "String" } } }
+  "@ppError": { "placeholders": { "error": { "type": "String" } } },
+
+  "secondsAgo": "с назад",
+  "bleStatusLabel": "BLE: {status}",
+  "@bleStatusLabel": {
+    "placeholders": {
+      "status": { "type": "String" }
+    }
+  },
+  "wifiConnected": "WiFi: подключено к {host}",
+  "@wifiConnected": {
+    "placeholders": {
+      "host": { "type": "String" }
+    }
+  },
+  "wifiHostLabel": "WiFi: {host}",
+  "@wifiHostLabel": {
+    "placeholders": {
+      "host": { "type": "String" }
+    }
+  },
+  "wifiNotConnected": "WiFi: Не подключено",
+  "bleNotConnected": "BLE: Не подключено",
+  "cpuTempUnknown": "--°C",
+  "cpuTooltip": "CPU {temp}",
+  "@cpuTooltip": {
+    "placeholders": {
+      "temp": { "type": "String" }
+    }
+  },
+  "cpuCoreInfo": "C0: {c0}МГц C1: {c1}МГц",
+  "@cpuCoreInfo": {
+    "placeholders": {
+      "c0": { "type": "int" },
+      "c1": { "type": "int" }
+    }
+  },
+
+  "connectedToHost": "Подключено к {host}",
+  "@connectedToHost": {
+    "placeholders": {
+      "host": { "type": "String" }
+    }
+  }
 }

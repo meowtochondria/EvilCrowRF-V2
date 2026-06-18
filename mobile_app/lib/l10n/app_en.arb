@@ -1247,6 +1247,10 @@
   "deviceIdLabel": "ID: {id}",
   "@deviceIdLabel": { "placeholders": { "id": { "type": "String" } } },
 
+  "invalidSettingsFormat": "Invalid settings format",
+  "modulationFsk2": "2-FSK",
+  "modulationFsk4": "4-FSK",
+
   "stateIdle": "Idle",
   "stateDetecting": "Detecting",
   "stateRecording": "Recording",
@@ -1321,5 +1325,48 @@
   "ppStopped": "ProtoPirate stopped",
   "ppHistoryCleared": "History cleared",
   "ppError": "ProtoPirate error: {error}",
-  "@ppError": { "placeholders": { "error": { "type": "String" } } }
+  "@ppError": { "placeholders": { "error": { "type": "String" } } },
+
+  "secondsAgo": "s ago",
+  "bleStatusLabel": "BLE: {status}",
+  "@bleStatusLabel": {
+    "placeholders": {
+      "status": { "type": "String" }
+    }
+  },
+  "wifiConnected": "WiFi: connected to {host}",
+  "@wifiConnected": {
+    "placeholders": {
+      "host": { "type": "String" }
+    }
+  },
+  "wifiHostLabel": "WiFi: {host}",
+  "@wifiHostLabel": {
+    "placeholders": {
+      "host": { "type": "String" }
+    }
+  },
+  "wifiNotConnected": "WiFi: Not connected",
+  "bleNotConnected": "BLE: Not connected",
+  "cpuTempUnknown": "--°C",
+  "cpuTooltip": "CPU {temp}",
+  "@cpuTooltip": {
+    "placeholders": {
+      "temp": { "type": "String" }
+    }
+  },
+  "cpuCoreInfo": "C0: {c0}MHz C1: {c1}MHz",
+  "@cpuCoreInfo": {
+    "placeholders": {
+      "c0": { "type": "int" },
+      "c1": { "type": "int" }
+    }
+  },
+
+  "connectedToHost": "Connected to {host}",
+  "@connectedToHost": {
+    "placeholders": {
+      "host": { "type": "String" }
+    }
+  }
 }

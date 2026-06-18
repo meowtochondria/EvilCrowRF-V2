@@ -1989,6 +1989,15 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get invalidSettingsFormat => 'Invalid settings format';
+
+  @override
+  String get modulationFsk2 => '2-FSK';
+
+  @override
+  String get modulationFsk4 => '4-FSK';
+
+  @override
   String get stateIdle => 'Idle';
 
   @override
@@ -2188,5 +2197,47 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String ppError(String error) {
     return 'ProtoPirate error: $error';
+  }
+
+  @override
+  String get secondsAgo => 's ago';
+
+  @override
+  String bleStatusLabel(String status) {
+    return 'BLE: $status';
+  }
+
+  @override
+  String wifiConnected(String host) {
+    return 'WiFi: connected to $host';
+  }
+
+  @override
+  String wifiHostLabel(String host) {
+    return 'WiFi: $host';
+  }
+
+  @override
+  String get wifiNotConnected => 'WiFi: Not connected';
+
+  @override
+  String get bleNotConnected => 'BLE: Not connected';
+
+  @override
+  String get cpuTempUnknown => '--°C';
+
+  @override
+  String cpuTooltip(String temp) {
+    return 'CPU $temp';
+  }
+
+  @override
+  String cpuCoreInfo(int c0, int c1) {
+    return 'C0: ${c0}MHz C1: ${c1}MHz';
+  }
+
+  @override
+  String connectedToHost(String host) {
+    return 'Connected to $host';
   }
 }

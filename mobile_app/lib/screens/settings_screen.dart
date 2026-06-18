@@ -5,11 +5,14 @@ import 'package:provider/provider.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/ble_provider.dart';
+import '../providers/connection_state_provider.dart';
+import '../providers/device_info_provider.dart';
 import '../providers/wifi_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/firmware_protocol.dart';
 import '../services/update_service.dart';
+import '../services/device_preferences_service.dart';
 import '../theme/app_colors.dart';
 import '../providers/files_provider.dart';
 import 'debug_screen.dart';
@@ -38,13 +41,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   /// Sync controllers from device state when AP config arrives on connect.
   /// Only populates if controllers are currently empty (user has not typed yet).
-  void _syncApControllersFromDevice(BleProvider bleProvider) {
-    if (_apNameController.text.isEmpty && bleProvider.wifiApName.isNotEmpty) {
-      _apNameController.text = bleProvider.wifiApName;
+  void _syncApControllersFromDevice(DeviceInfoProvider deviceInfo) {
+    if (_apNameController.text.isEmpty && deviceInfo.wifiApName.isNotEmpty) {
+      _apNameController.text = deviceInfo.wifiApName;
     }
     if (_apPasswordController.text.isEmpty &&
-        bleProvider.wifiApPassword.isNotEmpty) {
-      _apPasswordController.text = bleProvider.wifiApPassword;
+        deviceInfo.wifiApPassword.isNotEmpty) {
+      _apPasswordController.text = deviceInfo.wifiApPassword;
     }
   }
 
@@ -310,57 +313,60 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           // Content
           Expanded(
-            child: Consumer<BleProvider>(
-              builder: (context, bleProvider, child) {
+            child: Consumer3<ConnectionStateProvider, DeviceInfoProvider,
+                BleProvider>(
+              builder:
+                  (context, connectionState, deviceInfo, bleProvider, child) {
                 // Sync AP fields from device when config arrives on connect
-                _syncApControllersFromDevice(bleProvider);
+                _syncApControllersFromDevice(deviceInfo);
                 return SingleChildScrollView(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       // ===== SDR MODE (prominent toggle) =====
-                      _buildSdrModeSection(context, bleProvider),
-
+                      _buildSdrModeSection(
+                          context, deviceInfo, connectionState, bleProvider),
                       const SizedBox(height: 12),
 
                       // ===== App Settings (Expandable, collapsed) =====
-                      _buildAppSettingsSection(context, bleProvider),
-
+                      _buildAppSettingsSection(
+                          context, connectionState, bleProvider),
                       const SizedBox(height: 12),
 
                       // ===== RF Settings (Expandable, collapsed) =====
-                      _buildRFSettingsSection(context, bleProvider),
-
+                      _buildRFSettingsSection(
+                          context, connectionState, bleProvider),
                       const SizedBox(height: 12),
 
                       // ===== HW Buttons (Expandable, collapsed) =====
-                      _buildHwButtonsSection(context, bleProvider),
-
+                      _buildHwButtonsSection(
+                          context, deviceInfo, connectionState, bleProvider),
                       const SizedBox(height: 12),
 
                       // ===== nRF24 Settings (Expandable, collapsed) =====
-                      _buildNrfSettingsSection(context, bleProvider),
-
+                      _buildNrfSettingsSection(
+                          context, connectionState, bleProvider),
                       const SizedBox(height: 12),
 
                       // ===== Firmware Update (Expandable, collapsed) =====
-                      _buildFirmwareUpdateSection(context, bleProvider),
-
+                      _buildFirmwareUpdateSection(
+                          context, deviceInfo, connectionState, bleProvider),
                       const SizedBox(height: 12),
 
                       // ===== Connection (WiFi + Bluetooth) =====
-                      _buildConnectionSection(context, bleProvider),
-
+                      _buildConnectionSection(
+                          context, deviceInfo, connectionState, bleProvider),
                       const SizedBox(height: 12),
 
                       // ===== Others (Expandable, collapsed) =====
-                      _buildOthersSection(context, bleProvider),
-
+                      _buildOthersSection(
+                          context, deviceInfo, connectionState, bleProvider),
                       const SizedBox(height: 12),
 
                       // ===== Device Management (factory reset, format SD) =====
-                      _buildDeviceManagementSection(context, bleProvider),
+                      _buildDeviceManagementSection(
+                          context, connectionState, bleProvider),
                     ],
                   ),
                 );
@@ -375,9 +381,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// Build SDR MODE toggle section — prominent card at the top of Settings.
   /// When SDR mode is active, other CC1101 operations (record, TX, detect,
   /// jam) are blocked on the firmware side. The app disables SubGhz controls.
-  Widget _buildSdrModeSection(BuildContext context, BleProvider bleProvider) {
-    final isActive = bleProvider.sdrModeActive;
-    final isConnected = bleProvider.isConnected;
+  Widget _buildSdrModeSection(
+    BuildContext context,
+    DeviceInfoProvider deviceInfo,
+    ConnectionStateProvider connectionState,
+    BleProvider bleProvider,
+  ) {
+    final isActive = deviceInfo.sdrModeActive;
+    final isConnected = connectionState.isConnected;
 
     return Card(
       shape: RoundedRectangleBorder(
@@ -466,8 +477,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Freq: ${bleProvider.sdrFrequencyMHz.toStringAsFixed(2)} MHz  •  '
-                        'Mod: ${_modLabel(bleProvider.sdrModulation)}\n'
+                        'Freq: ${deviceInfo.sdrFrequencyMHz.toStringAsFixed(2)} MHz  •  '
+                        'Mod: ${_modLabel(deviceInfo.sdrModulation)}\n'
                         '${AppLocalizations.of(context)!.sdrConnectViaUsb}',
                         style: TextStyle(
                           color: AppColors.warning,
@@ -506,7 +517,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   /// Build App Settings expandable section (language, cache, permissions, debug).
   Widget _buildAppSettingsSection(
-      BuildContext context, BleProvider bleProvider) {
+    BuildContext context,
+    ConnectionStateProvider connectionState,
+    BleProvider bleProvider,
+  ) {
     return Card(
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -583,7 +597,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                       ElevatedButton.icon(
-                        onPressed: bleProvider.isConnected
+                        onPressed: connectionState.isConnected
                             ? () => bleProvider.rebootDevice()
                             : null,
                         icon: const Icon(Icons.restart_alt),
@@ -606,7 +620,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   /// Build the RF Settings expandable section with Bruteforce + Radio sub-sections.
   Widget _buildRFSettingsSection(
-      BuildContext context, BleProvider bleProvider) {
+    BuildContext context,
+    ConnectionStateProvider connectionState,
+    BleProvider bleProvider,
+  ) {
     return Card(
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -1120,7 +1137,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   /// Build nRF24 Settings expandable section.
   Widget _buildNrfSettingsSection(
-      BuildContext context, BleProvider bleProvider) {
+    BuildContext context,
+    ConnectionStateProvider connectionState,
+    BleProvider bleProvider,
+  ) {
     return Card(
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -1422,7 +1442,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _sendNrfSettings(BuildContext context, BleProvider bleProvider,
       SettingsProvider settingsProvider) async {
-    if (!bleProvider.isConnected) return;
+    if (!context.read<ConnectionStateProvider>().isConnected) return;
     try {
       // Send NRF settings as a settings sync command
       // Using MSG_SETTINGS_UPDATE (0xC1) with extended NRF payload
@@ -1458,7 +1478,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// Build Firmware Update expandable section.
   /// Currently only shows a "Check FW Version" button that queries the device.
   Widget _buildFirmwareUpdateSection(
-      BuildContext context, BleProvider bleProvider) {
+    BuildContext context,
+    DeviceInfoProvider deviceInfo,
+    ConnectionStateProvider connectionState,
+    BleProvider bleProvider,
+  ) {
     return Card(
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -1473,12 +1497,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           subtitle: Text(
-            bleProvider.firmwareVersion.isNotEmpty
+            deviceInfo.firmwareVersion.isNotEmpty
                 ? AppLocalizations.of(context)!
-                    .deviceFwVersion(bleProvider.firmwareVersion)
+                    .deviceFwVersion(deviceInfo.firmwareVersion)
                 : AppLocalizations.of(context)!.notConnected,
             style: TextStyle(
-              color: bleProvider.firmwareVersion.isNotEmpty
+              color: deviceInfo.firmwareVersion.isNotEmpty
                   ? AppColors.success
                   : AppColors.secondaryText,
               fontSize: 12,
@@ -1518,7 +1542,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(height: 16),
 
                   // FW version display
-                  if (bleProvider.firmwareVersion.isNotEmpty)
+                  if (deviceInfo.firmwareVersion.isNotEmpty)
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
@@ -1544,7 +1568,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 ),
                               ),
                               Text(
-                                'v${bleProvider.firmwareVersion}',
+                                'v${deviceInfo.firmwareVersion}',
                                 style: const TextStyle(
                                   color: AppColors.success,
                                   fontSize: 18,
@@ -1563,7 +1587,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: bleProvider.isConnected
+                      onPressed: connectionState.isConnected
                           ? () => _checkFirmwareVersion(context, bleProvider)
                           : null,
                       icon: const Icon(Icons.refresh),
@@ -1595,7 +1619,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                   ),
-                  if (!bleProvider.isConnected)
+                  if (!connectionState.isConnected)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: Text(
@@ -1614,7 +1638,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   /// Build Others section (FlipperZero SubGHz DB cloning, etc.)
-  Widget _buildOthersSection(BuildContext context, BleProvider bleProvider) {
+  Widget _buildOthersSection(
+    BuildContext context,
+    DeviceInfoProvider deviceInfo,
+    ConnectionStateProvider connectionState,
+    BleProvider bleProvider,
+  ) {
     return Card(
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -1644,7 +1673,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   // FlipperZero SubGHz DB Cloning
-                  _buildSubGhzDbCloneButton(context, bleProvider),
+                  _buildSubGhzDbCloneButton(
+                      context, deviceInfo, connectionState, bleProvider),
                   const SizedBox(height: 16),
                   // Debug logs
                   _buildDebugButton(context),
@@ -1683,7 +1713,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildSubGhzDbCloneButton(
-      BuildContext context, BleProvider bleProvider) {
+    BuildContext context,
+    DeviceInfoProvider deviceInfo,
+    ConnectionStateProvider connectionState,
+    BleProvider bleProvider,
+  ) {
     return Card(
       color: AppColors.secondaryBackground,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -1726,7 +1760,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: bleProvider.isConnected
+                onPressed: connectionState.isConnected
                     ? () => _startSubGhzDbCloning(context, bleProvider)
                     : null,
                 icon: const Icon(Icons.download, size: 18),
@@ -1739,7 +1773,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
             ),
-            if (!bleProvider.isConnected)
+            if (!connectionState.isConnected)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
@@ -1857,22 +1891,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   /// Build the Connection section with WiFi and Bluetooth sub-sections.
   Widget _buildConnectionSection(
-      BuildContext context, BleProvider bleProvider) {
+    BuildContext context,
+    DeviceInfoProvider deviceInfo,
+    ConnectionStateProvider connectionState,
+    BleProvider bleProvider,
+  ) {
     return Column(
       children: [
         // ── WiFi expandable section ──
-        _buildWifiSection(context, bleProvider),
+        _buildWifiSection(context, deviceInfo, connectionState, bleProvider),
         const SizedBox(height: 12),
         // ── Bluetooth expandable section ──
-        _buildBluetoothSection(context, bleProvider),
+        _buildBluetoothSection(
+            context, deviceInfo, connectionState, bleProvider),
       ],
     );
   }
 
-  /// Build the WiFi expandable section with connection settings and Access Point.
-  Widget _buildWifiSection(BuildContext context, BleProvider bleProvider) {
+  // ── Build the WiFi expandable section with connection settings and Access Point.
+  Widget _buildWifiSection(
+    BuildContext context,
+    DeviceInfoProvider deviceInfo,
+    ConnectionStateProvider connectionState,
+    BleProvider bleProvider,
+  ) {
     return Consumer<WifiProvider>(
       builder: (context, wifiProvider, child) {
+        // Re-read connectionState inside Consumer so the save/apply callbacks
+        // see the current value.
         return Card(
           child: Theme(
             data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -2063,8 +2109,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: ElevatedButton.icon(
                 onPressed: hasName
                     ? () async {
-                        if (!bleProvider.isConnected &&
-                            !wifiProvider.isConnected) {
+                        if (!context
+                            .read<ConnectionStateProvider>()
+                            .isConnected) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text(
@@ -2076,7 +2123,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         }
                         final name = _apNameController.text.trim();
                         bool success;
-                        if (bleProvider.isConnected) {
+                        if (context
+                                .read<ConnectionStateProvider>()
+                                .connectedTransport ==
+                            'ble') {
                           success = await bleProvider.setWifiApConfig(
                             name,
                             _apPasswordController.text.trim(),
@@ -2127,8 +2177,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: ElevatedButton.icon(
                 onPressed: hasName
                     ? () async {
-                        if (!wifiProvider.isConnected &&
-                            !bleProvider.isConnected) {
+                        if (!context
+                            .read<ConnectionStateProvider>()
+                            .isConnected) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text(
@@ -2141,7 +2192,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         final ssid = _apNameController.text.trim();
                         final password = _apPasswordController.text.trim();
                         bool sent = false;
-                        if (wifiProvider.isConnected) {
+                        if (context
+                                .read<ConnectionStateProvider>()
+                                .connectedTransport ==
+                            'wifi') {
                           sent = await wifiProvider.applyWifiConfig(
                               ssid, password);
                         } else {
@@ -2175,7 +2229,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   /// Build the Bluetooth expandable section with device name settings.
-  Widget _buildBluetoothSection(BuildContext context, BleProvider bleProvider) {
+  Widget _buildBluetoothSection(
+    BuildContext context,
+    DeviceInfoProvider deviceInfo,
+    ConnectionStateProvider connectionState,
+    BleProvider bleProvider,
+  ) {
     return Card(
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -2190,11 +2249,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           subtitle: Text(
-            bleProvider.isConnected
-                ? 'Device: ${bleProvider.deviceName}'
+            connectionState.isConnected
+                ? 'Device: ${deviceInfo.deviceName}'
                 : 'Bluetooth device settings',
             style: TextStyle(
-              color: bleProvider.isConnected
+              color: connectionState.isConnected
                   ? AppColors.success
                   : AppColors.secondaryText,
               fontSize: 12,
@@ -2236,7 +2295,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             border: Border.all(color: AppColors.borderDefault),
                           ),
                           child: Text(
-                            bleProvider.deviceName,
+                            deviceInfo.deviceName,
                             style: const TextStyle(
                               color: AppColors.primaryText,
                               fontSize: 14,
@@ -2247,7 +2306,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       const SizedBox(width: 8),
                       ElevatedButton(
-                        onPressed: bleProvider.isConnected
+                        onPressed: connectionState.isConnected
                             ? () => _showChangeNameDialog(context, bleProvider)
                             : null,
                         style: ElevatedButton.styleFrom(
@@ -2271,7 +2330,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   /// Build Device Management section (Format SD, Factory Reset).
   Widget _buildDeviceManagementSection(
-      BuildContext context, BleProvider bleProvider) {
+    BuildContext context,
+    ConnectionStateProvider connectionState,
+    BleProvider bleProvider,
+  ) {
     return Card(
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -2286,11 +2348,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           subtitle: Text(
-            bleProvider.isConnected
+            connectionState.isConnected
                 ? 'Format SD, Factory Reset'
                 : 'Not connected',
             style: TextStyle(
-              color: bleProvider.isConnected
+              color: connectionState.isConnected
                   ? AppColors.success
                   : AppColors.secondaryText,
               fontSize: 12,
@@ -2342,7 +2404,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton.icon(
-                            onPressed: bleProvider.isConnected
+                            onPressed: connectionState.isConnected
                                 ? () =>
                                     _showFormatSDDialog(context, bleProvider)
                                 : null,
@@ -2400,7 +2462,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton.icon(
-                            onPressed: bleProvider.isConnected
+                            onPressed: connectionState.isConnected
                                 ? () => _showFactoryResetDialog(
                                     context, bleProvider)
                                 : null,
@@ -2418,7 +2480,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
 
-                  if (!bleProvider.isConnected)
+                  if (!connectionState.isConnected)
                     const Padding(
                       padding: EdgeInsets.only(top: 8),
                       child: Text(
@@ -2651,7 +2713,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   /// Show dialog to change BLE device name.
   void _showChangeNameDialog(BuildContext context, BleProvider bleProvider) {
-    final controller = TextEditingController(text: bleProvider.deviceName);
+    final controller = TextEditingController(
+        text: context.read<DeviceInfoProvider>().deviceName);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -2928,7 +2991,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   /// Build HW Buttons configuration section.
-  Widget _buildHwButtonsSection(BuildContext context, BleProvider bleProvider) {
+  Widget _buildHwButtonsSection(
+    BuildContext context,
+    DeviceInfoProvider deviceInfo,
+    ConnectionStateProvider connectionState,
+    BleProvider bleProvider,
+  ) {
     return Card(
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -2953,18 +3021,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Consumer<SettingsProvider>(
               builder: (context, settingsProvider, child) {
                 // Reset sync flag on disconnect so we re-sync next time
-                if (_hwConfigSynced && !bleProvider.isConnected) {
+                if (_hwConfigSynced && !connectionState.isConnected) {
                   _hwConfigSynced = false;
                 }
                 // Sync HW button config from device once, when 0xC8 arrives
-                if (!_hwConfigSynced && bleProvider.deviceBtn1Action >= 0) {
+                if (!_hwConfigSynced && deviceInfo.deviceBtn1Action >= 0) {
                   _hwConfigSynced = true;
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     settingsProvider.syncButtonsFromDevice(
-                      btn1Action: bleProvider.deviceBtn1Action,
-                      btn2Action: bleProvider.deviceBtn2Action,
-                      btn1PathType: bleProvider.deviceBtn1PathType,
-                      btn2PathType: bleProvider.deviceBtn2PathType,
+                      btn1Action: deviceInfo.deviceBtn1Action,
+                      btn2Action: deviceInfo.deviceBtn2Action,
+                      btn1PathType: deviceInfo.deviceBtn1PathType,
+                      btn2PathType: deviceInfo.deviceBtn2PathType,
                     );
                   });
                 }
@@ -3233,7 +3301,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     bleProvider.sendGetStateCommand();
 
     // Show current info (may already be populated from initial connect)
-    final version = bleProvider.firmwareVersion;
+    final version = context.read<DeviceInfoProvider>().firmwareVersion;
     showDialog(
       context: context,
       builder: (ctx) {
@@ -3262,9 +3330,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 8),
                 Text(
                   AppLocalizations.of(context)!.fwVersionDetails(
-                      bleProvider.fwMajor,
-                      bleProvider.fwMinor,
-                      bleProvider.fwPatch),
+                      context.read<DeviceInfoProvider>().fwMajor,
+                      context.read<DeviceInfoProvider>().fwMinor,
+                      context.read<DeviceInfoProvider>().fwPatch),
                   style: const TextStyle(
                       color: AppColors.secondaryText, fontSize: 12),
                 ),
@@ -3390,7 +3458,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             TextButton(
               onPressed: () async {
-                await bleProvider.clearDeviceCache();
+                await DevicePreferencesService().clearDeviceId();
                 Navigator.of(dialogContext).pop();
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text(l10n.clearDeviceCache)),

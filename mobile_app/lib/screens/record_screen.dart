@@ -7,12 +7,11 @@ import '../providers/files_provider.dart';
 import '../providers/subghz_provider.dart';
 import '../providers/notification_provider.dart';
 import '../services/signal_processing/signal_data.dart';
-import '../services/cc1101/cc1101_values.dart';
 import '../services/cc1101/cc1101_calculator.dart';
-import '../widgets/record_screen_widgets.dart';
 import '../widgets/transmit_file_dialog.dart';
 import '../services/logger_service.dart';
 import '../theme/app_colors.dart';
+import 'record/record_config_panel.dart';
 import 'record/record_file_list.dart';
 
 /// Module action type
@@ -41,11 +40,9 @@ class _RecordScreenState extends State<RecordScreen>
   // Configurations for each module
   final List<RecordConfig> _recordConfigs = [];
 
-  // Controllers for input fields
-  final List<TextEditingController> _frequencyControllers = [];
-  final List<TextEditingController> _dataRateControllers = [];
-  final List<TextEditingController> _deviationControllers = [];
-  final List<TextEditingController> _bandwidthControllers = [];
+  // Note: input-field TextEditingControllers are now owned by
+  // RecordConfigPanel (one set per panel instance) — see
+  // `screens/record/record_config_panel.dart`.
 
   // Local state for recorded files (independent of providers)
   final List<dynamic> _recordedFiles = [];
@@ -59,8 +56,8 @@ class _RecordScreenState extends State<RecordScreen>
   // Advanced Mode expansion state for each module
   final List<bool> _isAdvancedExpanded = [];
 
-  // Last frequency detection time for each module
-  final Map<int, DateTime> _lastFrequencyDetectionTime = {};
+  // Note: per-module frequency-detection timestamp moved into
+  // RecordConfigPanel as a private instance field (M4 of refactor.md).
 
   // Flag to track if auto-switch was performed on open
   bool _hasAutoSwitched = false;
@@ -202,11 +199,9 @@ class _RecordScreenState extends State<RecordScreen>
       _isAdvancedExpanded.add(false);
       _selectedActions.add(ModuleAction.recording); // Default Recording
 
-      // Create controllers for input fields
-      _frequencyControllers.add(TextEditingController(text: '433.92'));
-      _dataRateControllers.add(TextEditingController());
-      _deviationControllers.add(TextEditingController());
-      _bandwidthControllers.add(TextEditingController());
+      // Note: input-field TextEditingControllers are now owned by
+      // RecordConfigPanel (one set per panel instance) — see
+      // `screens/record/record_config_panel.dart`.
     }
 
     // Update tab count based on module count
@@ -241,18 +236,8 @@ class _RecordScreenState extends State<RecordScreen>
   }
 
   void _disposeControllers() {
-    for (final controller in _frequencyControllers) {
-      controller.dispose();
-    }
-    for (final controller in _dataRateControllers) {
-      controller.dispose();
-    }
-    for (final controller in _deviationControllers) {
-      controller.dispose();
-    }
-    for (final controller in _bandwidthControllers) {
-      controller.dispose();
-    }
+    // TextEditingControllers are now owned by RecordConfigPanel, which
+    // disposes them in its own dispose(). Nothing to do here.
   }
 
   /// Check module state and switch to active (jamming or recording)
@@ -331,25 +316,6 @@ class _RecordScreenState extends State<RecordScreen>
 
   /// Find closest frequency from CC1101Values.frequencies list
   /// Returns string frequency value from list or null
-  String? _findClosestFrequencyString(double detectedFreq) {
-    if (CC1101Values.frequencies.isEmpty) return null;
-
-    String? closest;
-    double minDifference = double.infinity;
-
-    for (final freqString in CC1101Values.frequencies) {
-      final freq = double.tryParse(freqString);
-      if (freq == null) continue;
-
-      final difference = (freq - detectedFreq).abs();
-      if (difference < minDifference) {
-        minDifference = difference;
-        closest = freqString;
-      }
-    }
-
-    return closest;
-  }
 
   void _stopFrequencySearch(int moduleIndex, SubGhzProvider subGhz) async {
     try {
@@ -934,8 +900,32 @@ class _RecordScreenState extends State<RecordScreen>
               // Record/jamming settings with overlay
               Stack(
                 children: [
-                  _buildRecordSettings(
-                      moduleIndex, config, isBusy, selectedAction),
+                  if (selectedAction == ModuleAction.recording)
+                    RecordConfigPanel(
+                      // Stable key so controllers survive list rebuilds.
+                      key: ValueKey('record_panel_$moduleIndex'),
+                      moduleIndex: moduleIndex,
+                      config: config,
+                      isBusy: isBusy,
+                      isFrequencySearching:
+                          subGhz.isFrequencySearching[moduleIndex] ?? false,
+                      advancedExpanded: _isAdvancedExpanded[moduleIndex],
+                      onConfigChanged: (newConfig) =>
+                          _updateConfig(moduleIndex, newConfig),
+                      onStartFrequencySearch: () =>
+                          _startFrequencySearch(moduleIndex, subGhz),
+                      onStopFrequencySearch: () =>
+                          _stopFrequencySearch(moduleIndex, subGhz),
+                      onAdvancedExpansionChanged: (expanded) {
+                        setState(() {
+                          _isAdvancedExpanded[moduleIndex] = expanded;
+                        });
+                      },
+                    )
+                  else
+                    // Jamming UI doesn't use the config panel — placeholder
+                    // so the Stack still has a child to overlay.
+                    const SizedBox(height: 1),
                   // Dimming overlay when module is busy
                   if (isBusy) _buildBusyOverlay(),
                   // Recording overlay only on settings area
@@ -1078,391 +1068,6 @@ class _RecordScreenState extends State<RecordScreen>
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildAdvancedModeToggle(int moduleIndex, RecordConfig config) {
-    // Bar always visible to indicate expandability
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          if (!config.advancedMode) {
-            // If advancedMode is off, enable and expand it
-            _updateConfig(moduleIndex, config.copyWith(advancedMode: true));
-            _isAdvancedExpanded[moduleIndex] = true;
-          } else {
-            // If enabled, just collapse/expand
-            _isAdvancedExpanded[moduleIndex] =
-                !_isAdvancedExpanded[moduleIndex];
-          }
-        });
-      },
-      child: Container(
-        height: 28,
-        decoration: BoxDecoration(
-          color: Theme.of(context)
-              .colorScheme
-              .surfaceContainerHighest
-              .withOpacity(0.5),
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(
-            color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
-            width: 1,
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              (config.advancedMode && _isAdvancedExpanded[moduleIndex])
-                  ? Icons.keyboard_arrow_up
-                  : Icons.keyboard_arrow_down,
-              size: 16,
-              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-            ),
-            const SizedBox(width: 4),
-            Text(
-              (config.advancedMode && _isAdvancedExpanded[moduleIndex])
-                  ? AppLocalizations.of(context)!.presets
-                  : AppLocalizations.of(context)!.advanced,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurface
-                        .withOpacity(0.7),
-                    fontSize: 11,
-                  ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRecordSettings(int moduleIndex, RecordConfig config, bool isBusy,
-      ModuleAction selectedAction) {
-    final l10n = AppLocalizations.of(context)!;
-    final title = selectedAction == ModuleAction.recording
-        ? l10n.recordSettings
-        : l10n.jammingSettings;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primaryText,
-                  ),
-            ),
-            const SizedBox(height: 12),
-
-            // Frequency with search button
-            Row(
-              children: [
-                Expanded(
-                  child: Consumer<SubGhzProvider>(
-                    builder: (context, subGhz, child) {
-                      // Find current frequency string from list, or use config frequency
-                      String? currentFrequencyString =
-                          _findClosestFrequencyString(config.frequency);
-                      String currentFrequency = currentFrequencyString ??
-                          config.frequency.toStringAsFixed(2);
-
-                      // Get signals for this module, sorted by timestamp (newest first)
-                      final moduleSignals = subGhz.detectedSignals
-                          .where((signal) => signal.module == moduleIndex)
-                          .where((signal) => signal.timestamp.isAfter(
-                              DateTime.now()
-                                  .subtract(const Duration(seconds: 30))))
-                          .toList();
-
-                      // Sort by timestamp (newest first) to ensure we get the latest
-                      moduleSignals
-                          .sort((a, b) => b.timestamp.compareTo(a.timestamp));
-
-                      // Check if frequency search is active - if so, don't update the dropdown
-                      final isFrequencySearching =
-                          subGhz.isFrequencySearching[moduleIndex] ?? false;
-
-                      if (moduleSignals.isNotEmpty && !isFrequencySearching) {
-                        // Use the most recent detected frequency (first after sort)
-                        final latestSignal = moduleSignals.first;
-                        final detectedFreq =
-                            double.tryParse(latestSignal.frequency);
-                        if (detectedFreq != null && detectedFreq > 0) {
-                          // Find closest frequency from the list
-                          final closestFreqString =
-                              _findClosestFrequencyString(detectedFreq);
-                          if (closestFreqString != null) {
-                            currentFrequency = closestFreqString;
-                            final closestFreq = double.parse(closestFreqString);
-
-                            // Update config if frequency changed
-                            if ((closestFreq - config.frequency).abs() >
-                                0.001) {
-                              // Save frequency detection time only on new detection
-                              _lastFrequencyDetectionTime[moduleIndex] =
-                                  DateTime.now();
-
-                              // Set timer to hide icon after 3 seconds
-                              Future.delayed(const Duration(seconds: 3), () {
-                                if (mounted) {
-                                  setState(() {
-                                    // Update UI to hide icon
-                                  });
-                                }
-                              });
-
-                              // Use a small delay to ensure state is updated
-                              Future.microtask(() {
-                                if (mounted) {
-                                  _updateConfig(moduleIndex,
-                                      config.copyWith(frequency: closestFreq));
-                                  AppLogger.debug(
-                                      'Updated frequency to ${closestFreq}MHz for module $moduleIndex');
-                                }
-                              });
-                            }
-                          }
-                        }
-                      }
-
-                      // Check if 3 seconds have passed since frequency detection
-                      bool shouldShowIcon = false;
-                      if (moduleSignals.isNotEmpty) {
-                        final lastDetectionTime =
-                            _lastFrequencyDetectionTime[moduleIndex];
-                        if (lastDetectionTime != null) {
-                          final secondsSinceDetection = DateTime.now()
-                              .difference(lastDetectionTime)
-                              .inSeconds;
-                          shouldShowIcon = secondsSinceDetection < 3;
-                        } else {
-                          // If no time but signals exist, show icon
-                          shouldShowIcon = true;
-                          _lastFrequencyDetectionTime[moduleIndex] =
-                              DateTime.now();
-                        }
-                      }
-
-                      // Ensure currentFrequency is in the list, otherwise use closest
-                      if (!CC1101Values.frequencies
-                          .contains(currentFrequency)) {
-                        final closest =
-                            _findClosestFrequencyString(config.frequency);
-                        if (closest != null) {
-                          currentFrequency = closest;
-                        } else if (CC1101Values.frequencies.isNotEmpty) {
-                          currentFrequency = CC1101Values.frequencies.first;
-                        }
-                      }
-
-                      // Use key based on latest signal to force rebuild on new detections
-                      final latestSignalKey = moduleSignals.isNotEmpty
-                          ? '${moduleSignals.first.frequency}_${moduleSignals.first.timestamp.millisecondsSinceEpoch}'
-                          : '${config.frequency}';
-
-                      return DropdownButtonFormField<String>(
-                        key: ValueKey(
-                            'freq_dropdown_${moduleIndex}_$latestSignalKey'),
-                        initialValue: currentFrequency,
-                        onChanged: (!isBusy && !isFrequencySearching)
-                            ? (value) {
-                                if (value != null) {
-                                  final frequency = double.tryParse(value);
-                                  if (frequency != null) {
-                                    _updateConfig(moduleIndex,
-                                        config.copyWith(frequency: frequency));
-                                  }
-                                }
-                              }
-                            : null,
-                        decoration: InputDecoration(
-                          labelText:
-                              '${AppLocalizations.of(context)!.frequency} (${AppLocalizations.of(context)!.mhz})',
-                          border: const OutlineInputBorder(),
-                          prefixIcon: const Icon(Icons.graphic_eq),
-                          suffixIcon: shouldShowIcon
-                              ? const Icon(
-                                  Icons.check_circle,
-                                  color: AppColors.success,
-                                  size: 16,
-                                )
-                              : null,
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
-                        ),
-                        isDense: true,
-                        items: CC1101Values.frequencies.map((freq) {
-                          return DropdownMenuItem<String>(
-                            value: freq,
-                            child: Text(
-                              freq,
-                              style: const TextStyle(
-                                  color: AppColors.secondaryText),
-                            ),
-                          );
-                        }).toList(),
-                        dropdownColor: AppColors.secondaryBackground,
-                        style: const TextStyle(color: AppColors.primaryText),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Consumer<SubGhzProvider>(
-                  builder: (context, subGhz, child) {
-                    final isSearching =
-                        subGhz.isFrequencySearching[moduleIndex] ?? false;
-                    return IconButton(
-                      onPressed: isSearching
-                          ? () => _stopFrequencySearch(moduleIndex, subGhz)
-                          : () => _startFrequencySearch(moduleIndex, subGhz),
-                      icon: Icon(
-                        isSearching ? Icons.stop : Icons.search,
-                        color: isSearching ? AppColors.error : null,
-                      ),
-                      tooltip: isSearching
-                          ? AppLocalizations.of(context)!.stopFrequencySearch
-                          : AppLocalizations.of(context)!.searchForFrequency,
-                      style: IconButton.styleFrom(
-                        backgroundColor: isSearching
-                            ? AppColors.error.withOpacity(0.1)
-                            : null,
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 12),
-
-            // Settings depending on action
-            if (selectedAction == ModuleAction.recording) ...[
-              // Recording settings depending on mode
-              if (config.advancedMode && _isAdvancedExpanded[moduleIndex]) ...[
-                _buildAdvancedSettings(moduleIndex, config, isBusy),
-              ] else ...[
-                _buildSimpleSettings(moduleIndex, config, isBusy),
-              ],
-              // Narrow bar with "advanced" button at bottom of form
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: _buildAdvancedModeToggle(moduleIndex, config),
-              ),
-            ] else ...[
-              // Settings for jamming (frequency only, other params are fixed)
-              // For jamming show frequency only, other params are sent with fixed values
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSimpleSettings(
-      int moduleIndex, RecordConfig config, bool isBusy) {
-    return Consumer<SubGhzProvider>(
-      builder: (context, subGhz, child) {
-        final isFrequencySearching =
-            subGhz.isFrequencySearching[moduleIndex] ?? false;
-        return PresetSelector(
-          value: config.preset,
-          onChanged: (isBusy || isFrequencySearching)
-              ? null
-              : (value) {
-                  if (value != null) {
-                    _updateConfig(moduleIndex, config.copyWith(preset: value));
-                  }
-                },
-        );
-      },
-    );
-  }
-
-  Widget _buildAdvancedSettings(
-      int moduleIndex, RecordConfig config, bool isBusy) {
-    return Consumer<SubGhzProvider>(
-      builder: (context, subGhz, child) {
-        final isFrequencySearching =
-            subGhz.isFrequencySearching[moduleIndex] ?? false;
-        return Column(
-          children: [
-            // Bandwidth
-            BandwidthSelector(
-              controller: _bandwidthControllers[moduleIndex],
-              value: config.rxBandwidth,
-              onChanged: (isBusy || isFrequencySearching)
-                  ? null
-                  : (value) {
-                      if (value != null) {
-                        _updateConfig(
-                            moduleIndex, config.copyWith(rxBandwidth: value));
-                      }
-                    },
-            ),
-
-            const SizedBox(height: 16),
-
-            // Data rate
-            DataRateInputField(
-              controller: _dataRateControllers[moduleIndex],
-              value: config.dataRate,
-              onChanged: (isBusy || isFrequencySearching)
-                  ? null
-                  : (value) {
-                      if (value != null) {
-                        _updateConfig(
-                            moduleIndex, config.copyWith(dataRate: value));
-                      }
-                    },
-            ),
-
-            const SizedBox(height: 16),
-
-            // Modulation type
-            ModulationSelector(
-              value: config.modulation,
-              onChanged: (isBusy || isFrequencySearching)
-                  ? null
-                  : (value) {
-                      if (value != null) {
-                        _updateConfig(
-                            moduleIndex, config.copyWith(modulation: value));
-                      }
-                    },
-            ),
-
-            // Deviation (for all FM modulations: 2-FSK, GFSK, 4-FSK, MSK)
-            if (config.modulation != null &&
-                (config.modulation == '2-FSK' ||
-                    config.modulation == 'GFSK' ||
-                    config.modulation == '4-FSK' ||
-                    config.modulation == 'MSK')) ...[
-              const SizedBox(height: 16),
-              DeviationInputField(
-                controller: _deviationControllers[moduleIndex],
-                value: config.deviation,
-                onChanged: (isBusy || isFrequencySearching)
-                    ? null
-                    : (value) {
-                        if (value != null) {
-                          _updateConfig(
-                              moduleIndex, config.copyWith(deviation: value));
-                        }
-                      },
-              ),
-            ],
-          ],
-        );
-      },
     );
   }
 
