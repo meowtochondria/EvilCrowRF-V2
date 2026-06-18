@@ -64,10 +64,7 @@ class _SignalScannerScreenState extends State<SignalScannerScreen>
   void initState() {
     super.initState();
     _subGhz = context.read<SubGhzProvider>();
-    // Restore scanning state from device module status — if a module is
-    // in DetectSignal mode, the scan was left running across a tab switch.
-    _restoreScanningState();
-    // Initialize spectrum levels
+    // Initialize spectrum levels first, then the animation controller
     for (final freq in _scanFrequencies) {
       _spectrumLevels[freq] = -120.0;
     }
@@ -77,6 +74,10 @@ class _SignalScannerScreenState extends State<SignalScannerScreen>
     )..addListener(() {
         if (_viewMode != 0) setState(() {}); // Rebuild spectrogram on tick
       });
+
+    // Restore scanning state AFTER animation controller is initialized
+    // (it may call .repeat() on the controller).
+    _restoreScanningState();
   }
 
   @override
