@@ -7,6 +7,7 @@ import '../providers/subghz_provider.dart';
 import '../providers/notification_provider.dart';
 import '../providers/firmware_protocol.dart';
 import '../models/detected_signal.dart';
+import '../services/logger_service.dart';
 import '../theme/app_colors.dart';
 
 class SignalScannerScreen extends StatefulWidget {
@@ -33,6 +34,9 @@ class _SignalScannerScreenState extends State<SignalScannerScreen>
   final Map<double, double> _spectrumLevels = {};
   Timer? _decayTimer;
 
+  // Cached provider reference for safe use during dispose()
+  SubGhzProvider? _subGhz;
+
   // All 18 frequencies matching the firmware's signalDetectionFrequencies[]
   final List<double> _scanFrequencies = [
     300.00,
@@ -58,6 +62,7 @@ class _SignalScannerScreenState extends State<SignalScannerScreen>
   @override
   void initState() {
     super.initState();
+    _subGhz = context.read<SubGhzProvider>();
     // Initialize spectrum levels
     for (final freq in _scanFrequencies) {
       _spectrumLevels[freq] = -120.0;
@@ -86,6 +91,7 @@ class _SignalScannerScreenState extends State<SignalScannerScreen>
   Future<void> _startScanning() async {
     if (_isScanning) return;
     final subGhz = context.read<SubGhzProvider>();
+    _subGhz = subGhz;
 
     setState(() => _isScanning = true);
     if (_viewMode != 0) _spectrumAnimationController.repeat();
@@ -121,7 +127,8 @@ class _SignalScannerScreenState extends State<SignalScannerScreen>
 
   Future<void> _stopScanning() async {
     if (!_isScanning) return;
-    final subGhz = context.read<SubGhzProvider>();
+    final subGhz = _subGhz;
+    if (subGhz == null) return;
 
     setState(() => _isScanning = false);
     _spectrumAnimationController.stop();
@@ -135,15 +142,11 @@ class _SignalScannerScreenState extends State<SignalScannerScreen>
         await subGhz.sendCommand!(cmd0);
         await subGhz.sendCommand!(cmd1);
       } else {
-        final command =
-            FirmwareBinaryProtocol.createRequestIdleCommand(_selectedModule);
-        await subGhz.sendCommand!(command);
+        await subGhz.sendCommand!(
+            FirmwareBinaryProtocol.createRequestIdleCommand(_selectedModule));
       }
     } catch (e) {
-      if (mounted) {
-        Provider.of<NotificationProvider>(context, listen: false)
-            .showError(AppLocalizations.of(context)!.errorStoppingScan('$e'));
-      }
+      AppLogger.debug('Error stopping scan: $e');
     }
   }
 
