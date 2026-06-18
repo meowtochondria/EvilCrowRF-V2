@@ -8,6 +8,7 @@ import 'package:web_socket_channel/status.dart' as ws_status;
 import '../services/logger_service.dart';
 import '../services/connection_history_service.dart';
 import '../connection/message_dispatcher.dart';
+import '../services/binary_message_parser.dart';
 import 'firmware_protocol.dart';
 
 /// Configuration for a discovered EvilCrowRF device.
@@ -323,7 +324,23 @@ class WifiProvider extends ChangeNotifier {
     try {
       final response =
           FirmwareBinaryProtocol.parseResponse(Uint8List.fromList(data));
-      // Dispatch to module providers via MessageDispatcher (replaces onJsonReceived)
+
+      // If the payload is a binary message, parse it through BinaryMessageParser
+      // so providers receive typed maps (e.g. {'type': 'SignalDetected', 'data': {...}}).
+      if (response['isBinary'] == true &&
+          response['payloadBytes'] is Uint8List) {
+        final binaryMsg = BinaryMessageParser.parseBinaryMessage(
+            response['payloadBytes'] as Uint8List);
+        if (binaryMsg != null) {
+          messageDispatcher?.dispatch(binaryMsg);
+          if (onJsonReceived != null) {
+            onJsonReceived!(binaryMsg);
+          }
+          return;
+        }
+      }
+
+      // Fallback: dispatch the raw parsed response
       messageDispatcher?.dispatch(response);
       if (onJsonReceived != null) {
         onJsonReceived!(response);

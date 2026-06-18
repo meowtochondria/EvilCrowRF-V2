@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/logger_service.dart';
 import '../services/connection_history_service.dart';
 import '../providers/firmware_protocol.dart';
+import '../services/binary_message_parser.dart';
 import 'message_dispatcher.dart';
 
 /// Pure BLE transport provider.
@@ -382,7 +383,20 @@ class BleConnectionProvider extends ChangeNotifier {
             try {
               final response = FirmwareBinaryProtocol.parseResponse(
                   Uint8List.fromList(value));
-              // Forward to all listeners via MessageDispatcher
+
+              // If the payload is a binary message, parse it through
+              // BinaryMessageParser so providers receive typed maps.
+              if (response['isBinary'] == true &&
+                  response['payloadBytes'] is Uint8List) {
+                final binaryMsg = BinaryMessageParser.parseBinaryMessage(
+                    response['payloadBytes'] as Uint8List);
+                if (binaryMsg != null) {
+                  messageDispatcher?.dispatch(binaryMsg);
+                  return;
+                }
+              }
+
+              // Fallback: forward the raw parsed response
               messageDispatcher?.dispatch(response);
             } catch (e) {
               // Non-protocol data — ignore

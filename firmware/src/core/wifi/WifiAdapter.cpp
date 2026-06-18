@@ -107,8 +107,27 @@ void WifiAdapter::wifiCheck() {
 // ── notify() — Send notification via WebSocket binary frames ─────────
 
 void WifiAdapter::notify(String type, std::string message) {
-    // Delegate to BinaryProtocolHandler's send logic
-    sendBinaryResponse(String(message.c_str()));
+    if (!isTransportConnected()) return;
+
+    // Use raw data with length to preserve null bytes in binary data.
+    // String(message.c_str()) would truncate at the first 0x00 byte.
+    const char* rawData = message.data();
+    size_t rawLen = message.length();
+
+    if (rawLen <= MAX_CHUNK_SIZE) {
+        sendSingleChunk(0, 1, 1, rawData, static_cast<uint16_t>(rawLen));
+    } else {
+        // Chunk manually without String conversion
+        uint8_t chunkId = random(1, 255);
+        uint8_t totalChunks = (rawLen + MAX_CHUNK_SIZE - 1) / MAX_CHUNK_SIZE;
+        for (uint8_t i = 0; i < totalChunks; i++) {
+            uint8_t chunkNum = i + 1;
+            size_t startPos = i * MAX_CHUNK_SIZE;
+            size_t chunkLen = std::min((size_t)MAX_CHUNK_SIZE, rawLen - startPos);
+            sendSingleChunk(chunkId, chunkNum, totalChunks,
+                          rawData + startPos, static_cast<uint16_t>(chunkLen));
+        }
+    }
 }
 
 // ── isConnected() ──────────────────────────────────────────────────────
