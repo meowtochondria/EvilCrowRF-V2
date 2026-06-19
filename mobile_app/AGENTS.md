@@ -28,11 +28,11 @@ Keep it updated with any changes to how you want work done.
   - **Layer 1**: `MessageDispatcher` — broadcasts parsed `Map<String, dynamic>` firmware responses to all module providers.
   - **Layer 2**: `AppEventBus` — typed event bus for cross-provider domain events.
 - Module providers (DeviceInfoProvider, SubGhzProvider, NrfProvider, FilesProvider, BruterProvider, OtaProvider) each subscribe to `MessageDispatcher.messages` and filter by `msg['type']`.
-- BleProvider is a legacy god-object (5124 lines) being phased out. It coexists during transition (Option A). New code should use the new providers.
-- BleProvider has a `messageDispatcher` field set externally. When set, `_handleCompleteResponse` forwards parsed responses to it.
-- WifiProvider similarly has a `messageDispatcher` field. Its `_handleBinaryFrame` dispatches through it.
+- WifiProvider has a `messageDispatcher` field. Its `_handleBinaryFrame` dispatches through it.
 - All module providers have a `sendCommand` callback typed as `Future<bool> Function(Uint8List command, {bool withoutResponse})?`. Supports `withoutResponse: true` for fast BLE writes (OTA, chunked uploads).
-- `ConnectionStateProvider` wraps both BleProvider and WifiProvider for unified `isConnected` / `connectedTransport`.
+- `ConnectionStateProvider` wraps both BleConnectionProvider and WifiProvider for unified `isConnected` / `connectedTransport`.
+- `ConnectionLost` is emitted by transport providers (`BleConnectionProvider._resetConnectionState()`, `WifiProvider.disconnect()`) via `AppEventBus`. FilesProvider subscribes to fail pending completers on disconnect.
+- **The canonical architecture document lives at `mobile_app/docs/architecture.md`** — covers the full layered design, transport abstractions, binary protocol, provider wiring, message routing, screen composition, services, and app↔firmware communication. When you add/remove providers, change routing, or modify the protocol, update `architecture.md` alongside this file.
 
 ## Architecture (Firmware)
 
@@ -45,6 +45,7 @@ Keep it updated with any changes to how you want work done.
 - SoftAP starts immediately on boot. Captive portal and DNS server were removed — the app connects directly.
 - Button 2 defaults to `WiFiSoftAP` action. Button 1 defaults to `None`.
 - GPIO34/35 are input-only (no internal pull-up). External pull-up resistors required.
+- See `mobile_app/docs/architecture.md` for the full firmware architecture diagram (BinaryProtocolHandler, BleAdapter, WifiAdapter, CommandHandler, module layout).
 
 ## Memory Constraints
 
