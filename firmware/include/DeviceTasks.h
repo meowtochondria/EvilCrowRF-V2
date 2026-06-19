@@ -1,11 +1,11 @@
 #ifndef Tasks_h
 #define Tasks_h
 
-#include <functional>
-#include "compatibility.h"
+#include <memory>
+#include <string>
 #include <vector>
+#include <functional>
 #include "Arduino.h"
-#include "modules/CC1101_driver/CC1101_Module.h"
 
 namespace Device {
 

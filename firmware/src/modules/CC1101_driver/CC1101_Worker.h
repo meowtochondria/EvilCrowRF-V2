@@ -9,14 +9,10 @@
 #include <functional>
 #include "config.h"
 #include "modules/CC1101_driver/CC1101_Module.h"
-#include "modules/subghz_function/ProtocolDecoder.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
-#include "SD.h"
-#include "modules/subghz_function/StreamingSubFileParser.h"
-#include "StreamingPulsePayload.h"
-#include "PulsePayload.h"
 #include "DeviceTasks.h"
+#include "PulsePayload.h"
 // Note: <sstream> moved to CC1101_Worker.cpp — only needed there
 
 // Receive data structure - moved from Recorder.h

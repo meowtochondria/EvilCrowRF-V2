@@ -103,12 +103,12 @@ def _prompt_continue_or_terminate(message: str, title: str = "Timeout") -> bool:
                 from tkinter import messagebox
 
                 result_holder["answer"] = bool(
-                    messagebox.askyesno(title, message, parent=_TK_ROOT)
+                    messagebox.askyesno(title, message, parent=_TK_ROOT)  # type: ignore[arg-type]
                 )
             finally:
                 evt.set()
 
-        _TK_ROOT.after(0, _ask)
+        _TK_ROOT.after(0, _ask)  # type: ignore[union-attr]
         evt.wait()
         return bool(result_holder.get("answer", False))
 
@@ -192,7 +192,7 @@ def _create_command_popup(title: str):
     if threading.current_thread() is threading.main_thread():
         _create()
     else:
-        _TK_ROOT.after(0, _create)
+        _TK_ROOT.after(0, _create)  # type: ignore[union-attr]
         created_evt.wait()
 
     def enqueue(line: str):
@@ -200,17 +200,18 @@ def _create_command_popup(title: str):
 
     def close():
         def _close():
-            win = holder.get("win")
             try:
-                if win is not None and win.winfo_exists():
-                    win.destroy()
+                win = holder.get("win")
+                if win is not None:
+                    win.winfo_exists()  # type: ignore[union-attr]
+                    win.destroy()  # type: ignore[union-attr]
             except Exception:
                 pass
 
         if threading.current_thread() is threading.main_thread():
             _close()
         else:
-            _TK_ROOT.after(0, _close)
+            _TK_ROOT.after(0, _close)  # type: ignore[union-attr]
 
     return enqueue, stop_event, close
 
@@ -343,7 +344,8 @@ def run_command_verbose(
         if close_popup:
             close_popup()
 
-    return proc.poll() if proc.poll() is not None else 1
+    poll_result = proc.poll()
+    return poll_result if poll_result is not None else 1
 
 
 # ─── Tool Discovery ─────────────────────────────────────────────────
