@@ -180,7 +180,7 @@ void CC1101Worker::start() {
         "CC1101Worker",
         6144 / sizeof(StackType_t),
         nullptr,
-        5,  // Priority 3 (high priority for time-sensitive RF operations, increased for jamming stability)
+        1,  // Priority 1 (matches taskProcessor, SerialCmd — avoids starving app logic on Core 1)
         workerStack,
         &workerBuffer
     );
