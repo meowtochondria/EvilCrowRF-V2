@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../connection/message_dispatcher.dart';
+import '../services/logger_service.dart';
 import 'firmware_protocol.dart';
 
 /// Device information and status provider.
@@ -93,6 +94,26 @@ class DeviceInfoProvider extends ChangeNotifier {
   bool _settingsSynced = false;
   bool get settingsSynced => _settingsSynced;
 
+  // ── Protocol version compatibility ──
+  bool _versionChecked = false;
+  bool get versionChecked => _versionChecked;
+  bool _versionCompatible = false;
+  bool get versionCompatible => _versionCompatible;
+  static const int _requiredMajor = 3;
+
+  /// Returns true if the firmware version is compatible with this app.
+  bool get isFirmwareCompatible {
+    if (!_versionChecked) return false; // haven't checked yet
+    return _versionCompatible;
+  }
+
+  /// Returns a user-friendly incompatibility message, or null if compatible.
+  String? get incompatibilityReason {
+    if (!_versionChecked) return 'Firmware version not yet checked';
+    if (_versionCompatible) return null;
+    return 'App requires firmware v$_requiredMajor.0.0 or newer (device has $_firmwareVersion)';
+  }
+
   // ══════════════════════════════════════════════════════════════
   //  Dispatch — filter by type field
   // ══════════════════════════════════════════════════════════════
@@ -165,6 +186,13 @@ class DeviceInfoProvider extends ChangeNotifier {
     _fwMinor = data['minor'] ?? 0;
     _fwPatch = data['patch'] ?? 0;
     _firmwareVersion = data['version'] ?? '$_fwMajor.$_fwMinor.$_fwPatch';
+    _versionChecked = true;
+    // Protocol v3.0.0+ is required (major version must match)
+    _versionCompatible = _fwMajor == _requiredMajor;
+    if (!_versionCompatible) {
+      AppLogger.warning(
+          'Firmware version $_firmwareVersion is incompatible with app v$_requiredMajor.0.0 required');
+    }
     notifyListeners();
   }
 

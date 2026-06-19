@@ -356,6 +356,15 @@ class BleConnectionProvider extends ChangeNotifier {
         if (txCharacteristic != null && rxCharacteristic != null) {
           isConnected = true;
           statusMessage = 'Connected to ${device.name}';
+
+          // Request device state to trigger version info (needed for protocol compat check)
+          try {
+            await Future.delayed(const Duration(milliseconds: 500));
+            await sendBinaryCommand(
+                FirmwareBinaryProtocol.createGetStateCommand());
+          } catch (_) {
+            // Best-effort — version check will surface incompatibility
+          }
           _deviceName = device.name;
           _deviceId = device.id.toString();
 

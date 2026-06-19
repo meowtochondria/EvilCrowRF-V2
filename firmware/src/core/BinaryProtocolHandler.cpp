@@ -101,13 +101,14 @@ void BinaryProtocolHandler::processBinaryData(uint8_t *data, size_t len) {
         handleChunkedCommand(chunkId, chunkNum, totalChunks, payload, dataLength);
     } else {
         ESP_LOGD(transportName(), "Processing single packet: chunkId=%d", chunkId);
-        handleSingleCommand(payload, dataLength);
+        handleSingleCommand(chunkId, payload, dataLength);
     }
 }
 
 // ── Single command handler ────────────────────────────────────────────
 
-void BinaryProtocolHandler::handleSingleCommand(uint8_t *payload, size_t payloadLength) {
+void BinaryProtocolHandler::handleSingleCommand(uint8_t chunkId, uint8_t *payload, size_t payloadLength) {
+    _lastRequestChunkId = chunkId;
     if (payloadLength < 1) {
         notifyError("Empty payload");
         return;
@@ -165,7 +166,7 @@ void BinaryProtocolHandler::handleChunkedCommand(
             notifyError("Empty chunked command");
             return;
         }
-        handleSingleCommand(payload, payloadLength);
+        handleSingleCommand(chunkId, payload, payloadLength);
     } else {
         ESP_LOGD(transportName(), "Received chunk %d/%d for chunkId %d",
                  chunkNum, totalChunks, chunkId);

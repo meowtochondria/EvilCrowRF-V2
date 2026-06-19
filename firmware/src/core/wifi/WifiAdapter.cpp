@@ -115,10 +115,10 @@ void WifiAdapter::notify(String type, std::string message) {
     size_t rawLen = message.length();
 
     if (rawLen <= MAX_CHUNK_SIZE) {
-        sendSingleChunk(0, 1, 1, rawData, static_cast<uint16_t>(rawLen));
+        sendSingleChunk(_lastRequestChunkId, 1, 1, rawData, static_cast<uint16_t>(rawLen));
     } else {
         // Chunk manually without String conversion
-        uint8_t chunkId = random(1, 255);
+        uint8_t chunkId = _lastRequestChunkId != 0 ? _lastRequestChunkId : static_cast<uint8_t>(random(1, 255));
         uint8_t totalChunks = (rawLen + MAX_CHUNK_SIZE - 1) / MAX_CHUNK_SIZE;
         for (uint8_t i = 0; i < totalChunks; i++) {
             uint8_t chunkNum = i + 1;

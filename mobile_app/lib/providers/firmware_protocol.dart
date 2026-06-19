@@ -477,6 +477,15 @@ class FirmwareBinaryProtocol {
     return command;
   }
 
+  /// Sequence counter for request IDs (used as chunkId for request/response correlation).
+  static int _nextRequestId = 1;
+
+  /// Get the next incrementing request ID.
+  static int _getNextRequestId() {
+    _nextRequestId = (_nextRequestId % 255) + 1; // 1..255, never 0
+    return _nextRequestId;
+  }
+
   /// Create enhanced protocol command (matching firmware format)
   static Uint8List _createEnhancedCommand(int messageType, Uint8List payload) {
     // Enhanced format: [Magic:1][Type:1][ChunkID:1][ChunkNum:1][TotalChunks:1][DataLen:2][Data:variable][Checksum:1]
@@ -486,7 +495,7 @@ class FirmwareBinaryProtocol {
         PACKET_HEADER_SIZE + dataLength + 1); // header + data + checksum
     command[0] = MAGIC_BYTE; // Magic byte
     command[1] = PACKET_TYPE_DATA; // Type: data
-    command[2] = 0x00; // Chunk ID (0 for single packet)
+    command[2] = _getNextRequestId(); // Request ID for response correlation
     command[3] = 0x01; // Chunk number (1 for single packet)
     command[4] = 0x01; // Total chunks (1 for single packet)
     command[5] = dataLength & 0xFF; // Data length (low byte)

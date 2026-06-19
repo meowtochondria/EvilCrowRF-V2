@@ -544,6 +544,7 @@ flowchart LR
 - **ConnectionHistoryService** — Persists last successful transport + host/device-id via SharedPreferences.
 - **LoggerService** — App-wide logging with severity levels, wired to `LogProvider` for UI display.
 - **BinaryMessageParser** — Parses `0x80`-`0xFF` binary response payloads into typed Dart objects (e.g., `BinaryFileList`, `BinarySignalDetected`, `BinaryModeSwitch`).
+- **PendingRequestTracker** — Watches `MessageDispatcher` for matched response types with timeout support. Register an expected response type when sending a command; if no matching response arrives within 15 seconds, `onTimeout` fires. Used by module providers to detect hung commands (see [#glaring-issues](#glaring-issues)).
 - **CC1101 Services** — Frequency validation, register calculation, protocol-specific constants.
 - **File Parsers/Generators** — Flipper Zero `.sub` file format support (import/export).
 
@@ -667,9 +668,9 @@ sequenceDiagram
 
 1. ~~**Missing error recovery for hung completers in FilesProvider**: If the device reboots or disconnects mid-operation, the 8+ `Completer` instances in `FilesProvider` will never resolve, potentially leaking memory and leaving the UI in a perpetual loading state.~~ ✅ **Fixed**: `BleConnectionProvider._resetConnectionState()` and `WifiProvider.disconnect()` now emit `ConnectionLost` via `AppEventBus`. `FilesProvider` subscribes and calls `_failPendingCompleters()` + `resetFileLoadingState()` on disconnect.
 
-2. **No request timeout mechanism**: Module providers send commands and passively wait for responses via `MessageDispatcher`. If the firmware never responds (crash, RF interference, buffer overflow), the UI has no way to know the command failed. There's no correlation between sent commands and received responses. A request ID or sequence number in the protocol would enable timeout-based error handling.
+2. ~~**No request timeout mechanism**: Module providers send commands and passively wait for responses via `MessageDispatcher`. If the firmware never responds (crash, RF interference, buffer overflow), the UI has no way to know the command failed.~~ ✅ **Fixed**: The protocol now uses the `ChunkID` frame field as a request sequence number for response correlation. `FirmwareBinaryProtocol._getNextRequestId()` generates incrementing IDs (1..255). The firmware echoes the request's chunkId in responses via `_lastRequestChunkId`. A new `PendingRequestTracker` service (`lib/services/pending_request_tracker.dart`) watches `MessageDispatcher` and fires timeout callbacks when no matching response arrives within 15 seconds. Version bumped to **3.0.0** (breaking protocol change).
 
-3. **Binary protocol has no version negotiation**: The app assumes the firmware speaks the exact same protocol version. If a user connects an older firmware to a newer app (or vice versa), undefined behavior occurs. A `VERSION_INFO` response exists (`0xC2`) but isn't used for compatibility gating.
+3. ~~**Binary protocol has no version negotiation**: The app assumes the firmware speaks the exact same protocol version.~~ ✅ **Fixed**: On BLE connect, `BleConnectionProvider` sends a `getState` command after 500ms which triggers `sendVersionInfo()` on the firmware. `DeviceInfoProvider._handleVersionInfo()` now checks that `_fwMajor == 3` and exposes `isFirmwareCompatible` / `incompatibilityReason` getters. The app can gate features on these flags. Version bumped to **3.0.0** (both firmware `config.h` and app `pubspec.yaml`).
 
 4. ~~**SharedPreferences called on hot paths**: `SettingsProvider` calls `SharedPreferences.getInstance()` on every setter (e.g., `setScannerRssi`, `setBruterPowerValue`). Each call hits the async plugin channel.~~ ✅ **Fixed**: `SettingsProvider` now caches the `SharedPreferences` instance in `_cachedPrefs`, fetched once during `_initPrefs()`. All 15+ setters use the cached reference.
 
@@ -702,6 +703,7 @@ mobile_app/
 │   ├── services/
 │   │   ├── app_event_bus.dart             # Layer 2: typed cross-provider events
 │   │   ├── binary_message_parser.dart     # Parses 0x80-0xFF binary response payloads
+│   │   ├── pending_request_tracker.dart   # Timeout for pending response matching
 │   │   ├── binary_file_parser.dart        # .sub file format parsing
 │   │   ├── connection_history_service.dart # Persist last transport connection
 │   │   ├── device_preferences_service.dart # Persist device-specific prefs

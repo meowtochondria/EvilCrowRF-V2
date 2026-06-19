@@ -87,6 +87,7 @@ protected:
     // ── State ────────────────────────────────────────────────────────
     CommandHandler* commandHandler_ = nullptr;
     std::atomic<bool> isSerialCommand{false};
+    uint8_t _lastRequestChunkId{0};
 
     // File upload states
     std::map<uint8_t, FileUploadState> fileUploads;
@@ -96,7 +97,7 @@ protected:
 
 private:
     // ── Internal protocol handlers ───────────────────────────────────
-    void handleSingleCommand(uint8_t *payload, size_t payloadLength);
+    void handleSingleCommand(uint8_t chunkId, uint8_t *payload, size_t payloadLength);
     void handleChunkedCommand(uint8_t chunkId, uint8_t chunkNum,
                               uint8_t totalChunks, uint8_t *payload,
                               size_t payloadLength);

@@ -6,10 +6,10 @@
 // - MINOR: New features, new protocols, UI commands
 // - PATCH: Bug fixes, optimizations
 // The app will compare these values for FW update matching.
-#define FIRMWARE_VERSION_MAJOR 1
-#define FIRMWARE_VERSION_MINOR 3
+#define FIRMWARE_VERSION_MAJOR 3
+#define FIRMWARE_VERSION_MINOR 0
 #define FIRMWARE_VERSION_PATCH 0
-#define FIRMWARE_VERSION_STRING "1.3.0"
+#define FIRMWARE_VERSION_STRING "3.0.0"
 
 #define CC1101_NUM_MODULES 2
 
