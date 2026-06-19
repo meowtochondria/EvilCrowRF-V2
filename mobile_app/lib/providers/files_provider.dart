@@ -6,6 +6,7 @@ import '../connection/message_dispatcher.dart';
 import '../models/file_item.dart';
 import '../models/directory_tree_node.dart';
 import '../services/logger_service.dart';
+import '../services/app_event_bus.dart';
 import 'firmware_protocol.dart';
 
 /// File system provider — manages SD card and LittleFS file operations.
@@ -25,6 +26,8 @@ class FilesProvider extends ChangeNotifier {
 
   FilesProvider(this._messageDispatcher) {
     _subscription = _messageDispatcher.messages.listen(_dispatch);
+    _connectionLostHandler = _onConnectionLost;
+    AppEventBus().on<ConnectionLost>(_connectionLostHandler!);
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -59,6 +62,9 @@ class FilesProvider extends ChangeNotifier {
   Completer<Map<String, dynamic>>? _pendingDirectoryTreeCompleter;
   Completer<Map<String, dynamic>>? _pendingCopyCompleter;
   Completer<Map<String, dynamic>>? _pendingMoveCompleter;
+
+  // Connection loss handler
+  void Function(ConnectionLost)? _connectionLostHandler;
 
   // ══════════════════════════════════════════════════════════════
   //  Dispatch
@@ -248,6 +254,13 @@ class FilesProvider extends ChangeNotifier {
       default:
         return null;
     }
+  }
+
+  void _onConnectionLost(ConnectionLost event) {
+    AppLogger.debug(
+        'FilesProvider: connection lost (${event.reason}), failing pending completers');
+    _failPendingCompleters('Connection lost: ${event.reason}');
+    resetFileLoadingState();
   }
 
   void _failPendingCompleters(String message) {
@@ -625,6 +638,9 @@ class FilesProvider extends ChangeNotifier {
   @override
   void dispose() {
     _subscription?.cancel();
+    if (_connectionLostHandler != null) {
+      AppEventBus().off<ConnectionLost>(_connectionLostHandler!);
+    }
     _failPendingCompleters('Provider disposed');
     super.dispose();
   }

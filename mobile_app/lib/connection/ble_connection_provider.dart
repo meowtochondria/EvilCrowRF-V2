@@ -8,6 +8,7 @@ import '../services/logger_service.dart';
 import '../services/connection_history_service.dart';
 import '../providers/firmware_protocol.dart';
 import '../services/binary_message_parser.dart';
+import '../services/app_event_bus.dart';
 import 'message_dispatcher.dart';
 
 /// Pure BLE transport provider.
@@ -431,6 +432,11 @@ class BleConnectionProvider extends ChangeNotifier {
     rxCharacteristic = null;
     isConnected = false;
     statusMessage = 'disconnected';
+
+    // Notify all providers that the connection was lost so they can
+    // cancel pending operations (e.g. FilesProvider completers).
+    // OTA reboot is intentional — providers already handle this path.
+    AppEventBus().emit(ConnectionLost('BLE disconnected'));
 
     notifyListeners();
 

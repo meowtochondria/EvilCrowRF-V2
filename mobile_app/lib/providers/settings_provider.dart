@@ -66,6 +66,10 @@ extension HwButtonActionLabel on HwButtonAction {
 }
 
 class SettingsProvider with ChangeNotifier {
+  // Cached SharedPreferences instance — fetched once to avoid async plugin
+  // channel hits on every setter (see architecture.md §glaring-issues).
+  SharedPreferences? _cachedPrefs;
+
   int _bruterDelayMs = 10; // Default inter-frame delay in ms
   int _bruterModule = 1; // Default bruter module (0=Module 1, 1=Module 2)
   HwButtonAction _button1Action = HwButtonAction.none;
@@ -113,7 +117,7 @@ class SettingsProvider with ChangeNotifier {
   StreamSubscription<Map<String, dynamic>>? _subscription;
 
   SettingsProvider({MessageDispatcher? messageDispatcher}) {
-    _loadSettings();
+    _initPrefs();
     _subscription = messageDispatcher?.messages.listen(_onMessage);
   }
 
@@ -240,8 +244,9 @@ class SettingsProvider with ChangeNotifier {
     if (changed) notifyListeners();
   }
 
-  Future<void> _loadSettings() async {
+  Future<void> _initPrefs() async {
     final prefs = await SharedPreferences.getInstance();
+    _cachedPrefs = prefs;
     _bruterDelayMs = prefs.getInt('bruterDelayMs') ?? 10;
     _bruterModule = (prefs.getInt('bruterModule') ?? 1).clamp(0, 1);
     _button1Action = HwButtonAction.values[
@@ -266,8 +271,7 @@ class SettingsProvider with ChangeNotifier {
 
   Future<void> setBruterDelayMs(int value) async {
     _bruterDelayMs = value.clamp(1, 1000);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('bruterDelayMs', _bruterDelayMs);
+    await _cachedPrefs?.setInt('bruterDelayMs', _bruterDelayMs);
     notifyListeners();
   }
 
@@ -287,76 +291,73 @@ class SettingsProvider with ChangeNotifier {
 
   Future<void> setBruterModule(int value) async {
     _bruterModule = value.clamp(0, 1);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('bruterModule', _bruterModule);
+    await _cachedPrefs?.setInt('bruterModule', _bruterModule);
     notifyListeners();
   }
 
   Future<void> setButton1Action(HwButtonAction action) async {
     _button1Action = action;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('hwButton1Action', action.index);
+    await _cachedPrefs?.setInt('hwButton1Action', action.index);
     notifyListeners();
   }
 
   Future<void> setButton2Action(HwButtonAction action) async {
     _button2Action = action;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('hwButton2Action', action.index);
+    await _cachedPrefs?.setInt('hwButton2Action', action.index);
     notifyListeners();
   }
 
   Future<void> setButton1ReplayFile(String? path, int pathType) async {
     _button1ReplayPath = path;
     _button1ReplayPathType = pathType.clamp(0, 5);
-    final prefs = await SharedPreferences.getInstance();
-    if (path == null || path.isEmpty) {
-      await prefs.remove('hwButton1ReplayPath');
-    } else {
-      await prefs.setString('hwButton1ReplayPath', path);
+    final prefs = _cachedPrefs;
+    if (prefs != null) {
+      if (path == null || path.isEmpty) {
+        await prefs.remove('hwButton1ReplayPath');
+      } else {
+        await prefs.setString('hwButton1ReplayPath', path);
+      }
+      await prefs.setInt('hwButton1ReplayPathType', _button1ReplayPathType);
     }
-    await prefs.setInt('hwButton1ReplayPathType', _button1ReplayPathType);
     notifyListeners();
   }
 
   Future<void> setButton2ReplayFile(String? path, int pathType) async {
     _button2ReplayPath = path;
     _button2ReplayPathType = pathType.clamp(0, 5);
-    final prefs = await SharedPreferences.getInstance();
-    if (path == null || path.isEmpty) {
-      await prefs.remove('hwButton2ReplayPath');
-    } else {
-      await prefs.setString('hwButton2ReplayPath', path);
+    final prefs = _cachedPrefs;
+    if (prefs != null) {
+      if (path == null || path.isEmpty) {
+        await prefs.remove('hwButton2ReplayPath');
+      } else {
+        await prefs.setString('hwButton2ReplayPath', path);
+      }
+      await prefs.setInt('hwButton2ReplayPathType', _button2ReplayPathType);
     }
-    await prefs.setInt('hwButton2ReplayPathType', _button2ReplayPathType);
     notifyListeners();
   }
 
   Future<void> setNrfPaLevel(int value) async {
     _nrfPaLevel = value.clamp(0, 3);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('nrfPaLevel', _nrfPaLevel);
+    await _cachedPrefs?.setInt('nrfPaLevel', _nrfPaLevel);
     notifyListeners();
   }
 
   Future<void> setNrfDataRate(int value) async {
     _nrfDataRate = value.clamp(0, 2);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('nrfDataRate', _nrfDataRate);
+    await _cachedPrefs?.setInt('nrfDataRate', _nrfDataRate);
     notifyListeners();
   }
 
   Future<void> setNrfChannel(int value) async {
     _nrfChannel = value.clamp(0, 125);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('nrfChannel', _nrfChannel);
+    await _cachedPrefs?.setInt('nrfChannel', _nrfChannel);
     notifyListeners();
   }
 
   Future<void> setNrfAutoRetransmit(int value) async {
     _nrfAutoRetransmit = value.clamp(0, 15);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('nrfAutoRetransmit', _nrfAutoRetransmit);
+    await _cachedPrefs?.setInt('nrfAutoRetransmit', _nrfAutoRetransmit);
     notifyListeners();
   }
 
@@ -391,11 +392,13 @@ class SettingsProvider with ChangeNotifier {
     }
     if (changed) {
       // Persist new values
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('hwButton1Action', _button1Action.index);
-      await prefs.setInt('hwButton2Action', _button2Action.index);
-      await prefs.setInt('hwButton1ReplayPathType', _button1ReplayPathType);
-      await prefs.setInt('hwButton2ReplayPathType', _button2ReplayPathType);
+      final prefs = _cachedPrefs;
+      if (prefs != null) {
+        await prefs.setInt('hwButton1Action', _button1Action.index);
+        await prefs.setInt('hwButton2Action', _button2Action.index);
+        await prefs.setInt('hwButton1ReplayPathType', _button1ReplayPathType);
+        await prefs.setInt('hwButton2ReplayPathType', _button2ReplayPathType);
+      }
       notifyListeners();
     }
   }

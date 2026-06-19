@@ -9,6 +9,7 @@ import '../services/logger_service.dart';
 import '../services/connection_history_service.dart';
 import '../connection/message_dispatcher.dart';
 import '../services/binary_message_parser.dart';
+import '../services/app_event_bus.dart';
 import 'firmware_protocol.dart';
 
 /// Configuration for a discovered EvilCrowRF device.
@@ -245,6 +246,7 @@ class WifiProvider extends ChangeNotifier {
     }
     _isConnected = false;
     _deviceHost = null;
+    AppEventBus().emit(ConnectionLost('WiFi disconnected'));
     notifyListeners();
     AppLogger.debug('Disconnected');
   }
