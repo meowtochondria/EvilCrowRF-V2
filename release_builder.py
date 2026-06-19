@@ -624,8 +624,8 @@ def write_firmware_version(new_version: str):
         content,
     )
     content = re.sub(
-        r'#define\s+FIRMWARE_VERSION_STRING\s+"[^"]+"',
-        f'#define FIRMWARE_VERSION_STRING "{new_version}"',
+        r'(#define\s+FIRMWARE_VERSION_STRING\s+)"[^"]*"',
+        rf'\1"{new_version}"',
         content,
     )
     CONFIG_H.write_text(content, encoding="utf-8")
