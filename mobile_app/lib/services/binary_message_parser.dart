@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:convert';
 import 'logger_service.dart';
 
 /// Binary message types from firmware (0x80-0xFF)
@@ -1080,15 +1081,22 @@ class BinaryMessageParser {
           };
 
         case BinaryMessageType.versionInfo:
-          // [0xC2][major:u8][minor:u8][patch:u8] = 4 bytes
+          // [0xC2][major:u8][minor:u8][patch:u8][suffix...] = 4 + variable
           if (data.length < 4) return null;
+          final major = data[1];
+          final minor = data[2];
+          final patch = data[3];
+          String suffix = '';
+          if (data.length > 4) {
+            suffix = utf8.decode(data.sublist(4));
+          }
           return {
             'type': 'VersionInfo',
             'data': {
-              'major': data[1],
-              'minor': data[2],
-              'patch': data[3],
-              'version': '${data[1]}.${data[2]}.${data[3]}',
+              'major': major,
+              'minor': minor,
+              'patch': patch,
+              'version': '$major.$minor.$patch$suffix',
             },
           };
 

@@ -74,12 +74,12 @@ void bruter_handleCommand(const String& command) {
 }
 
 void BruterModule::updatePinsForModule() {
-    if (selectedModule == MODULE_1) {
-        RF_CS   = CC1101_SS0;
-        RF_GDO0 = MOD0_GDO0;
-        RF_TX   = MOD0_GDO0;
+    if (selectedModule < CC1101_NUM_MODULES) {
+        RF_CS   = moduleCC1101State[selectedModule].getCsPin();
+        RF_GDO0 = moduleCC1101State[selectedModule].getGdo0Pin();
+        RF_TX   = moduleCC1101State[selectedModule].getGdo0Pin();
     } else {
-        RF_CS   = CC1101_SS1;
+        RF_CS   = CC1101_SS1;  // fallback default
         RF_GDO0 = MOD1_GDO0;
         RF_TX   = MOD1_GDO0;
     }
@@ -100,7 +100,9 @@ bool BruterModule::setupCC1101() {
 
     // Ensure pin assignments match the selected module
     updatePinsForModule();
-    int gdo2Pin = (selectedModule == MODULE_1) ? MOD0_GDO2 : MOD1_GDO2;
+    int gdo2Pin = (selectedModule < CC1101_NUM_MODULES)
+        ? moduleCC1101State[selectedModule].getGdo2Pin()
+        : MOD1_GDO2;
 
     cc1101.addSpiPin(RF_SCK, RF_MISO, RF_MOSI, RF_CS, selectedModule);
     // Use addGDO() (not addGDO0!) to preserve gdo_set[]=2.

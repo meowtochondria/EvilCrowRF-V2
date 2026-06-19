@@ -44,6 +44,7 @@ private:
   byte id;
   byte inputPin;
   byte outputPin;
+  byte csPin;
   SemaphoreHandle_t stateChangeSemaphore;
   static SemaphoreHandle_t rwSemaphore;
 
@@ -93,6 +94,9 @@ public:
   void reset();
   byte getInputPin();
   byte getOutputPin();
+  byte getCsPin() { return csPin; }
+  byte getGdo0Pin() { return outputPin; }
+  byte getGdo2Pin() { return inputPin; }
   int getRssi();
   byte getLqi();
   void setSidle();

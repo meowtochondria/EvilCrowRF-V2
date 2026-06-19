@@ -230,17 +230,25 @@ private:
     }
     
     // Send firmware version info to all BLE clients.
-    // Payload: [0xC2][major][minor][patch] — 4 bytes total.
+    // Payload: [0xC2][major][minor][patch][suffix\0...] — 4 bytes + null-terminated suffix.
     static void sendVersionInfo() {
         BinaryVersionInfo vInfo;
         vInfo.major = FIRMWARE_VERSION_MAJOR;
         vInfo.minor = FIRMWARE_VERSION_MINOR;
         vInfo.patch = FIRMWARE_VERSION_PATCH;
+
+        // Append build suffix after the struct (empty for release builds)
+        constexpr size_t baseLen = sizeof(FIRMWARE_VERSION_STRING) - 1;
+        const char* suffix = FIRMWARE_VERSION_DISPLAY + baseLen;  // NOLINT
+        uint8_t payload[sizeof(BinaryVersionInfo) + 16] = {0};
+        memcpy(payload, &vInfo, sizeof(BinaryVersionInfo));
+        strcpy(reinterpret_cast<char*>(payload + sizeof(BinaryVersionInfo)), suffix);
+
         ClientsManager::getInstance().notifyAllBinary(
             NotificationType::VersionInfo,
-            reinterpret_cast<const uint8_t*>(&vInfo), sizeof(vInfo));
-        ESP_LOGI("StateCommands", "VersionInfo sent: %d.%d.%d",
-                 vInfo.major, vInfo.minor, vInfo.patch);
+            payload, sizeof(BinaryVersionInfo) + strlen(suffix) + 1);
+        ESP_LOGI("StateCommands", "VersionInfo sent: %d.%d.%d%s",
+                 vInfo.major, vInfo.minor, vInfo.patch, suffix);
     }
 
     // Send current persistent settings to all BLE clients.

@@ -2,6 +2,7 @@
 #include "BleAdapter.h"
 #include "core/ClientsManager.h"
 #include "ConfigManager.h"
+#include <NimBLESecurity.h>
 
 static const char* TAG = "BleAdapter";
 
@@ -60,6 +61,10 @@ void BleAdapter::begin() {
     // Initialize NimBLE with device name
     NimBLEDevice::init(bleName);
     NimBLEDevice::setPower(ESP_PWR_LVL_P9); // +9dBm
+
+    // Enable just-works bonding (no passkey, no MITM)
+    NimBLEDevice::setSecurityAuth(false, false, true);  // bonding enabled, no MITM, secure connections
+    NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);  // just-works
 
     // Create BLE Server
     pServer = NimBLEDevice::createServer();

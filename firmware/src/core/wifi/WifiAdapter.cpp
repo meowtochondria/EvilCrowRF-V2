@@ -61,7 +61,7 @@ void WifiAdapter::begin() {
         if (MDNS.begin(mdnsHostname.c_str())) {
             MDNS.addService("_evilcrow", "_tcp", 80);
             MDNS.addServiceTxt("_evilcrow", "_tcp", "name", deviceName);
-            MDNS.addServiceTxt("_evilcrow", "_tcp", "fw_version", FIRMWARE_VERSION_STRING);
+            MDNS.addServiceTxt("_evilcrow", "_tcp", "fw_version", FIRMWARE_VERSION_DISPLAY);
             MDNS.addServiceTxt("_evilcrow", "_tcp", "transport", "websocket");
             ESP_LOGI(TAG, "mDNS started as %s.local", mdnsHostname.c_str());
         } else {
@@ -91,7 +91,7 @@ void WifiAdapter::wifiCheck() {
         if (MDNS.begin(mdnsHostname.c_str())) {
             MDNS.addService("_evilcrow", "_tcp", 80);
             MDNS.addServiceTxt("_evilcrow", "_tcp", "name", deviceName);
-            MDNS.addServiceTxt("_evilcrow", "_tcp", "fw_version", FIRMWARE_VERSION_STRING);
+            MDNS.addServiceTxt("_evilcrow", "_tcp", "fw_version", FIRMWARE_VERSION_DISPLAY);
             MDNS.addServiceTxt("_evilcrow", "_tcp", "transport", "websocket");
             ESP_LOGI(TAG, "=== STA CONNECTED: %s (%s) ===",
                      mdnsHostname.c_str(), WiFi.localIP().toString().c_str());
@@ -198,7 +198,7 @@ String WifiAdapter::formatDeviceInfo() {
 
     json += "{";
     json += "\"device_name\":\"" + String(deviceName) + "\",";
-    json += "\"fw_version\":\"" + String(FIRMWARE_VERSION_STRING) + "\",";
+    json += "\"fw_version\":\"" + String(FIRMWARE_VERSION_DISPLAY) + "\",";
     json += "\"free_heap\":" + String(ESP.getFreeHeap()) + ",";
     json += "\"uptime\":" + String(millis() / 1000) + ",";
     json += "\"transport\":\"websocket\",";

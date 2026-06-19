@@ -14,6 +14,7 @@ ModuleCc1101::ModuleCc1101(byte sck, byte miso, byte mosi, byte ss, byte ip, byt
     cc1101.addGDO(op, ip, module);
     inputPin = ip;
     outputPin = op;
+    csPin = ss;
     id = module;
 }
 

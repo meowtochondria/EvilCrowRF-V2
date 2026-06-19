@@ -80,7 +80,7 @@ struct Notification
 {
     NotificationType type;
     char textBuffer[256];  // Static buffer for text messages (keep small - files sent directly)
-    uint8_t binaryData[128];  // Static buffer for binary messages
+    uint8_t binaryData[256];  // Static buffer for binary messages
     size_t messageLength;
     bool isBinary;
 

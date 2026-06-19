@@ -185,7 +185,8 @@ class ConfigManager
     /// Persist current in-memory settings to /config.txt.
     static bool saveSettings()
     {
-        File f = LittleFS.open("/config.txt", FILE_WRITE);
+        // Write to temp file first for atomic update
+        File f = LittleFS.open("/config.tmp", FILE_WRITE);
         if (!f) return false;
         f.printf("serial_baud_rate=%d\n", settings.serialBaudRate);
         f.printf("scanner_rssi=%d\n",     settings.scannerRssi);
@@ -209,7 +210,15 @@ class ConfigManager
         f.printf("wifi_ap_name=%s\n", settings.wifiApName);
         f.printf("wifi_ap_password=%s\n", settings.wifiApPassword);
         f.close();
-        ESP_LOGI("ConfigManager", "Settings saved to /config.txt");
+
+        // Atomic rename: temp → actual config. Power loss during write
+        // only corrupts the temp file, never the actual config.
+        if (!LittleFS.rename("/config.tmp", "/config.txt")) {
+            ESP_LOGE("ConfigManager", "Failed to rename config.tmp → config.txt");
+            LittleFS.remove("/config.tmp");  // Clean up
+            return false;
+        }
+        ESP_LOGI("ConfigManager", "Settings saved atomically to /config.txt");
         return true;
     }
 

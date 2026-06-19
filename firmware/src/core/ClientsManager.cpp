@@ -101,8 +101,17 @@ bool ClientsManager::enqueueMessage(NotificationType type, const std::string& me
     }
     
     if (xQueueSend(clientsNotificationQueue, &notification, pdMS_TO_TICKS(100)) != pdPASS) {
-        ESP_LOGW("ClientsManager", "Notification queue full, dropping message");
-        return false;
+        // Queue full — try priority drop: receive oldest message, log, then send
+        ESP_LOGW("ClientsManager", "Notification queue full, dropping oldest to make room");
+        Notification dropped;
+        if (xQueueReceive(clientsNotificationQueue, &dropped, 0) == pdPASS) {
+            ESP_LOGW("ClientsManager", "Dropped notification: type=%d", (int)dropped.type);
+        }
+        // Retry send
+        if (xQueueSend(clientsNotificationQueue, &notification, pdMS_TO_TICKS(100)) != pdPASS) {
+            ESP_LOGW("ClientsManager", "Notification queue still full after drop, discarding");
+            return false;
+        }
     }
 
     return true;

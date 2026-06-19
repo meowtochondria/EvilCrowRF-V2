@@ -9,11 +9,17 @@
 #define FIRMWARE_VERSION_MAJOR 3
 #define FIRMWARE_VERSION_MINOR 0
 #define FIRMWARE_VERSION_PATCH 0
-#define FIRMWARE_VERSION_STRING "3.0.0" FIRMWARE_BUILD_SUFFIX
+#define FIRMWARE_VERSION_STRING "3.0.0"
 
+// Build-environment suffix (e.g. _bt, _wifi). Set via PlatformIO build flags.
+// Stringified by XSTR() for adjacent string literal concatenation.
+// Default: empty string (no suffix for local/serial builds).
 #ifndef FIRMWARE_BUILD_SUFFIX
-#define FIRMWARE_BUILD_SUFFIX ""
+#define FIRMWARE_BUILD_SUFFIX 
 #endif
+#define STRINGIFY_(x) #x
+#define XSTR(x) STRINGIFY_(x)
+#define FIRMWARE_VERSION_DISPLAY "3.0.0" XSTR(FIRMWARE_BUILD_SUFFIX)
 
 #define CC1101_NUM_MODULES 2
 
@@ -39,7 +45,7 @@
 #define SERIAL_BAUDRATE 115200
 
 // Tasks params
-#define NOTIFICATIONS_QUEUE 5  // Reduced from 10 to save ~2KB heap
+#define NOTIFICATIONS_QUEUE 15
 
 /* I/O */
 // SPI devices

@@ -81,6 +81,9 @@ SPIClass sdspi(VSPI);
 // REMOVED - old static task buffers (no longer needed with worker architecture)
 // CC1101Worker uses its own static allocation
 
+// Queue for serial command data — decouples Serial ISR from processing task
+static QueueHandle_t serialDataQueue = nullptr;
+
 // Forward declarations
 void signalRecordedHandler(bool saved, const std::string& filename);
 void timeSyncTask(void* pvParameters);
@@ -397,8 +400,9 @@ void serialCommandTask(void* pvParameters) {
     static size_t bufferIndex = 0;
 
     while (true) {
-        if (Serial.available()) {
-            uint8_t byte = Serial.read();
+        uint8_t byte;
+        // Block until a byte arrives on the queue
+        if (xQueueReceive(serialDataQueue, &byte, portMAX_DELAY) == pdPASS) {
             buffer[bufferIndex++] = byte;
 
             // Handle simple raw commands (non-framed) to avoid race with loop()
@@ -585,8 +589,6 @@ void serialCommandTask(void* pvParameters) {
             if (bufferIndex >= sizeof(buffer)) {
                 bufferIndex = 0;
             }
-        } else {
-            vTaskDelay(pdMS_TO_TICKS(10)); // Small delay when no data
         }
     }
 }
@@ -697,6 +699,9 @@ void setup()
     ClientsManager& clients = ClientsManager::getInstance();
     clients.initializeQueue(NOTIFICATIONS_QUEUE);
     ESP_LOGD(TAG, "ClientsManager initialized.");
+
+    // Create serial data queue for the serialCommandTask
+    serialDataQueue = xQueueCreate(64, sizeof(uint8_t));
 
     // Initialize CommandHandler and register commands
     ESP_LOGI(TAG, "Initializing CommandHandler...");
@@ -822,6 +827,17 @@ void timeSyncTask(void* pvParameters) {
 
 void loop()
 {
+    // Read serial bytes into queue for serialCommandTask
+    if (serialDataQueue != nullptr) {
+        while (Serial.available() > 0) {
+            uint8_t byte = Serial.read();
+            // Non-blocking send — drop byte if queue is full
+            if (xQueueSend(serialDataQueue, &byte, 0) != pdPASS) {
+                break;  // Queue full, stop reading
+            }
+        }
+    }
+
 #if EVILCROW_WIFI_MODE
     // Process WiFi provisioning (SoftAP captive portal)
     WifiConfigManager::process();

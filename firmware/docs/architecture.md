@@ -109,6 +109,7 @@ flowchart LR
 - `notify()` sends responses by calling `sendSingleChunk()` or chunking via `sendChunkedResponse()`.
 - **Request correlation**: `_lastRequestChunkId` is stored from incoming commands and echoed in responses.
 - Heartbeat timer fires every 2.5 s to keep the connection alive.
+- **Just-works bonding**: Pairing is enabled with no passkey or MITM protection (`NimBLEDevice::setSecurityAuth`). Devices bonded over BLE can reconnect without re-pairing.
 - Connection/disconnection triggers `clients.notifyAll()` with JSON status strings, which the app receives as `ble_connected` / `ble_disconnected`.
 
 ### WifiAdapter (`src/core/wifi/WifiAdapter.cpp`, inherits `BinaryProtocolHandler`)
@@ -258,6 +259,7 @@ flowchart TB
     NotifQueue --> NotifQ
     NotifQ -->|"adapter->notify()"| Transports["BLE / WiFi Transport"]
 ```
+- **SerialCmd**: Reads serial bytes from a FreeRTOS queue (filled by `loop()`) instead of blocking on `Serial.read()`. The queue decouples Serial I/O from command processing.
 
 ### taskProcessor (Core 1, 6 KB stack)
 
@@ -295,7 +297,7 @@ When a brute-force attack starts, `BruterModule::startAttackAsync()` spawns a de
 
 ### CC1101_Module (`src/modules/CC1101_driver/`)
 
-Low-level SPI driver for the CC1101 sub-GHz transceiver. Handles register read/write, frequency configuration, modulation settings, RSSI polling, and GDO pin management. Two instances (module 0 on pins SS=5/GDO0=2, module 1 on pins SS=27/GDO0=25).
+Low-level SPI driver for the CC1101 sub-GHz transceiver. Handles register read/write, frequency configuration, modulation settings, RSSI polling, and GDO pin management. Two instances (module 0 on pins SS=5/GDO0=2, module 1 on pins SS=27/GDO0=25). The BruterModule reads pin assignments from the module instance directly (`moduleCC1101State[module].getCsPin()`, `getGdo0Pin()`) instead of duplicating pin defines, ensuring pin changes in config.h propagate automatically.
 
 ### BruterModule (`src/modules/bruter/`)
 
@@ -344,8 +346,8 @@ sequenceDiagram
 
 **Key design decisions:**
 - Notifications are queued rather than sent synchronously. This prevents BLE/WiFi I/O from blocking command handlers or ISRs.
-- The notification queue is only 5 slots deep. If full, messages are dropped (logged as warning).
-- Binary payloads use a static buffer in the `Notification` struct — no heap allocation in the hot path.
+- The notification queue is 15 slots deep. If full, the oldest message is dropped to make room (priority drop).
+- Binary payloads use a static buffer (256 bytes) in the `Notification` struct — no heap allocation in the hot path.
 - Heartbeat messages bypass the queue and are sent directly from the timer callback (non-blocking, drop-if-full).
 
 ---
@@ -354,7 +356,7 @@ sequenceDiagram
 
 ### ConfigManager (`include/ConfigManager.h`)
 
-Persistent settings are stored in `/config.txt` on LittleFS as a key=value text file. Runtime settings struct (`DeviceSettings`) includes:
+Persistent settings are stored in `/config.txt` on LittleFS as a key=value text file. Writes are atomic: `saveSettings()` writes to `/config.tmp` first, then atomically renames to `/config.txt`. Power loss during a write only corrupts the temp file. Runtime settings struct (`DeviceSettings`) includes:
 
 | Field | Default | Purpose |
 |-------|---------|---------|
@@ -457,19 +459,20 @@ sequenceDiagram
 Two build environments in `platformio.ini`:
 
 | Environment | Define | Output suffix | Key differences |
-|-------------|--------|--------------|----------------|
-| `evilcrow-bt` | `EVILCROW_BT_MODE=1` | `-bt` | NimBLE stack, excludes `core/wifi/` sources |
-| `evilcrow-wifi` | `EVILCROW_WIFI_MODE=1` | `-wifi` | AsyncTCP + AsyncWebServer, excludes `core/ble/` sources |
+|-------------|--------|:-------------:|-----------------|
+| `evilcrow-bt` | `EVILCROW_BT_MODE=1` | `_bt` | NimBLE stack, excludes `core/wifi/` sources |
+| `evilcrow-wifi` | `EVILCROW_WIFI_MODE=1` | `_wifi` | AsyncTCP + AsyncWebServer, excludes `core/ble/` sources |
 
 **Version**: Defined in `include/config.h`:
 ```c
 #define FIRMWARE_VERSION_MAJOR 3
 #define FIRMWARE_VERSION_MINOR 0
 #define FIRMWARE_VERSION_PATCH 0
-#define FIRMWARE_VERSION_STRING "3.0.0" FIRMWARE_BUILD_SUFFIX
+#define FIRMWARE_VERSION_STRING "3.0.0"
+#define FIRMWARE_VERSION_DISPLAY "3.0.0" XSTR(FIRMWARE_BUILD_SUFFIX)
 ```
 
-`FIRMWARE_BUILD_SUFFIX` is empty by default and overridden by PlatformIO build flags (`-DFIRMWARE_BUILD_SUFFIX="-bt"` / `-wifi`). The resulting string (e.g. `"3.0.0-bt"`) appears in mDNS, HTTP `/api/info`, and `VersionInfo` binary messages.
+`FIRMWARE_BUILD_SUFFIX` is undefined by default and set via PlatformIO build flags (`-DFIRMWARE_BUILD_SUFFIX=_bt` / `_wifi`). The `XSTR()` macro stringifies the value (e.g. `_bt` → `"_bt"`), producing `"3.0.0_bt"` via adjacent string literal concatenation. The display version appears in mDNS, HTTP `/api/info`, and `VersionInfo` binary messages.
 
 **Makefile** provides `build-bt`, `build-wifi`, `flash-bt`, `flash-wifi`, `monitor`, `flash-monitor-bt/wifi`, and `clean` targets. All delegate to PlatformIO via the project's `.venv`.
 
