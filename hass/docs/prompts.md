@@ -1,3 +1,5 @@
+Evaluate if [@plan.md](file:///home/dev/src/EvilCrowRF-V2/hass/docs/plan.md) meets the following requirements. List strentghs, weaknesses, and suggestions to make the plan better. Focus should be on usability of the integration. The user should be able to onboard RF signals and replay them to control various devices via Home Assistant
+
 I would like to use evilcrow wifi with home assistant to control various RF remote control devices. The end user should be able to able to learn all the buttons by pressing them and using evilcrow's Sub-Ghz functionality to capture the signal. to start, the person should be able to enter FCC ID of the device whose signal they're trying to capture. If they know the RF frequency at which the remote operates, they should be able to enter that instead. If given an FCC ID, the plugin should be able to query FCC APIs and determine the frequency on which the target device operates.
 Once the signal is captured, the integration should ask the person to confirm operation by replaying the signal. If the person responds with a negative, then restart the signal capture and confirmation option, with another option to cancel and go back to home assitant.
 The integration can communicate with evilcrow device over wifi. They will first need to setup that device. Add facility to connect to evilcrow device as first-run wizard. User should be able to skip it if they have already onboarded the device, and should be able to provide just the IP or FQDN.
@@ -9,6 +11,10 @@ Methods of connecting to device and communicating with it can be found in [@arch
 Write a plan to implement it to [@plan.md](file:///home/dev/src/EvilCrowRF-V2/hass/docs/plan.md) . Include a makefile that allows developer to quickly test the changes. Use best practices to design the implementation.
 
 use fccid.io instead for FCC API. downloading the page from https://fccid.io/{fcc_id} and looking for frequency seems to be working. Make this API endpoint configurable in settings. When the user updates the endpoint, scrape the page once and see if we are able to derive frequency from it or not. Leave it in that state, with an option to revert the configuration to default. Use `uv` for dependency management. Update the doc
+
+I would like to add one more feature - the user may use the remote or the app to send RF signals. in that scenario, the state of the appliance acting on RF signal in home assistant will deviate from what's actually happening. Evilcrow RF has two CC11101 modules. Use one module to be always in listening mode, and match captured signal to what it already knows. If there is a match, then change the device status in Home Assistant accordingly. Allow user to configure if it this integration should also expose new signals that it detects. This can be noisy as random signals can be picked up from devices that do not belong to the user, so user should be able to turn this behavior on or off. Additionally, even if the capture mode is on, there is no guarantee that state would be perfectly reflected in home assistant - it can be due to distance from remote, general RF noise in the environment, and many other reasons i am not able to think of.
+
+
 ---
 1. **Options flow does NOT match the user's requirement** (L683–L688)
 Update document to apply suggestions.
