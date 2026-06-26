@@ -1,0 +1,119 @@
+{
+  "config": {
+    "flow_title": "{name}",
+    "step": {
+      "user": {
+        "title": "EvilCrowRF V2 — Setup Method",
+        "description": "Choose how to configure the EvilCrowRF V2 device.",
+        "data": {
+          "setup_method": "Setup method"
+        },
+        "data_description": {
+          "setup_method": "Select how you want to add the device."
+        }
+      },
+      "manual_device": {
+        "title": "EvilCrowRF V2 — Manual Configuration",
+        "description": "Enter the IP address or hostname and port of your EvilCrowRF device.",
+        "data": {
+          "host": "Hostname or IP address",
+          "port": "Port"
+        },
+        "data_description": {
+          "host": "The IP address or hostname of the EvilCrowRF device on your network.",
+          "port": "The HTTP/WebSocket port (default: 80)."
+        }
+      },
+      "discovery": {
+        "title": "EvilCrowRF V2 — Discovered Devices",
+        "description": "{num_devices} device(s) found. Select the device to configure.",
+        "data": {
+          "device_index": "Discovered devices"
+        },
+        "data_description": {
+          "device_index": "Choose a device from the list."
+        }
+      },
+      "reconfigure": {
+        "title": "EvilCrowRF V2 — Reconfigure Device",
+        "description": "Update the connection settings for your EvilCrowRF device.",
+        "data": {
+          "host": "Hostname or IP address",
+          "port": "Port"
+        },
+        "data_description": {
+          "host": "The new IP address or hostname of the EvilCrowRF device.",
+          "port": "The new HTTP/WebSocket port (default: 80)."
+        }
+      },
+      "options": {
+        "title": "EvilCrowRF V2 — Monitoring Settings",
+        "description": "Configure signal monitoring and unknown signal exposure for this device.",
+        "data": {
+          "monitor_enabled": "Enable continuous monitoring",
+          "monitor_module": "CC1101 module for monitoring",
+          "monitor_rssi_threshold": "RSSI threshold (dBm)",
+          "expose_unknown": "Expose unknown signals as entities",
+          "expose_unknown_min_occurrences": "Minimum occurrences before exposing",
+          "expose_unknown_window_seconds": "Detection window (seconds)"
+        },
+        "data_description": {
+          "monitor_enabled": "When enabled, the device continuously listens for RF signals on the configured frequency.",
+          "monitor_module": "Which CC1101 module to use: 0 = primary, 1 = secondary (if available).",
+          "monitor_rssi_threshold": "Signals below this RSSI threshold (in dBm) will be ignored. Range: -127 to 0.",
+          "expose_unknown": "When enabled, unknown (unmatched) signals will be surfaced as transient entities.",
+          "expose_unknown_min_occurrences": "How many times an unknown signal must be detected before it is exposed as an entity.",
+          "expose_unknown_window_seconds": "The time window (in seconds) during which occurrences are counted."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the device. Check the IP address and ensure the device is powered on.",
+      "invalid_host": "The hostname or IP address is not valid.",
+      "unknown": "An unexpected error occurred. Please try again.",
+      "no_devices_found": "No EvilCrowRF devices were discovered on the network. Try manual configuration."
+    },
+    "abort": {
+      "already_configured": "This device is already configured.",
+      "no_devices_found": "No EvilCrowRF devices were found on the network.",
+      "no_discovery_info": "No discovery information received.",
+      "reconfigure_successful": "Device configuration updated successfully. The integration will reload.",
+      "already_in_progress": "Configuration is already in progress for this device."
+    },
+    "create_entry": {
+      "default": "Successfully connected to the EvilCrowRF device."
+    },
+    "progress": {
+      "connecting": "Connecting to the EvilCrowRF device..."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "EvilCrowRF V2 — Monitoring Settings",
+        "description": "Configure signal monitoring and unknown signal exposure.",
+        "data": {
+          "monitor_enabled": "Enable continuous monitoring",
+          "monitor_module": "CC1101 module for monitoring",
+          "monitor_rssi_threshold": "RSSI threshold (dBm)",
+          "expose_unknown": "Expose unknown signals as entities",
+          "expose_unknown_min_occurrences": "Minimum occurrences before exposing",
+          "expose_unknown_window_seconds": "Detection window (seconds)"
+        },
+        "data_description": {
+          "monitor_enabled": "When enabled, the device continuously listens for RF signals.",
+          "monitor_module": "Which CC1101 module to use: 0 = primary, 1 = secondary (if available).",
+          "monitor_rssi_threshold": "Signals below this RSSI threshold (in dBm) will be ignored.",
+          "expose_unknown": "When enabled, unknown (unmatched) signals will be surfaced as transient entities.",
+          "expose_unknown_min_occurrences": "How many times an unknown signal must be detected before it is exposed.",
+          "expose_unknown_window_seconds": "Time window (seconds) for counting occurrences."
+        }
+      }
+    },
+    "error": {
+      "invalid_rssi": "RSSI threshold must be between -127 and 0.",
+      "invalid_occurrences": "Minimum occurrences must be between 1 and 100.",
+      "invalid_window": "Detection window must be between 5 and 3600 seconds."
+    }
+  }
+}

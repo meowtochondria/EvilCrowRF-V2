@@ -1,0 +1,47 @@
+# Python
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+*.whl
+*.so
+*.dll
+*.dylib
+
+# Virtual environment
+.venv/
+
+# Bytecode cache
+__pycache__/
+*.pyc
+
+# Ruff cache
+.ruff_cache/
+
+# Mypy cache
+.mypy_cache/
+
+# Coverage
+.coverage
+htmlcov/
+
+# Pytest
+.pytest_cache/
+
+# Test fixtures / temporary artifacts
+tests/fixtures/cassettes/*.tmp
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Home Assistant config copy
+config/

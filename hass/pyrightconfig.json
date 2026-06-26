@@ -1,0 +1,9 @@
+{
+  "pythonVersion": "3.13",
+  "include": ["custom_components", "tests"],
+  "exclude": [".venv", "**/__pycache__"],
+  "typeCheckingMode": "standard",
+  "reportMissingImports": false,
+  "reportMissingTypeStubs": false,
+  "reportIncompatibleVariableOverride": false,
+}

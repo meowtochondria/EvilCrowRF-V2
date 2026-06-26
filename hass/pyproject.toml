@@ -1,0 +1,67 @@
+[project]
+name = "evilcrow-rf-hass"
+version = "1.0.0"
+description = "EvilCrowRF V2 Home Assistant integration"
+requires-python = ">=3.13.2"
+# Production deps are declared in the HA manifest (aiohttp, beautifulsoup4, lxml).
+# We do NOT list them here — HA's custom-component loader installs them at
+# startup from the manifest, and listing them here would create two sources of
+# truth that can drift apart.
+dependencies = []
+
+[project.optional-dependencies]
+# Dev deps only. Tests run against a mocked HA environment provided by
+# pytest-homeassistant-custom-component — we do NOT pull in the full
+# `homeassistant` package as a direct dev dep (it's huge, slow to install, and
+# version-coupled to HA's release cadence). `pytest-homeassistant-custom-component`
+# transitively depends on `homeassistant`, which provides the `hass` CLI needed
+# by the `make run` target.
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=4.1",
+    "pytest-aiohttp>=1.0",
+    "pytest-homeassistant-custom-component>=0.13.245",
+    "basedpyright>=1.39",
+    "ruff>=0.3",
+    "mypy>=1.8",
+    "types-beautifulsoup4",
+    "zeroconf>=0.132",
+    # These match the manifest so devs can run scripts outside HA that
+    # exercise the same code paths.
+    "aiohttp>=3.9",
+    "beautifulsoup4>=4.12",
+    "lxml>=5.0",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+
+[tool.pyright]
+pythonVersion = "3.13"
+include = ["custom_components", "tests"]
+exclude = [".venv", "**/__pycache__"]
+typeCheckingMode = "standard"
+reportMissingImports = false
+reportMissingTypeStubs = false
+reportIncompatibleVariableOverride = false
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "-v --cov=custom_components/evilcrow_rf --cov-report=term-missing --strict-markers"
+asyncio_mode = "auto"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
