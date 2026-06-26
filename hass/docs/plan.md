@@ -41,7 +41,7 @@ This integration allows Home Assistant to control RF remote-controlled devices v
 | Timeout safety | Every command has a 15–30s timeout; the state machine cannot hang forever |
 | Version awareness | Read `RESP_VERSION_INFO` on connect; warn (but allow) on major mismatch |
 | File rename | Captured `.sub` files can be renamed so they are usable from the mobile app too |
-| File load | `CMD_FILE_LOAD (0xA2)` reads `.sub` file contents from the SD card so the integration can populate Flipper Sub entity attributes |
+| File load | `CMD_FILE_LOAD (0xA5)` reads `.sub` file contents from the SD card so the integration can populate Flipper Sub entity attributes |
 | Frequency scan fallback | `CMD_SCAN (0x02)` lets users without an FCC ID discover the operating frequency by pressing the remote near the device |
 | Persistent signal monitoring | Dedicate one CC1101 module to continuous listening; match incoming signals against known signals and update HA entity state; optionally expose unknown signals; user can enable/disable per device |
 | SmartConfig onboarding | Optional firmware support for ESP-TOUCH SmartConfig to push WiFi credentials |
@@ -95,17 +95,17 @@ flowchart TB
 |---|---|
 | **Python dataclasses for protocol** instead of raw byte arrays | Maintainable, testable, matches HA conventions |
 | **DataUpdateCoordinator** for device polling | HA best practice for device state management |
-| **`hass-config-sync` command** (new, `0xC2` → `0xC3`) for device ID exchange | Persists the HA device UUID in `/config/ha_device_id.txt` on the SD card via a new firmware `CMD_HA_SETTINGS_WRITE_SD` command; the existing mobile-app ↔ firmware protocol is unaffected — the mobile app ignores the new commands |
+| **`hass-config-sync` command** (new, `0xD8` → `0xD9`) for device ID exchange | Persists the HA device UUID in `/config/ha_device_id.txt` on the SD card via a new firmware `CMD_HA_SETTINGS_WRITE_SD (0xDA)` command; the existing mobile-app ↔ firmware protocol is unaffected — the mobile app ignores the new commands |
 | **Configurable FCC API endpoint** stored in `evilcrow_rf.yaml` (not options flow) | The FCC endpoint is an integration-wide setting (not per-device); a YAML file is the right scope and survives integration reloads |
 | **Options-flow test/revert flow** | On endpoint change: scrape once, show result, **always persist the new endpoint**, expose "Revert to default" as an always-available action |
-| **Single config entry per device** at launch; multi-device dispatch from day one | `hass.data[DOMAIN]` is a `dict[str, EvilCrowCoordinator]`; services take `device_id`; reconfigure flow handles host/port changes |
-| **mDNS auto-discovery** + manual IP fallback | Reduces friction; mDNS uses `_evilcrow._tcp` / `evilcrow.local`. Manual IP is the recommended path (mDNS is unreliable across VLANs/routers) |
+| **Single config entry per device** at launch; multi-device dispatch from Phase 5 | Phases 1–4: dispatch keyed by `host:port` (config-entry `entry_id`). Phase 5: dispatch keyed by stable UUID from `CMD_HA_CONFIG_SYNC`. Services take `device_id` (the config-entry key in Phases 1–4, the SD-card UUID in Phase 5). Reconfigure flow handles host/port changes in both phases. |
+| **mDNS auto-discovery** via HA's built-in zeroconf integration | The manifest declares `"zeroconf": ["_evilcrow._tcp.local."]`; HA core runs the browser and the integration implements `async_step_zeroconf` in `config_flow.py`. No custom `discovery.py` module — the integration does not start its own browser, which would race with HA's. Manual IP entry is the recommended path (mDNS is unreliable across VLANs/routers). |
 | **Request/response timeout tracker** | If a command times out (firmware crash, RF interference, silent WS drop), the state machine transitions to an error state and a `persistent_notification` is shown — never hangs |
 | **Version awareness with warning, not block** | Read `RESP_VERSION_INFO` on connect; if major version differs, show a warning that the user can dismiss and continue |
 | **SmartConfig (ESP-TOUCH) onboarding** | Firmware gains a `smartConfig` mode; the integration instructs the user to put the device in this mode, then broadcasts SSID/password via UDP — no need for the HA host to have WiFi or to connect to the device's SoftAP |
 | **Captured signals mapped to Flipper Sub file fields** | `frequency`, `preset`, `protocol`, `bit`, `key`, `te`, `repeat`, etc. stored as entity attributes — directly portable to the mobile app; `flipper_sub.py` parses `.sub` files read from the device via `CMD_FILE_LOAD` |
 | **Target RF remote persistence** | Learned signals and their button-to-file mappings are persisted in `<config_dir>/evilcrow_rf_targets.json` so they survive HA restarts |
-| **Persistent signal monitoring** | `signal_monitor.py` dedicates one CC1101 module to always-on listening. The firmware reports detected signals via `CMD_START_MONITOR (0x0C)` / `RESP_SIGNAL_MONITOR (0x95)`. The integration matches the decoded key against known signals in `TargetDeviceStore` and updates `CapturedSignalEntity` state (`last_detected`, `active`). Unknown signals can optionally be exposed as transient entities (off by default — RF noise makes this noisy). User enables/disables monitoring per device via config entry options. |
+| **Persistent signal monitoring** | `signal_monitor.py` dedicates one CC1101 module to always-on listening. The firmware reports detected signals via `CMD_START_MONITOR (0x1B)` / `RESP_SIGNAL_MONITOR (0x95)`. The integration matches the decoded key against known signals in `TargetDeviceStore` and updates `CapturedSignalEntity` state (`last_detected`, `active`). Unknown signals can optionally be exposed as transient entities (off by default — RF noise makes this noisy). User enables/disables monitoring per device via config entry options. |
 | **Reconfigure flow** | If the device IP changes (DHCP), the user can update host/port without removing/re-adding the integration |
 | **Config entry migration** | `CONFIG_ENTRY_VERSION` and `async_migrate_entry` protect against schema drift between integration releases |
 | **Firmware prerequisites documented** | A dedicated "Firmware Prerequisites" section lists the new firmware commands required (with command IDs and firmware PR references) so the integration cannot be installed against incompatible firmware without clear messaging |
@@ -138,7 +138,6 @@ hass/
 │       ├── fcc_lookup.py               # FCC ID → frequency API client (loads endpoint from YAML)
 │       ├── subghz.py                   # Sub-GHz capture/replay state machine
 │       ├── signal_monitor.py           # Persistent RF monitoring (dedicated CC1101 module)
-│       ├── discovery.py                # mDNS discovery for EvilCrow devices
 │       ├── timeout_tracker.py          # PendingRequestTracker (request/response timeout)
 │       ├── smartconfig.py              # ESP-TOUCH SmartConfig WiFi provisioning
 │       ├── flipper_sub.py              # Flipper Sub file format parser/serializer
@@ -156,8 +155,11 @@ hass/
 │   ├── test_device.py                  # hass-config-sync round-trip, factory-reset reconciliation
 │   ├── test_coordinator.py             # Multi-device dispatch, version negotiation, NOT_READY
 │   ├── test_flipper_sub.py             # .sub file format round-trip
-│   ├── test_smartconfig.py             # ESP-TOUCH packet format
-│   └── test_yaml_config.py             # evilcrow_rf.yaml load/save/revert
+│   ├── test_target_device_store.py  # TargetDevice persistence round-trip, atomic writes
+    │   ├── test_signal_monitor.py       # Monitor lifecycle, signal matching, unknown handling
+    │   ├── test_smartconfig.py           # ESP-TOUCH packet format
+    │   ├── test_yaml_config.py          # evilcrow_rf.yaml load/save/revert
+    │   └── test_options_flow.py         # FCC endpoint options: persist, scrape, revert
 ├── docs/
 │   └── plan.md                        # This file
 └── Makefile                            # Developer targets (uv, lint, test, install, run, lock)
@@ -169,23 +171,64 @@ hass/
 
 ## Firmware Prerequisites
 
-The integration depends on the following **new firmware commands** (additive — no existing firmware code paths are modified, and the mobile app ignores them):
+> **Status**: All commands listed here are **deferred to Phase 5** — see [Implementation Order](#implementation-order). Phases 1–4 ship against the **current, unmodified** firmware. The integration detects at runtime which commands the firmware supports and gracefully disables Phase 5 features (with a `persistent_notification`) on older firmware. This lets the firmware PRs and the integration code be developed in parallel.
+
+The integration depends on the following **new firmware commands** (additive — no existing firmware code paths are modified, and the mobile app ignores them). All byte allocations are picked from ranges that the existing mobile-app and web-app firmware protocols do **not** use:
 
 | Command | ID | Direction | Purpose | Firmware Impact |
 |---|---|---|---|---|
-| `CMD_HA_CONFIG_SYNC` | `0xC2` | App → Device | Request the device's HA-assigned UUID | Firmware reads `/config/ha_device_id.txt` from SD card; response `0xC3` returns the UUID bytes or zero-length if absent |
-| `RESP_HA_CONFIG_SYNC` | `0xC3` | Device → App | Return the HA-assigned UUID (or empty) | Payload: `[length:uint16][uuid-bytes]`; 0x0000 means no UUID assigned yet |
-| `CMD_HA_SETTINGS_WRITE_SD` | `0xC4` | App → Device | Write a key=value pair to `/config/<key>.txt` on the SD card | Opens/writes/closes a file on the SD card filesystem; payload: `[key_len:uint8][key:N][value_len:uint16][value:N]` |
-| `RESP_HA_SETTINGS_WRITE_SD_ACK` | `0xC5` | Device → App | Acknowledge successful SD write | Payload: `[key_len:uint8][key:N]` (the key that was written); empty on error |
-| `CMD_SMART_CONFIG` | `0x18` | App → Device | Enter ESP-TOUCH SmartConfig WiFi provisioning mode | Uses the ESP-IDF SmartConfig library (already available); no payload needed |
-| `CMD_START_MONITOR` | `0x0C` | App → Device | Start continuous RX on a dedicated CC1101 module | Configures the specified module in RX mode at the given frequency; payload: `[module:uint8][frequency:uint32 LE][rssi_threshold:int8]` |
-| `CMD_STOP_MONITOR` | `0x0D` | App → Device | Stop the monitoring module | Releases the module back to idle; no payload |
+| `CMD_HA_CONFIG_SYNC` | `0xD8` | App → Device | Request the device's HA-assigned UUID | Firmware reads `/config/ha_device_id.txt` from SD card; response `0xD9` returns the UUID bytes or zero-length if absent |
+| `RESP_HA_CONFIG_SYNC` | `0xD9` | Device → App | Return the HA-assigned UUID (or empty) | Payload: `[length:uint16][uuid-bytes]`; 0x0000 means no UUID assigned yet |
+| `CMD_HA_SETTINGS_WRITE_SD` | `0xDA` | App → Device | Write a key=value pair to `/config/<key>.txt` on the SD card | Opens/writes/closes a file on the SD card filesystem; payload: `[key_len:uint8][key:N][value_len:uint16][value:N]` |
+| `RESP_HA_SETTINGS_WRITE_SD_ACK` | `0xDB` | Device → App | Acknowledge successful SD write | Payload: `[key_len:uint8][key:N]` (the key that was written); empty on error |
+| `CMD_SMART_CONFIG` | `0xDC` | App → Device | Enter ESP-TOUCH SmartConfig WiFi provisioning mode | Uses the ESP-IDF SmartConfig library (already available); no payload needed |
+| `RESP_SMART_CONFIG_STATUS` | `0xDD` | Device → App | Status notification for SmartConfig provisioning | Payload: TBD by firmware team (one of: `provisioning_started`, `credentials_received`, `wifi_joined`, `failed`) |
+| `CMD_START_MONITOR` | `0x1B` | App → Device | Start continuous RX on a dedicated CC1101 module | Configures the specified module in RX mode at the given frequency; payload: `[module:uint8][frequency:uint32 LE][rssi_threshold:int8]` |
+| `CMD_STOP_MONITOR` | `0x1C` | App → Device | Stop the monitoring module | Releases the module back to idle; no payload |
 | `RESP_SIGNAL_MONITOR` | `0x95` | Device → App | Signal detected during monitoring | Payload: `[frequency:uint32 LE][rssi:int8][protocol:uint8][bit:uint8][key_len:uint8][key:N]` |
-| `CMD_FILE_LOAD` | `0xA2` | App → Device | Read a file from the SD card (chunked response) | Firmware opens the file and streams it in ≤500B chunks via `RESP_FILE_CONTENT (0xA2)` |
+| `CMD_FILE_LOAD` | `0xA5` | App → Device | Read a file from the SD card (chunked response) | Firmware opens the file and streams it in ≤500B chunks via `RESP_FILE_CONTENT (0xA6)` |
+| `RESP_FILE_CONTENT` | `0xA6` | Device → App | Chunked file content response for `CMD_FILE_LOAD` | Payload: `[chunk_num:uint8][total_chunks:uint8][data:N]` |
+
+**Collision-avoidance analysis** (the exhaustive mobile/web-app byte map this avoids):
+
+| Range | Used by | Status |
+|---|---|---|
+| `0x01`–`0x1A` | Core commands (`GET_STATE`, `REQUEST_SCAN`, `REQUEST_IDLE`, `BRUTER`, file ops, `REBOOT`, `FACTORY_RESET`, `FORMAT_SD`, `SET_WIFI_AP_CONFIG`, `APPLY_WIFI`) | taken |
+| `0x1B`–`0x1F` | (none) | **free** — `CMD_START_MONITOR` (0x1B), `CMD_STOP_MONITOR` (0x1C) |
+| `0x20`–`0x35` | NRF24 + OTA commands | taken |
+| `0x36`–`0x3F` | (none) | free (unused; reserved for future Core commands) |
+| `0x40` | HW Button | taken |
+| `0x50`–`0x60` | SDR + ProtoPirate commands | taken |
+| `0x80`–`0x82` | `modeSwitch`, `status`, `heartbeat` | taken (responses) |
+| `0x90`–`0x94` | `signalDetected`, `signalRecorded`, `signalSent`, `signalSendError`, `frequencySearch` | taken (responses) |
+| `0x95`–`0x9F` | (none — `RESP_SIGNAL_MONITOR` at 0x95; rest free for future Sub-GHz responses) | **0x95 used; rest free** |
+| `0xA0`–`0xA3` | `fileContent`, `fileList`, `directoryTree`, `fileActionResult` (mobile) | taken (responses) |
+| `0xA4`–`0xAF` | (none — `RESP_FILE_CONTENT` at 0xA6; `CMD_FILE_LOAD` at 0xA5) | **partially used; rest free** |
+| `0xB0`–`0xBB` | Bruter + ProtoPirate responses | taken |
+| `0xBC`–`0xBF` | (none) | free |
+| `0xC0`–`0xC4` | `settingsSync`, `settingsUpdate`, `versionInfo`, `batteryStatus`, `sdrStatus` | taken (commands + responses) |
+| `0xC5`–`0xC6` | (none) | free |
+| `0xC7`–`0xCB` | `deviceName`, `hwButtonStatus`, `sdStatus`, `nrfModuleStatus`, `wifiApConfig` | taken (responses) |
+| `0xCC`–`0xCF` | (none) | free |
+| `0xD0`–`0xD7` | NRF24 events | taken (responses) |
+| `0xD8`–`0xDF` | (none — `CMD_HA_CONFIG_SYNC` 0xD8, `RESP_HA_CONFIG_SYNC` 0xD9, `CMD_HA_SETTINGS_WRITE_SD` 0xDA, `RESP_HA_SETTINGS_WRITE_SD_ACK` 0xDB, `CMD_SMART_CONFIG` 0xDC, `RESP_SMART_CONFIG_STATUS` 0xDD) | **used by Phase 5** |
+| `0xE0`–`0xE2` | OTA events | taken (responses) |
+| `0xE3`–`0xEF` | (none) | free |
+| `0xF0`–`0xF3` | `error`, `lowMemory`, `commandSuccess`, `commandError` | taken (responses) |
+| `0xF4`–`0xFF` | (none) | free |
+
+**Source**: bytes derived from `mobile_app/lib/providers/firmware_protocol.dart` (commands) and `mobile_app/lib/services/binary_message_parser.dart` (responses).
 
 **Minimum firmware version**: The integration checks `fw_major` from `/api/info` and warns if <3 (current major). The specific minor/patch version depends on when these commands land. The integration logs a clear error message listing the missing commands if `RESP_VERSION_INFO` does not report the expected capability flags.
 
-**Backward compatibility**: All new commands live in ranges the mobile app does not use (`0xA2`, `0xC2`–`0xC5`). The mobile app's `FirmwareBinaryProtocol` ignores unknown message types — no mobile-app changes required.
+**Backward compatibility**: All new commands live in ranges the mobile app does not use (`0x1B`–`0x1C`, `0xA4`–`0xA6`, `0xD8`–`0xDD`). The mobile app's `FirmwareBinaryProtocol` ignores unknown message types — no mobile-app changes required.
+
+**Runtime detection (Phases 1–4)**: Until the firmware PRs land, the integration must detect capability at runtime and:
+- Skip `CMD_HA_CONFIG_SYNC` (0xD8) if `RESP_VERSION_INFO` doesn't advertise the `HASS_CONFIG_SYNC` capability flag.
+- Skip `CMD_START_MONITOR` (0x1B) and surface "monitoring not supported on this firmware" if the capability flag is absent.
+- Skip `CMD_FILE_LOAD` (0xA5) and populate `CapturedSignalEntity` attributes from locally-cached state instead.
+- Skip `CMD_SMART_CONFIG` (0xDC) and instruct the user to put the device in SmartConfig mode via the BOOT button (firmware already supports this without the new command).
+The capability flags are negotiated once on connect and cached on the coordinator. See `test_coordinator.py` for the fallback test cases.
 
 ---
 
@@ -237,37 +280,43 @@ FRAME_TYPE_ACK = 0x02
 FRAME_TYPE_NAK = 0x03
 MAX_PAYLOAD_SIZE = 500
 
-# Message types (command → device)
+# Message types (command → device).
+# Byte allocations follow the safe-harbor map documented in §Firmware Prerequisites.
+# Newly added commands (Phase 5) occupy ranges that are NOT used by the existing
+# mobile-app or web-app firmware protocol — see §Firmware Prerequisites for the
+# full collision-avoidance analysis.
 CMD_GET_STATE = 0x01
 CMD_SCAN = 0x02
 CMD_IDLE = 0x03
 CMD_START_RECORDING = 0x09
 CMD_STOP_RECORDING = 0x0A
 CMD_SEND_SIGNAL = 0x0B
-CMD_START_MONITOR = 0x0C     # continuous listening on a dedicated CC1101 module
-CMD_STOP_MONITOR = 0x0D      # stop the monitoring module
-CMD_SMART_CONFIG = 0x18       # new: put device into SmartConfig WiFi provisioning mode
-CMD_FILE_LIST = 0xA0          # request SD-card file listing
-CMD_FILE_LOAD = 0xA2          # read a .sub file from the SD card (chunked response)
-CMD_FILE_RENAME = 0xA4        # rename a file on the SD card
+CMD_START_MONITOR = 0x1B     # Phase 5: continuous listening on a dedicated CC1101 module
+CMD_STOP_MONITOR = 0x1C      # Phase 5: stop the monitoring module
+CMD_FILE_LIST = 0xA0         # request SD-card file listing
+CMD_FILE_LOAD = 0xA5         # Phase 5: read a .sub file from the SD card (chunked response)
+CMD_FILE_RENAME = 0xA4       # rename a file on the SD card
 CMD_SETTINGS_UPDATE = 0xC1
-CMD_HA_CONFIG_SYNC = 0xC2     # new: ask device for its HA-assigned UUID (response 0xC3)
-CMD_HA_SETTINGS_WRITE_SD = 0xC4  # new: write a key=value pair to /config/ on the SD card
+CMD_HA_CONFIG_SYNC = 0xD8    # Phase 5: ask device for its HA-assigned UUID (response 0xD9)
+CMD_HA_SETTINGS_WRITE_SD = 0xDA  # Phase 5: write a key=value pair to /config/ on the SD card
+CMD_SMART_CONFIG = 0xDC      # Phase 5: put device into SmartConfig WiFi provisioning mode
 
-# Message types (response → app, 0x80+)
+# Message types (response → app, 0x80+).
+# Phase 5 response codes are paired with their command counterparts (0xD8/0xD9,
+# 0xDA/0xDB, 0xDC/0xDD) so direction is always unambiguous.
 RESP_SIGNAL_DETECTED = 0x90
 RESP_SIGNAL_RECORDED = 0x91
 RESP_SIGNAL_SENT = 0x92
 RESP_SIGNAL_ERROR = 0x93
 RESP_SIGNAL_SENDING_ERROR = 0x94
-RESP_SIGNAL_MONITOR = 0x95    # signal detected during continuous monitoring (payload: freq, rssi, raw_key)
+RESP_SIGNAL_MONITOR = 0x95   # Phase 5: signal detected during continuous monitoring (payload: freq, rssi, raw_key)
 RESP_FILE_LIST = 0xA1
-RESP_FILE_CONTENT = 0xA2      # chunked file content response for CMD_FILE_LOAD
+RESP_FILE_CONTENT = 0xA6     # Phase 5: chunked file content response for CMD_FILE_LOAD (0xA5)
 RESP_FILE_ACTION = 0xA3
 RESP_VERSION_INFO = 0xC0
-RESP_HA_CONFIG_SYNC = 0xC3    # payload: [length:uint16][uuid-string-bytes] or 0x0000 if unset
-RESP_HA_SETTINGS_WRITE_SD_ACK = 0xC5  # ack for CMD_HA_SETTINGS_WRITE_SD
-RESP_SMART_CONFIG_STATUS = 0xC6
+RESP_HA_CONFIG_SYNC = 0xD9   # Phase 5: payload: [length:uint16][uuid-string-bytes] or 0x0000 if unset
+RESP_HA_SETTINGS_WRITE_SD_ACK = 0xDB  # Phase 5: ack for CMD_HA_SETTINGS_WRITE_SD (0xDA)
+RESP_SMART_CONFIG_STATUS = 0xDD  # Phase 5: status notification for CMD_SMART_CONFIG (0xDC)
 RESP_DEVICE_NAME = 0xC8
 RESP_SETTINGS_SYNC = 0xC9
 
@@ -321,9 +370,12 @@ CONF_FCC_API_ENDPOINT = "fcc_api_endpoint"
 CONF_FCC_TEST_ID = "fcc_test_id"
 
 # Config entry options (per-device, settable via Options flow)
-CONF_MONITOR_ENABLED = "monitor_enabled"   # bool, default False
-CONF_MONITOR_MODULE = "monitor_module"     # int, which CC1101 module (0 or 1, default 1)
-CONF_EXPOSE_UNKNOWN = "expose_unknown"     # bool, expose newly detected signals, default False
+CONF_MONITOR_ENABLED = "monitor_enabled"               # bool, default False
+CONF_MONITOR_MODULE = "monitor_module"                 # int, which CC1101 module (0 or 1, default 1)
+CONF_MONITOR_RSSI_THRESHOLD = "monitor_rssi_threshold" # int, dBm; signals below this are ignored (default: -80)
+CONF_EXPOSE_UNKNOWN = "expose_unknown"                 # bool, expose newly detected signals, default False
+CONF_EXPOSE_UNKNOWN_MIN_OCCURRENCES = "expose_unknown_min_occurrences"  # int, default 3
+CONF_EXPOSE_UNKNOWN_WINDOW_SECONDS = "expose_unknown_window_seconds"    # int, default 60
 
 # Persistent notifications (used for timeout, version-mismatch, etc.)
 NOTIFY_VERSION_WARNING = "evilcrow_rf_version_warning"
@@ -398,8 +450,8 @@ class EvilCrowBinaryProtocol:
         Flipper-style name usable from the mobile app too."""
 
     def build_file_load_command(self, file_path: str) -> list[bytes]:
-        """Build File Load command to read a .sub file from the SD card.
-        The firmware responds with chunked RESP_FILE_CONTENT (0xA2)."""
+        """Build File Load command (CMD_FILE_LOAD 0xA5) to read a .sub file from
+                the SD card. The firmware responds with chunked RESP_FILE_CONTENT (0xA6)."""
 
     def build_scan_command(self) -> list[bytes]:
         """Build Scan command (CMD_SCAN 0x02) — tells the firmware to listen
@@ -407,16 +459,16 @@ class EvilCrowBinaryProtocol:
         user doesn't know the frequency and has no FCC ID."""
 
     def build_start_monitor_command(
-        self, module: int, frequency: int, rssi_threshold: int = -80,
-    ) -> list[bytes]:
-        """Build Start Monitor command (CMD_START_MONITOR 0x0C).
-        Dedicates one CC1101 module to continuous listening on the given
-        frequency. The firmware streams RESP_SIGNAL_MONITOR (0x95) for every
-        detected signal above the RSSI threshold."""
+            self, module: int, frequency: int, rssi_threshold: int = -80,
+        ) -> list[bytes]:
+            """Build Start Monitor command (CMD_START_MONITOR 0x1B).
+            Dedicates one CC1101 module to continuous listening on the given
+            frequency. The firmware streams RESP_SIGNAL_MONITOR (0x95) for every
+            detected signal above the RSSI threshold."""
 
-    def build_stop_monitor_command(self) -> list[bytes]:
-        """Build Stop Monitor command (CMD_STOP_MONITOR 0x0D).
-        Releases the dedicated CC1101 module back to idle."""
+        def build_stop_monitor_command(self) -> list[bytes]:
+            """Build Stop Monitor command (CMD_STOP_MONITOR 0x1C).
+            Releases the dedicated CC1101 module back to idle."""
 
     def build_settings_update_command(
         self, setting_key: int, setting_value: bytes,
@@ -424,16 +476,19 @@ class EvilCrowBinaryProtocol:
         """Build a generic settings-update command."""
 
     def build_smartconfig_command(
-        self, ssid: str, password: str, channel: int | None = None,
-    ) -> list[bytes]:
-        """Build a SmartConfig (ESP-TOUCH) provisioning command. The firmware
-        receives this and uses its internal SmartConfig library to join WiFi.
-        Alternative: firmware exposes SmartConfig as a separate mode triggered
-        by the hardware button; this command then only confirms."""
+            self, ssid: str, password: str, channel: int | None = None,
+        ) -> list[bytes]:
+            """Build a SmartConfig (ESP-TOUCH) provisioning command (CMD_SMART_CONFIG
+            0xDC). The firmware receives this and uses its internal SmartConfig
+            library to join WiFi. Alternative: firmware exposes SmartConfig as a
+            separate mode triggered by the hardware button; this command then only
+            confirms. The firmware emits RESP_SMART_CONFIG_STATUS (0xDD) on each
+            provisioning lifecycle event."""
 
-    def build_ha_config_sync_command(self) -> list[bytes]:
-        """Ask the device for its HA-assigned UUID (response 0xC3). Payload is
-        empty; the response carries the UUID or a zero-length string if unset."""
+        def build_ha_config_sync_command(self) -> list[bytes]:
+            """Ask the device for its HA-assigned UUID (CMD_HA_CONFIG_SYNC 0xD8,
+            response RESP_HA_CONFIG_SYNC 0xD9). Payload is empty; the response
+            carries the UUID or a zero-length string if unset."""
 
     # ---- response parsing ----
 
@@ -444,7 +499,7 @@ class EvilCrowBinaryProtocol:
 
 **Design rationale**: Following the mobile app pattern, this is a pure-data module with no I/O. The frame builder and response parser are stateless (except for the request-id counter, which is trivial). The chunk ID is reused as the request sequence number — every command carries one, the firmware echoes it in the response, and `timeout_tracker.py` uses it to correlate responses with pending commands.
 
-**Wire-compatibility note**: The new commands `CMD_FILE_LOAD (0xA2)`, `CMD_SMART_CONFIG (0x18)`, `CMD_HA_CONFIG_SYNC (0xC2)`, and `CMD_HA_SETTINGS_WRITE_SD (0xC4)` are no-ops for the existing mobile app because it never sends them and ignores the corresponding response codes (`0xA2`, `0xC3`, `0xC5`, `0xC6`). No firmware refactor is needed for mobile-app compatibility.
+**Wire-compatibility note**: The new commands `CMD_FILE_LOAD (0xA5)`, `RESP_FILE_CONTENT (0xA6)`, `CMD_SMART_CONFIG (0xDC)`, `RESP_SMART_CONFIG_STATUS (0xDD)`, `CMD_HA_CONFIG_SYNC (0xD8)`, `RESP_HA_CONFIG_SYNC (0xD9)`, `CMD_HA_SETTINGS_WRITE_SD (0xDA)`, `RESP_HA_SETTINGS_WRITE_SD_ACK (0xDB)`, `CMD_START_MONITOR (0x1B)`, `CMD_STOP_MONITOR (0x1C)`, and `RESP_SIGNAL_MONITOR (0x95)` are no-ops for the existing mobile app because it never sends them and ignores the corresponding response codes. All bytes were picked from gaps in the existing mobile-app and web-app protocol maps (see §Firmware Prerequisites "Collision-avoidance analysis" for the full table). No firmware refactor is needed for mobile-app compatibility.
 
 ### 1.4 `wifi_transport.py` — WebSocket Client
 
@@ -523,7 +578,9 @@ stateDiagram-v2
     RECONNECTING --> DISCONNECTED: max retries or user cancelled
 ```
 
-### 1.5 `device.py` — Device Identity Management
+### 1.5 `device.py` — Device Identity Management *(Phase 5 — firmware-dependent)*
+
+> **Phases 1–4** identify devices by `host:port` (the existing config-entry data model). The `DeviceInfo` dataclass and `DeviceRegistryStore` below are still defined in Phase 1, but the UUID round-trip (`hass-config-sync`) is **deferred to Phase 5** because it requires the new `CMD_HA_CONFIG_SYNC (0xD8)` / `CMD_HA_SETTINGS_WRITE_SD (0xDA)` firmware commands. Until Phase 5 ships, devices keep their HA-assigned entry_id as a stable identity, which is sufficient for single-device use. Multi-device support from Phase 5 onward uses the UUID instead of entry_id for dispatch (see [§1.6 coordinator.py multi-device dispatch](#16-coordinatorpy--device-state-coordinator)).
 
 ```python
 @dataclass
@@ -564,7 +621,7 @@ class DeviceRegistryStore:
 
 **Device ID flow (`hass-config-sync`)** — no MAC, survives firmware updates, factory reset, and any change in `host:port`:
 
-The device stores its HA-assigned UUID in `/config/ha_device_id.txt` on its **SD card**. The firmware's existing `ConfigManager` writes to `/config.txt` on LittleFS (internal flash) which does **not** survive `factoryReset`. A new firmware command `CMD_HA_SETTINGS_WRITE_SD (0xC4)` writes a `key=value` pair to the SD card at `/config/<key>.txt`, and `CMD_HA_CONFIG_SYNC (0xC2`→ response `0xC3`) reads it back. These are additive commands — the mobile app ignores them.
+The device stores its HA-assigned UUID in `/config/ha_device_id.txt` on its **SD card**. The firmware's existing `ConfigManager` writes to `/config.txt` on LittleFS (internal flash) which does **not** survive `factoryReset`. A new firmware command `CMD_HA_SETTINGS_WRITE_SD (0xDA)` writes a `key=value` pair to the SD card at `/config/<key>.txt`, and `CMD_HA_CONFIG_SYNC (0xD8`→ response `0xD9`) reads it back. These are additive commands — the mobile app ignores them.
 
 ```mermaid
 sequenceDiagram
@@ -573,30 +630,30 @@ sequenceDiagram
     participant FW as Firmware
     participant SD as /config/ on SD card
 
-    Int->>Tr: CMD_HA_CONFIG_SYNC (0xC2)
-    Tr->>FW: send_frame
-    FW->>SD: read /config/ha_device_id.txt
-    alt UUID present
-        FW-->>Tr: RESP_HA_CONFIG_SYNC (0xC3) + UUID bytes
-        Tr-->>Int: HassConfigSyncResult(existing=UUID)
-    else UUID absent (fresh device or after factory reset)
-        FW-->>Tr: RESP_HA_CONFIG_SYNC (0xC3) + length=0
-        Tr-->>Int: HassConfigSyncResult(existing=None)
-        Int->>Int: uuid4()
-        Int->>Tr: CMD_HA_SETTINGS_WRITE_SD (0xC4) + key=ha_device_id, value=&lt;UUID&gt;
+    Int->>Tr: CMD_HA_CONFIG_SYNC (0xD8)
         Tr->>FW: send_frame
-        FW->>SD: write /config/ha_device_id.txt
-        FW-->>Tr: RESP_HA_SETTINGS_WRITE_SD_ACK (0xC5) confirmation
-        Tr-->>Int: was_newly_assigned=True
-    end
+        FW->>SD: read /config/ha_device_id.txt
+        alt UUID present
+            FW-->>Tr: RESP_HA_CONFIG_SYNC (0xD9) + UUID bytes
+            Tr-->>Int: HassConfigSyncResult(existing=UUID)
+        else UUID absent (fresh device or after factory reset)
+            FW-->>Tr: RESP_HA_CONFIG_SYNC (0xD9) + length=0
+            Tr-->>Int: HassConfigSyncResult(existing=None)
+            Int->>Int: uuid4()
+            Int->>Tr: CMD_HA_SETTINGS_WRITE_SD (0xDA) + key=ha_device_id, value=<UUID>
+            Tr->>FW: send_frame
+            FW->>SD: write /config/ha_device_id.txt
+            FW-->>Tr: RESP_HA_SETTINGS_WRITE_SD_ACK (0xDB) confirmation
+            Tr-->>Int: was_newly_assigned=True
+        end
 ```
 
 **Why a dedicated command instead of reusing `settingsUpdate`**:
 
 - `settingsUpdate` (0xC1) writes to the device's internal LittleFS (`/config.txt`), which survives reboots but **does not survive `factoryReset`**. The user explicitly requested SD-card persistence so the UUID can be inspected/edited by humans and survives a factory reset.
-- `CMD_HA_SETTINGS_WRITE_SD (0xC4)` is a new firmware command that writes a single `key=value` pair to `/config/<key>.txt` on the SD card. The response `RESP_HA_SETTINGS_WRITE_SD_ACK (0xC5)` confirms the write.
-- `CMD_HA_CONFIG_SYNC (0xC2`→ `0xC3`) handles the read path: the firmware reads `/config/ha_device_id.txt` from the SD card and returns it (or zero-length if absent).
-- The mobile app never sends `0xC2`, `0xC4` and ignores `0xC3`, `0xC5` — no mobile-app protocol change needed.
+- `CMD_HA_SETTINGS_WRITE_SD (0xDA)` is a new firmware command that writes a single `key=value` pair to `/config/<key>.txt` on the SD card. The response `RESP_HA_SETTINGS_WRITE_SD_ACK (0xDB)` confirms the write.
+- `CMD_HA_CONFIG_SYNC (0xD8`→ `0xD9`) handles the read path: the firmware reads `/config/ha_device_id.txt` from the SD card and returns it (or zero-length if absent).
+- The mobile app never sends `0xD8`, `0xDA` and ignores `0xD9`, `0xDB` — no mobile-app protocol change needed.
 
 **Firmware change required**: The firmware must implement `CMD_HA_SETTINGS_WRITE_SD` to open/write/close a file at `/config/<key>.txt` on the SD card (SPIFFS or FAT, whichever the SD card uses). This is a small, additive change — no existing code paths are modified. See [Firmware Prerequisites](#firmware-prerequisites).
 
@@ -631,7 +688,7 @@ class EvilCrowCoordinator(DataUpdateCoordinator[dict]):
             device_id=device_info.device_id,
         )
         self._tracker = TimeoutTracker(default_timeout=CAPTURE_TIMEOUT)
-        self._subghz = SubGhzService(self._transport, self._protocol, self._tracker)
+        self._subghz = SubGhzService(self._transport, self._protocol, self._tracker, hass, device_info.device_id)
         self._signal_monitor = SignalMonitor(self._transport, self._protocol, target_store, hass)
         self._reader_task: asyncio.Task | None = None
         self._version_warning_dismissed: bool = False
@@ -669,9 +726,13 @@ class EvilCrowCoordinator(DataUpdateCoordinator[dict]):
     def subghz(self) -> SubGhzService: ...
     @property
     def signal_monitor(self) -> SignalMonitor: ...
+    @property
+    def target_store(self) -> TargetDeviceStore: ...
 ```
 
 **Multi-device dispatch**: `__init__.py` maintains `hass.data[DOMAIN]: dict[str, EvilCrowCoordinator]` keyed by `device_id`. Each coordinator owns its own transport; the dispatcher inside `__init__.py` routes incoming frames to the right coordinator based on the `device_id` field carried in every frame (the firmware echoes the requesting app's UUID in the response — see `firmware/docs/architecture.md` for `_lastRequestChunkId`).
+
+> **Phases 1–4**: `device_id` is the config-entry `entry_id` (HA-assigned UUID), since the SD-card-backed UUID via `hass-config-sync` is not yet available. Two devices with the same `host:port` would still be a single device in this phase, which is fine because the firmware's WS server is single-host per device. **Phase 5**: dispatch key upgrades to the SD-card-backed UUID from `CMD_HA_CONFIG_SYNC`. The same coordinator code path works in both phases; only the key source changes. No data migration is required for Phases 1–4 → Phase 5 because Phase 5 adds a new key column without removing the old one.
 
 ```mermaid
 flowchart LR
@@ -696,34 +757,7 @@ flowchart LR
 
 The user is never blocked. The notification is the source of truth.
 
-### 1.7 `discovery.py` — mDNS / ZeroConf Device Discovery
-
-```python
-class EvilCrowDiscovery:
-    """Watches _evilcrow._tcp.local. via zeroconf and surfaces candidates
-    to the config flow as a select-list."""
-
-    def __init__(self, hass):
-        self._hass = hass
-        self._zeroconf: zeroconf.Zeroconf | None = None
-        self._browser: zeroconf.ServiceBrowser | None = None
-        self._found: dict[str, DiscoveredDevice] = {}
-
-    async def async_start(self) -> None: ...
-    async def async_stop(self) -> None: ...
-    def discovered(self) -> list[DiscoveredDevice]:
-        """Return the current list of mDNS-discovered devices (name, host, port)."""
-```
-
-The manifest already declares `"zeroconf": ["_evilcrow._tcp.local."]`. HA's built-in zeroconf integration surfaces these to the integration via `async_step_zeroconf` in `config_flow.py`. `discovery.py` is the integration-side wrapper that:
-
-- starts a passive zeroconf browser on setup (optional, for the "no HA core zeroconf" case);
-- filters by service type and TXT records (`name`, `fw_version`, `transport=wifi`);
-- resolves hostnames to IPs (mDNS hostnames like `evilcrow.local` are unreliable across VLANs — the resolved IP is what gets stored).
-
-**Limitation surfaced to the user**: mDNS only works on the same L2 broadcast domain. The discovery step warns the user and recommends manual IP entry if the device is on a different VLAN.
-
-### 1.8 `timeout_tracker.py` — PendingRequestTracker
+### 1.7 `timeout_tracker.py` — PendingRequestTracker
 
 Pattern ported from the mobile app's `PendingRequestTracker` (`mobile_app/docs/architecture.md`, "Glaring Issues ✅ Fixed #2").
 
@@ -758,6 +792,8 @@ Every command built by `EvilCrowBinaryProtocol` carries a request ID. The transp
 ### 1.9 `flipper_sub.py` — Flipper Sub File Parser / Serializer
 
 This module reads, parses, and writes `.sub` files in the Flipper Zero Sub-GHz file format. It is the bridge between the integration's `CapturedSignalEntity` and the raw binary data read from the device's SD card via `CMD_FILE_LOAD`.
+
+> **Phases 1–4** develop and unit-test the parser/serializer against local fixture files in `tests/fixtures/subs/`. The `CMD_FILE_LOAD (0xA5)` integration path (reading `.sub` bytes from the device and feeding them into `parse()`) is **deferred to Phase 5** because it requires the new `CMD_FILE_LOAD` firmware command. In Phases 1–4, `CapturedSignalEntity` attributes are populated from locally-cached state when the user provides a `.sub` path (e.g., manually copied into `tests/fixtures/`); the entity will be visually identical once Phase 5 enables live file loads.
 
 **Flipper Sub file format** (`.sub`):
 
@@ -819,7 +855,9 @@ class FlipperSubFile:
 
 ---
 
-### 1.10 `smartconfig.py` — ESP-TOUCH WiFi Provisioning
+### 1.10 `smartconfig.py` — ESP-TOUCH WiFi Provisioning *(Phase 5 — firmware-dependent)*
+
+> **Phases 1–4** skip this module entirely. The firmware already supports SmartConfig via the BOOT button (held for 3 seconds) — users can onboard by putting the device in SmartConfig mode manually, then adding the device in HA via manual IP entry once it joins WiFi. The wizard (§2.5) replaces the SmartConfig wizard step in Phases 1–4 with explicit instructions to use the BOOT button. The `smartconfig.py` module ships in Phase 5 along with `CMD_SMART_CONFIG (0xDC)`, which lets the integration trigger SmartConfig mode without requiring physical access to the device.
 
 Implements the ESP-TOUCH (SmartConfig) protocol for provisioning a WiFi-less EvilCrowRF device onto the local network. Based on Espressif's open specification.
 
@@ -827,7 +865,7 @@ Implements the ESP-TOUCH (SmartConfig) protocol for provisioning a WiFi-less Evi
 
 **Protocol overview**:
 
-1. The device enters SmartConfig mode (triggered by `CMD_SMART_CONFIG (0x18)` or by holding a hardware button for 3 seconds).
+1. The device enters SmartConfig mode (triggered by `CMD_SMART_CONFIG (0xDC)` or by holding a hardware button for 3 seconds).
 2. The integration constructs a UDP packet containing: magic byte (`0x01`), SSID length, SSID, password length, password, token length, token.
 3. The packet is broadcast to `255.255.255.255` on port `7000` (ESP-TOUCH default).
 4. If the channel is known, the packet is also sent to the broadcast address of that specific channel (optional optimization).
@@ -838,6 +876,7 @@ Implements the ESP-TOUCH (SmartConfig) protocol for provisioning a WiFi-less Evi
 import asyncio
 import struct
 import socket
+import time
 
 SMARTCONFIG_PORT = 7000
 SMARTCONFIG_MAGIC = 0x01
@@ -856,24 +895,32 @@ async def broadcast_smartconfig(
     repeatedly for up to 30 seconds (ESP-TOUCH requires multiple packets for
     reliability).
 
+    The blocking socket.sendto() calls are run in a thread-pool executor so
+    the HA event loop is never blocked.
+
     Returns True if at least one packet was sent successfully.
     """
     payload = _build_smartconfig_packet(ssid, password, channel)
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    sock.settimeout(0.1)
+    loop = asyncio.get_event_loop()
 
-    try:
-        for _ in range(300):  # 30s at 100ms intervals
-            try:
-                sock.sendto(payload, (broadcast_addr, SMARTCONFIG_PORT))
-            except OSError:
-                pass
-            await asyncio.sleep(0.1)
-    finally:
-        sock.close()
+    def _send_loop() -> bool:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.settimeout(0.1)
+        sent = False
+        try:
+            for _ in range(300):  # 30s at 100ms intervals
+                try:
+                    sock.sendto(payload, (broadcast_addr, SMARTCONFIG_PORT))
+                    sent = True
+                except OSError:
+                    pass
+                time.sleep(0.1)
+        finally:
+            sock.close()
+        return sent
 
-    return True
+    return await loop.run_in_executor(None, _send_loop)
 
 
 def _build_smartconfig_packet(ssid: str, password: str, channel: int | None) -> bytes:
@@ -882,6 +929,10 @@ def _build_smartconfig_packet(ssid: str, password: str, channel: int | None) -> 
     Format: [magic:1B][total_len:1B][cmd:1B][ssid_len:1B][ssid:N]
             [pwd_len:1B][pwd:N][token_len:1B][token:N][checksum:1B]
     """
+    # The `hash()` built-in is not deterministic across Python runs on 3.12+.
+    # In production use a stable hash (e.g., hashlib.sha256) or use a fixed
+    # random token — the ESP-TOUCH spec only requires a 4-byte token that the
+    # device echoes back, so a uuid4() truncated to 4 bytes is sufficient.
     token = struct.pack("!I", hash(ssid + password) & 0xFFFFFFFF)
     body = struct.pack("B", len(ssid)) + ssid.encode("utf-8")
     body += struct.pack("B", len(password)) + password.encode("utf-8")
@@ -893,7 +944,7 @@ def _build_smartconfig_packet(ssid: str, password: str, channel: int | None) -> 
 
 **Integration wiring**: `smartconfig.py` is called from `config_flow.py`'s `async_step_smartconfig` step. The integration does **not** need to be on the same WiFi as the device — only on the same L2 broadcast domain (the local subnet). For VLAN-isolated deployments, the user should use Manual Entry instead.
 
-**Firmware prerequisite**: The device must implement `CMD_SMART_CONFIG (0x18)` to enter ESP-TOUCH listening mode. The firmware's existing SmartConfig library (part of ESP-IDF) handles the receive side; the command only triggers it.
+**Firmware prerequisite**: The device must implement `CMD_SMART_CONFIG (0xDC)` (and `RESP_SMART_CONFIG_STATUS (0xDD)` for provisioning lifecycle events) to enter ESP-TOUCH listening mode. The firmware's existing SmartConfig library (part of ESP-IDF) handles the receive side; the command only triggers it.
 
 ---
 
@@ -918,12 +969,12 @@ flowchart TD
 
 ### 2.1 Config Flow Steps
 
-**Step 1: Setup Method** (`user` step)
+Step 1: Setup Method (`user` step)
 
 User chooses one of:
-- **Auto-discover** — shows a list of EvilCrowRF devices found via mDNS (`_evilcrow._tcp`). Warns that mDNS does not cross VLANs.
+- **Auto-discover** — surfaces devices found by HA's built-in zeroconf integration (declared in `manifest.json` as `"zeroconf": ["_evilcrow._tcp.local."]`). Warns that mDNS does not cross VLANs.
 - **Manual entry** — prompts for IP address or FQDN (recommended path).
-- **SmartConfig onboarding** — push WiFi credentials to a device in provisioning mode via ESP-TOUCH UDP packets. Does not require the HA host to have WiFi or to join the device's SoftAP.
+- **SmartConfig onboarding** *(Phase 5 only)* — push WiFi credentials to a device in provisioning mode via ESP-TOUCH UDP packets. Does not require the HA host to have WiFi or to join the device's SoftAP. **Phases 1–4 omit this option**; users onboard WiFi-less devices by holding the BOOT button for 3 seconds (firmware already supports this) and then using **Manual entry** once the device joins the network.
 
 **Step 2a: Manual Entry** (`manual_device` step)
 
@@ -935,9 +986,11 @@ On submit, the integration:
 - If reachable, stores device info and proceeds to `hass-config-sync`
 - If unreachable, shows error and offers to retry
 
-**Step 2b: SmartConfig Onboarding** (`smartconfig` step)
+Step 2b: SmartConfig Onboarding (`smartconfig` step) *(Phase 5 only)*
 
-The firmware is given a new `CMD_SMART_CONFIG (0x18)` command that puts the radio into ESP-TOUCH mode. The flow:
+> **Phases 1–4**: this step is omitted from the wizard. The wizard's Step 1 omits the "SmartConfig onboarding" option, and Step 2b is hidden. Users follow the firmware's built-in BOOT-button path instead, then use Manual entry.
+
+The firmware is given a new `CMD_SMART_CONFIG (0xDC)` command that puts the radio into ESP-TOUCH mode. The flow:
 
 1. User is told to power on the device and put it in SmartConfig mode (e.g., hold the BOOT button for 3 seconds, or send `CMD_SMART_CONFIG` over USB).
 2. User enters the target SSID and password in the wizard. The wizard also asks for the channel (optional; auto-scan if blank).
@@ -950,15 +1003,15 @@ This path replaces the legacy SoftAP → `setWifiApConfig` + `applyWifi` flow. T
 
 **Step 2c: Discovery** (`discovery` step)
 
-Triggered by HA's built-in zeroconf when a `_evilcrow._tcp.local.` service appears, or by `EvilCrowDiscovery.async_start()` (see §1.7).
+Triggered by HA's built-in zeroconf integration when a `_evilcrow._tcp.local.` service appears (declared in `manifest.json` via the `"zeroconf"` key). The integration implements `async_step_zeroconf` in `config_flow.py` to consume the discovered service.
 
-The user is shown a select list of discovered devices (`name`, `host`, `port`, `fw_version`). Selecting one proceeds to `hass-config-sync`. If the device is on a different VLAN, the user is told to use Manual Entry instead.
+The user is shown a select list of discovered devices (`name`, `host`, `port`, `fw_version`). Selecting one proceeds to `hass-config-sync` (Phase 5) or directly to entry creation in Phases 1–4 (which use `host:port` as identity). If the device is on a different VLAN, the user is told to use Manual Entry instead.
 
 **Step 3: Device Registration / `hass-config-sync`** (`register_device` step)
 
 - Integration connects to the device, fetches `/api/info`.
-- Sends `CMD_HA_CONFIG_SYNC (0xC2)`. The device reads `config.txt` on the SD card.
-- If a UUID is already there, use it. Otherwise, generate a `uuid4()`, send `CMD_SETTINGS_UPDATE (0xC1)` with `key=ha_device_id, value=<UUID>`, and wait for the `RESP_SETTINGS_SYNC (0xC9)` confirmation.
+- Sends `CMD_HA_CONFIG_SYNC (0xD8)`. The device reads `/config/ha_device_id.txt` on the SD card.
+- If a UUID is already there, use it. Otherwise, generate a `uuid4()`, send `CMD_HA_SETTINGS_WRITE_SD (0xDA)` with `key=ha_device_id, value=<UUID>`, and wait for the `RESP_HA_SETTINGS_WRITE_SD_ACK (0xDB)` confirmation. *(The older `CMD_SETTINGS_UPDATE (0xC1)` path writes to LittleFS and is not used here because it does not survive factory reset — see §1.5.)*
 - Store device info in the device registry.
 - Create the config entry with `data: { "device_id": uuid, "host": ip, "port": 80 }`.
 
@@ -996,6 +1049,7 @@ The endpoint URL is loaded from `evilcrow_rf.yaml` (see [Integration YAML Config
 ```python
 import re
 import logging
+import asyncio
 from dataclasses import dataclass
 from typing import Optional
 
@@ -1144,7 +1198,7 @@ The FCC endpoint is **not** in the config entry — it lives in `evilcrow_rf.yam
 The FCC API endpoint is configured via the integration YAML file `evilcrow_rf.yaml` (not via the config-entry options flow). The flow:
 
 1. User edits `evilcrow_rf.yaml` (manually, or via a "Configure" helper service that opens the file in the editor add-on). Schema is documented in the YAML config section.
-2. The integration watches the file (or the user clicks "Reload" on the integration).
+2. On startup and on every config change, the integration watches HA's config directory for file modification events (via `hass.config.is_allowed_path` + `async_track` on the config file) and reloads the YAML automatically when `evilcrow_rf.yaml` changes.
 3. On reload, the integration **always persists the new endpoint** and **scrapes once** with a sample FCC ID from the YAML (`test_fcc_id`). The scrape result (success/failure + extracted frequencies) is surfaced as a `persistent_notification`.
 4. If the scrape fails, the integration keeps the new endpoint and surfaces a warning notification with a "Revert to default" action. The user can click it to reset the endpoint to `https://fccid.io/{fcc_id}` and reload again.
 
@@ -1179,7 +1233,59 @@ This matches the user's explicit requirement: *"When the user updates the endpoi
 
 ---
 
+## 2.5 Guided Remote Onboarding Wizard
+
+After the EvilCrowRF device is onboarded (config entry created), the integration offers a guided wizard to walk the user through learning their first RF remote. The wizard is triggered from the device's overview page via an **"Add Target Remote"** button entity. It surfaces as a multi-step dialog in the HA UI (implemented via `config_flow.py` helper steps or via a dedicated `wizard.py` service-backed dialog).
+
+### Wizard Steps
+
+**Step 1: Name the Target Remote**
+- Prompt: "What are you controlling?" (e.g., "Garage Door", "Living Room Lights")
+- `target_device_name` (str, required)
+
+> **Phases 1–4 note**: The wizard stepper is the same shape; the only difference is that any Phase 5 features (e.g., a SmartConfig-from-wizard option in Step 1) are hidden until the corresponding firmware command ships.
+
+**Step 2a: Identify Frequency**
+- Two sub-paths:
+  - **FCC ID**: User enters FCC ID → integration scrapes the configured endpoint → shows extracted frequency in MHz.
+    - If the lookup **succeeds**: pre-fills the frequency field with the extracted value. User confirms or overrides.
+    - If the lookup **fails**: shows a warning: "Could not determine frequency from FCC ID. Please enter the frequency manually (e.g., 433.92 MHz). You can find this on the remote's label or in its manual." User must enter frequency manually before proceeding.
+  - **Frequency directly**: User enters frequency in MHz (e.g., 433.92).
+
+**Step 3: Scan Frequency (optional helper)**
+- Before or instead of FCC lookup, user can invoke the **"Scan Frequency"** service from the wizard. The device listens on all supported bands, detects the strongest RF signal, and returns the frequency. Pre-fills Step 2 if successful.
+- This is the recommended first step for generic 433/315 MHz remotes.
+
+**Step 4: Select Modulation**
+- Dropdown with common options: `OOK_FIX`, `OOK_VAR`, `FSK`, etc.
+- Default: `OOK_FIX` (works for most 433 MHz remotes).
+
+**Step 5: Learn First Button**
+- Prompt: "Press the button on your remote that you want to control."
+- "Start Learning" button → sends `CMD_START_RECORDING` → device listens for RF signal → `SignalRecorded` → auto-replay → asks "Did the device respond?" with **Yes / Retry / Cancel** buttons.
+- If **Yes**: signal is saved. Wizard asks "Learn another button?" → loops to Step 5 or finishes.
+- If **Retry**: restarts recording for the same button.
+- If **Cancel**: aborts wizard, returns to HA dashboard.
+
+**Step 6: Finish**
+- Summary of learned buttons.
+- Offer to start signal monitoring for the newly learned remote (if device has 2 CC1101 modules).
+
+---
+
 ## Phase 3: Signal Capture & Replay
+
+### 2.5b Wizard Integration with Services
+
+The wizard calls the same underlying services used by manual service invocation:
+- `learn_signal` (with target_device_id, frequency, modulation, button_name)
+- `confirm_capture` (confirmed=true/false)
+- `cancel_capture`
+- `scan_frequency`
+
+The wizard is a UI-first path; the services are the automation-first path. Both use the same `SubGhzService` state machine.
+
+---
 
 ### 3.1 `subghz.py` — Capture State Machine
 
@@ -1233,30 +1339,64 @@ class CaptureState:
 class SubGhzService:
     """Manages the Sub-GHz capture/replay lifecycle for ONE EvilCrowRF device."""
 
+    # Imports (top of file):
+    # from homeassistant.core import HomeAssistant
+    # from homeassistant.exceptions import HomeAssistantError
+    # from .const import DOMAIN, REQUEST_TIMEOUT, CAPTURE_TIMEOUT
+
     def __init__(
         self,
         transport: WiFiTransport,
         protocol: EvilCrowBinaryProtocol,
         tracker: TimeoutTracker,
         hass: HomeAssistant,
+        ec_device_id: str,  # the coordinator's device_id (evolves from entry_id → UUID in Phase 5)
     ):
         self._transport = transport
         self._protocol = protocol
         self._tracker = tracker
         self._hass = hass
+        self._ec_device_id = ec_device_id
         self._state = CaptureState(status="idle")
         self._event_callbacks: dict[str, list[Callable]] = {}
         self._cancel_event = asyncio.Event()
 
     async def start_capture(
-        self, frequency: float, modulation: str, button_name: str,
-        target_device_id: str, target_device_name: str,
-    ) -> bool:
-        """Send Start Recording + arm the TimeoutTracker."""
-        gen = self._state.generation + 1
-        self._state = CaptureState(
-            ec_device_id=self._transport._device_id,
-            target_device_id=target_device_id,
+            self, frequency: float, modulation: str, button_name: str,
+            target_device_id: str, target_device_name: str,
+        ) -> bool:
+            """Send Start Recording + arm the TimeoutTracker.
+
+            Raises `HomeAssistantError` (instead of silently starting a capture that
+            will time out) when required inputs are missing. Callers — wizard, services,
+            automations — are expected to validate at the UI layer; this is a last-line
+            guard so a misconfigured automation cannot strand the state machine in
+            `CAPTURING` for the full `CAPTURE_TIMEOUT`.
+            """
+            if frequency is None or frequency <= 0:
+                raise HomeAssistantError(
+                    f"Cannot start capture: frequency must be > 0 MHz (got {frequency!r}). "
+                    "Use the scan_frequency service or enter the frequency manually."
+                )
+            if not modulation:
+                raise HomeAssistantError(
+                    "Cannot start capture: modulation is required "
+                    "(e.g. 'OOK_FIX', 'OOK_VAR', 'FSK')."
+                )
+            if not button_name:
+                raise HomeAssistantError(
+                    "Cannot start capture: button_name is required."
+                )
+            if not target_device_id:
+                raise HomeAssistantError(
+                    "Cannot start capture: target_device_id is required. "
+                    "Use AddTargetDeviceButton to register a target first."
+                )
+
+            gen = self._state.generation + 1
+            self._state = CaptureState(
+                ec_device_id=self._ec_device_id,
+                target_device_id=target_device_id,
             target_device_name=target_device_name,
             frequency=frequency,
             modulation=modulation,
@@ -1378,7 +1518,7 @@ class SubGhzService:
 
     def _reset(self) -> None:
         self._state = CaptureState(
-            ec_device_id=self._transport._device_id,
+            ec_device_id=self._ec_device_id,
             target_device_id=self._state.target_device_id,
             target_device_name=self._state.target_device_name,
             frequency=0.0,
@@ -1405,9 +1545,15 @@ class SubGhzService:
 
 This makes the requirement *"another option to cancel and go back to home assistant"* first-class.
 
-### 3.1b `signal_monitor.py` — Persistent RF Signal Monitoring
+### 3.1b `signal_monitor.py` — Persistent RF Signal Monitoring *(Phase 5 — firmware-dependent)*
 
-EvilCrowRF V2 has **two CC1101 modules**. The capture/pelay workflow (§3.1) uses module 0. This module dedicates module 1 to **always-on passive listening** — it sits on a configured frequency, detects any RF transmission, decodes it, and reports the decoded key to the integration. The integration matches the key against all known signals in `TargetDeviceStore` and updates entity state in real time.
+EvilCrowRF V2 has **two CC1101 modules**. The capture/replay workflow (§3.1) uses module 0. This module dedicates module 1 to **always-on passive listening** — it sits on a configured frequency, detects any RF transmission, decodes it, and reports the decoded key to the integration. The integration matches the key against all known signals in `TargetDeviceStore` and updates entity state in real time.
+
+> **Firmware requirement**: This feature requires `CMD_START_MONITOR (0x1B)`, `CMD_STOP_MONITOR (0x1C)`, and `RESP_SIGNAL_MONITOR (0x95)`. Implementation is deferred to Phase 5 — see [Implementation Order](#implementation-order). Phases 1–4 deliver the full capture/replay workflow without monitoring.
+
+**Hardware requirement**: Monitoring requires a second CC1101 module. If `cc1101_count == 1` (per `/api/info`), the Options flow surfaces a `persistent_notification` explaining the feature is unavailable on this device and the `StartMonitoringButton` stays disabled. There is no degraded / sender-mode fallback — the feature is simply not exposed on single-CC1101 hardware.
+
+**Auto-populated monitoring frequency**: When the user starts monitoring from an existing target device (e.g., a learned garage door remote), the integration reads the target device's stored frequency from `TargetDeviceStore` and passes it to `SignalMonitor.start()`. If the user starts monitoring without a target device, the user enters the frequency manually.
 
 **Why this matters**: If the user presses a physical remote button (or uses the mobile app) to send an RF signal, Home Assistant's internal state for that device becomes stale. Without monitoring, HA thinks the garage door is still closed when it was actually opened via the physical remote. With monitoring, the integration sees the signal, matches it to the "Garage Door → Open" entity, and updates `last_detected` + an `active` binary sensor — closing the loop.
 
@@ -1416,16 +1562,20 @@ EvilCrowRF V2 has **two CC1101 modules**. The capture/pelay workflow (§3.1) use
 - **Not a reliable state mirror**: Distance, walls, RF noise, and antenna orientation mean some signals will be missed.
 - **Decoding dependency**: The firmware must be able to decode the modulation/protocol of the monitored frequency. Undecodable signals are silently dropped.
 - **Signal collisions**: Two remotes transmitting simultaneously on the same frequency will corrupt each other's signal.
-- **Module contention**: If the user starts a `learn_signal` while module 1 is monitoring, the learn operation uses module 0 — no conflict. But if both modules are needed for the same frequency band (e.g., both on 433 MHz), the monitoring module's RSSI threshold should be raised to avoid false positives from the learning module's transmissions.
+- **Module contention**: If the user starts a `learn_signal` while module 1 is monitoring, the learn operation uses module 0 — no conflict.
+- **Configurable signal buffering**: Unknown signals are buffered with configurable thresholds. A signal must appear at least `expose_unknown_min_occurrences` times (default: 3) within `expose_unknown_window_seconds` (default: 60s) before it is surfaced as an unknown signal notification. This is configured per-device in the config entry options and persisted with sane defaults that keep noise to a minimum.
 
+---
 ```python
 @dataclass
 class MonitorConfig:
-    """Per-device monitoring configuration, persisted in config entry options."""
-    enabled: bool = False
-    module: int = 1              # which CC1101 module (0 or 1; default 1 = second module)
-    rssi_threshold: int = -80    # dBm; signals below this are ignored
-    expose_unknown: bool = False # if True, create transient entities for unmatched signals
+ """Per-device monitoring configuration, persisted in config entry options."""
+ enabled: bool = False
+ module: int = 1 # which CC1101 module (0 or 1; default 1 = second module)
+ rssi_threshold: int = -80 # dBm; signals below this are ignored
+ expose_unknown: bool = False # if True, create transient entities for unmatched signals
+ expose_unknown_min_occurrences: int = 3 # minimum detections before surfacing unknown
+ expose_unknown_window_seconds: int = 60 # time window (seconds) for counting occurrences
 
 
 @dataclass
@@ -1470,8 +1620,8 @@ class SignalMonitor:
 
         1. Load known signals from TargetDeviceStore and build the
            raw_key → entity lookup map.
-        2. Send CMD_START_MONITOR (0x0C) with module, frequency (Hz),
-           and RSSI threshold.
+        2. Send CMD_START_MONITOR (0x1B) with module, frequency (Hz),
+                   and RSSI threshold.
         3. Set self._active = True.
 
         Returns False if the device is already monitoring or the
@@ -1479,8 +1629,8 @@ class SignalMonitor:
         """
 
     async def stop(self) -> bool:
-        """Stop monitoring. Sends CMD_STOP_MONITOR (0x0D), releases
-        the CC1101 module, clears the known-signal map."""
+            """Stop monitoring. Sends CMD_STOP_MONITOR (0x1C), releases
+            the CC1101 module, clears the known-signal map."""
 
     async def handle_signal(self, signal: DetectedSignal) -> None:
         """Route an incoming RESP_SIGNAL_MONITOR frame.
@@ -1490,10 +1640,7 @@ class SignalMonitor:
            CapturedSignalEntity (updates last_detected timestamp +
            sets an 'active' binary sensor to True for a configurable
            cooldown period, default 30s).
-        3. If unmatched and self._config.expose_unknown:
-           buffer the signal; after N occurrences within a time window,
-           surface a persistent_notification (NOTIFY_SIGNAL_MONITOR)
-           offering to learn it as a new button.
+        3. If unmatched and `self._config.expose_unknown`: buffer the signal; surface as unknown only after the signal has been detected at least `expose_unknown_min_occurrences` times (default: 3) within `expose_unknown_window_seconds` (default: 60s). This prevents noise from being surfaced to the user.
         4. If unmatched and expose_unknown is False: log at DEBUG level
            and discard (prevents noise from neighbors' devices from
            flooding the user).
@@ -1528,13 +1675,16 @@ class SignalMonitor:
 
 ```python
 OPTIONS_SCHEMA = vol.Schema({
-    vol.Optional(CONF_MONITOR_ENABLED, default=False): bool,
-    vol.Optional(CONF_MONITOR_MODULE, default=1): vol.In([0, 1]),
-    vol.Optional(CONF_EXPOSE_UNKNOWN, default=False): bool,
+ vol.Optional(CONF_MONITOR_ENABLED, default=False): bool,
+ vol.Optional(CONF_MONITOR_MODULE, default=1): vol.In([0, 1]),
+ vol.Optional(CONF_MONITOR_RSSI_THRESHOLD, default=-80): vol.All(int, vol.Range(min=-120, max=0)),
+ vol.Optional(CONF_EXPOSE_UNKNOWN, default=False): bool,
+ vol.Optional(CONF_EXPOSE_UNKNOWN_MIN_OCCURRENCES, default=3): vol.All(int, vol.Range(min=1, max=20)),
+ vol.Optional(CONF_EXPOSE_UNKNOWN_WINDOW_SECONDS, default=60): vol.All(int, vol.Range(min=10, max=600)),
 })
 ```
 
-**Firmware prerequisite**: The device must implement `CMD_START_MONITOR (0x0C)` and `CMD_STOP_MONITOR (0x0D)`. The start command payload includes `[module:uint8][frequency:uint32 LE][rssi_threshold:int8]`. The firmware configures the specified CC1101 in RX mode at the given frequency and streams `RESP_SIGNAL_MONITOR (0x95)` frames — payload: `[frequency:uint32 LE][rssi:int8][protocol:uint8][bit:uint8][key_len:uint8][key:N]` — whenever the RSSI exceeds the threshold and a signal is successfully decoded.
+**Firmware prerequisite**: The device must implement `CMD_START_MONITOR (0x1B)` and `CMD_STOP_MONITOR (0x1C)`. The start command payload includes `[module:uint8][frequency:uint32 LE][rssi_threshold:int8]`. The firmware configures the specified CC1101 in RX mode at the given frequency and streams `RESP_SIGNAL_MONITOR (0x95)` frames — payload: `[frequency:uint32 LE][rssi:int8][protocol:uint8][bit:uint8][key_len:uint8][key:N]` — whenever the RSSI exceeds the threshold and a signal is successfully decoded.
 
 ### 3.2 HA Services (`services.py`)
 
@@ -1549,7 +1699,7 @@ OPTIONS_SCHEMA = vol.Schema({
 | `module` | int | no | CC1101 module to use (default: 1, the second module) |
 | `rssi_threshold` | int | no | Minimum RSSI in dBm (default: -80) |
 
-**Behavior**: Sends `CMD_START_MONITOR (0x0C)` to dedicate the specified module to continuous RX. The firmware streams `RESP_SIGNAL_MONITOR (0x95)` for every decoded signal above the threshold. The integration's `SignalMonitor.handle_signal()` matches keys against known signals and updates entity state.
+**Behavior**: Sends `CMD_START_MONITOR (0x1B)` to dedicate the specified module to continuous RX. If `target_device_id` (optional) is provided, the integration reads its stored frequency from `TargetDeviceStore` and uses that as the monitoring frequency. The firmware streams `RESP_SIGNAL_MONITOR (0x95)` for every decoded signal above the threshold. The integration's `SignalMonitor.handle_signal()` matches keys against known signals and updates entity state.
 
 **`stop_monitoring`** — Release the monitoring module back to idle.
 
@@ -1557,7 +1707,7 @@ OPTIONS_SCHEMA = vol.Schema({
 |---|---|---|---|
 | `ec_device_id` | str | yes | EvilCrowRF device ID |
 
-**Behavior**: Sends `CMD_STOP_MONITOR (0x0D)`. The CC1101 module returns to idle and the known-signal map is cleared.
+**Behavior**: Sends `CMD_STOP_MONITOR (0x1C)`. The CC1101 module returns to idle and the known-signal map is cleared.
 
 **`learn_signal`** — Start or continue the capture workflow.
 
@@ -1571,7 +1721,9 @@ OPTIONS_SCHEMA = vol.Schema({
 | `button_name` | str | yes | Friendly name for this button |
 
 **Behavior**:
-1. If `fcc_id` given and no `frequency`, look up frequency from the FCC API endpoint configured in `evilcrow_rf.yaml`.
+1. If `fcc_id` is given and no `frequency`, look up frequency from the FCC API endpoint configured in `evilcrow_rf.yaml`.
+ - If the lookup **succeeds**: pre-fills the frequency; proceeds to Step 2.
+ - If the lookup **fails** (network error, scrape error, or no frequency found): surfaces a `persistent_notification` with the message: "Could not determine frequency from FCC ID `{fcc_id}`. Please visit the remote's manual or label to find the operating frequency and enter it manually." The capture does **not** start until the user provides a frequency.
 2. Send `start_recording` to the device with frequency/modulation.
 3. Wait for `SignalRecorded` (device saves `.sub` to SD). On timeout, raise a `persistent_notification` and stay in `IDLE`.
 4. Auto-advance: replay the captured signal so the user can verify the target device reacts.
@@ -1630,61 +1782,96 @@ OPTIONS_SCHEMA = vol.Schema({
 |---|---|---|---|
 | `ec_device_id` | str | yes | EvilCrowRF device ID |
 
-**`scan_frequency`** — Scan for the strongest RF signal frequency. Used when the user has no FCC ID and doesn't know the operating frequency.
+**scan_frequency** — Scan for the strongest RF signal frequency. Used when the user has no FCC ID and doesn't know the operating frequency. Available as a service call and as a wizard step (§2.5 Step 3).
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `ec_device_id` | str | yes | EvilCrowRF device ID |
 | `timeout_seconds` | int | no | How long to scan (default: 10, max: 60) |
 
-**Behavior**: Sends `CMD_SCAN (0x02)`. The device listens on its CC1101 for RF activity, records the RSSI level on each frequency, and responds with the frequency where the strongest signal was detected. The response is surfaced as a `persistent_notification` with the detected frequency and an option to immediately start `learn_signal` at that frequency. This covers generic/non-FCC remotes (e.g., 433 MHz garage door openers, 315 MHz ceiling fans).
+**Behavior**: Sends `CMD_SCAN (0x02)`. The device listens on its CC1101 for RF activity, records the RSSI level on each frequency, and responds with the frequency where the strongest signal was detected. The response is surfaced as a `persistent_notification` with the detected frequency and a button to immediately start `learn_signal` at that frequency. This covers generic/non-FCC remotes (e.g., 433 MHz garage door openers, 315 MHz ceiling fans) and is the recommended first step before FCC lookup.
 
 ### 3.3 Entities (`sensor.py`, `button.py`, `select.py`, `text.py`)
 
 Entities are registered per EvilCrowRF device. The target RF remote is modeled as a sub-device of the EvilCrowRF in the HA device registry, so its captured signals appear nested under the right hardware device in the UI.
 
-**`sensor.py`** — exposes per-device diagnostics and the most recent capture:
+**`sensor.py`** — exposes per-device diagnostics, capture state, and signal monitoring state:
 
 ```python
 class EvilCrowDeviceSensor(SensorEntity):
-    """Connection status, firmware version, last-captured filename, RSSI."""
-    _attr_icon = "mdi:radio-tower"
+ """Connection status, firmware version, last-captured filename, RSSI."""
+ _attr_icon = "mdi:radio-tower"
 
-    def __init__(self, coordinator: EvilCrowCoordinator):
-        self._coordinator = coordinator
-        self._attr_native_value = coordinator.device_info.name
-        self._attr_extra_state_attributes = {
-            "host": coordinator.device_info.host,
-            "port": coordinator.device_info.port,
-            "firmware_version": coordinator.device_info.firmware_version,
-            "fw_major": coordinator.device_info.fw_major,
-            "fw_minor": coordinator.device_info.fw_minor,
-            "fw_patch": coordinator.device_info.fw_patch,
-            "device_id": coordinator.device_info.device_id,
-            "transport": coordinator.device_info.transport,
-            "sd_present": coordinator.device_info.capabilities.get("sd_present"),
-            "nrf24_present": coordinator.device_info.capabilities.get("nrf24_present"),
-            "cc1101_count": coordinator.device_info.capabilities.get("cc1101_count"),
-            "connection_state": "connected",     # or "disconnected", "not_ready"
-            "version_warning_dismissed": ...,
-        }
+ def __init__(self, coordinator: EvilCrowCoordinator):
+ self._coordinator = coordinator
+ self._attr_native_value = coordinator.device_info.name
+ self._attr_extra_state_attributes = {
+ "host": coordinator.device_info.host,
+ "port": coordinator.device_info.port,
+ "firmware_version": coordinator.device_info.firmware_version,
+ "fw_major": coordinator.device_info.fw_major,
+ "fw_minor": coordinator.device_info.fw_minor,
+ "fw_patch": coordinator.device_info.fw_patch,
+ "device_id": coordinator.device_info.device_id,
+ "transport": coordinator.device_info.transport,
+ "sd_present": coordinator.device_info.capabilities.get("sd_present"),
+ "nrf24_present": coordinator.device_info.capabilities.get("nrf24_present"),
+ "cc1101_count": coordinator.device_info.capabilities.get("cc1101_count"),
+ "connection_state": "connected", # or "disconnected", "not_ready"
+ "version_warning_dismissed": ...,
+ }
 ```
 
-**`button.py`** — one button per learned target RF remote plus a global cancel/learn button:
+```python
+class CaptureStateSensor(SensorEntity):
+    """Shows the current state of any in-progress capture: idle, capturing, captured, confirming, confirmed, error."""
+    _attr_icon = "mdi:progress-check"
+    _attr_device_class = SensorDeviceClass.ENUM
+
+ def __init__(self, coordinator: EvilCrowCoordinator, target_name: str):
+ self._coordinator = coordinator
+ self._target_name = target_name
+ self._attr_native_value = "idle" # updated by SubGhzService._emit callbacks
+ self._attr_extra_state_attributes = {
+ "target_device_name": target_name,
+ "error": None,
+ "last_captured_file": None,
+ }
+```
+
+`CaptureStateSensor` is created for each target device. It changes state to `capturing` while the user presses a remote button, `captured` once the device has saved the file, `confirming` while the replay is being verified, and `confirmed` if the user confirms. A value of `error` with `error` attribute set means the capture failed. Automations can listen for state changes on this sensor to trigger downstream actions (e.g., "when capture is confirmed, turn on a light").
+
+---
+
+**`button.py`** — one button per learned target RF remote plus global action buttons:
 
 ```python
 class LearnButtonEntity(ButtonEntity):
-    """Press to learn a new button on the most recently selected target RF remote."""
-    _attr_icon = "mdi:record-rec"
+ """Press to learn a new button on the most recently selected target RF remote."""
+ _attr_icon = "mdi:record-rec"
 
 class CancelCaptureButtonEntity(ButtonEntity):
-    """Press to abort the in-progress capture (sends CMD_IDLE)."""
-    _attr_icon = "mdi:stop-circle-outline"
+ """Press to abort the in-progress capture (sends CMD_IDLE)."""
+ _attr_icon = "mdi:stop-circle-outline"
 
 class ReplayButtonEntity(ButtonEntity):
-    """Press to replay a captured .sub (the most recently captured, by default)."""
-    _attr_icon = "mdi:play-circle-outline"
+ """Press to replay a captured .sub (the most recently captured, by default)."""
+ _attr_icon = "mdi:play-circle-outline"
+
+class AddTargetDeviceButton(ButtonEntity):
+ """Opens the guided wizard to register a new target RF remote for this EvilCrowRF device."""
+ _attr_icon = "mdi:plus-circle-outline"
+
+class StartMonitoringButton(ButtonEntity):
+ """Start continuous RF monitoring using the most recent target device frequency."""
+ _attr_icon = "mdi:access-point"
 ```
+
+`AddTargetDeviceButton` is the primary entry point for users who have just onboarded an EvilCrowRF device and want to start controlling a remote. It launches the guided wizard described in §2.5.
+
+`StartMonitoringButton` reads the frequency from the most-recently-learned target device and calls `start_monitoring` automatically. If no target device exists, the button is disabled with a tooltip: "Learn a remote first before enabling monitoring."
+
+---
 
 **`select.py`** — pick a `.sub` file to replay:
 
@@ -1810,10 +1997,13 @@ class TargetDeviceStore:
 ```
 
 **Lifecycle**:
+- Entry point: `AddTargetDeviceButton` on the device's overview page launches the guided wizard (§2.5). The wizard calls `TargetDeviceStore.register()` once the user confirms the target device details (name, frequency, modulation). This button is the recommended UX path; the service-level `learn_signal` path is available for automations.
 - On `async_setup_entry`, `TargetDeviceStore.async_load()` is called. For each `TargetDevice` belonging to the coordinator's `ec_device_id`, `CapturedSignalEntity` instances are created from the persisted button mappings (reading each `.sub` file via `CMD_FILE_LOAD` → `flipper_sub.py` → entity constructor).
 - After `confirm_capture` succeeds, `TargetDeviceStore.add_button()` is called and `async_save()` persists the mapping.
 - When the user deletes or renames a signal, the store is updated and saved.
 - On `async_unload_entry`, entities are cleaned up but the store file remains — next load picks them up.
+
+**Entity lifecycle for unlearned buttons**: When `delete_signal` is called (or a `.sub` file is removed from the device), the integration must clean up both data layers: (1) `TargetDeviceStore.remove_button()` removes the entry from the JSON store and saves it; (2) `CapturedSignalEntity` is unregistered from HA's entity registry so it disappears from the UI. If all buttons for a target device are removed, the entire target device entry (and its `CaptureStateSensor`) is also removed, leaving a clean device tree. Automations or scripts that referenced the deleted entity will see it as `unavailable` and can be updated manually.
 
 **Example JSON on disk**:
 
@@ -1864,6 +2054,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][coordinator.device_info.device_id] = coordinator
 
+    # Load target RF remote persistence so learned signals survive HA restarts.
+    # Must happen before entities are created so CapturedSignalEntity instances
+    # can be restored from the persisted button-to-file mappings.
+    target_store = TargetDeviceStore(hass)
+    await target_store.async_load()
+    coordinator._target_store = target_store  # also accessible via coordinator.target_store property
+
     # Wire the transport's on_message to the timeout tracker, SubGhzService,
     # and SignalMonitor
     async def on_message(parsed: dict) -> None:
@@ -1891,7 +2088,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry, ["sensor", "button", "select", "text"]
     )
 
-    # Listen for YAML config changes (FCC endpoint, etc.)
+    # Listen for YAML config changes (FCC endpoint, etc.).
+    # The integration watches evilcrow_rf.yaml via HA's config directory
+    # tracking (hass.config.is_allowed_path + async_track) so that edits to
+    # the file are picked up automatically without a manual reload.
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
     return True
@@ -1909,7 +2109,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Reload the entry when options change (e.g., reconfigure)."""
+    """Reload the entry when options change (e.g., reconfigure).
+
+    Note: this triggers a full async_reload (teardown + re-setup), which
+    includes tearing down and re-establishing the WebSocket connection. For
+    lightweight changes (e.g., YAML endpoint update), a finer-grained refresh
+    would be more efficient; track as a future optimization."""
     await hass.config_entries.async_reload(entry.entry_id)
 
 
@@ -2256,7 +2461,7 @@ make test
 |---|---|---|
 | `test_binary_protocol.py` | Frame encode/decode, XOR checksum validation, chunking, command builders (record, idle, send, file list, file rename, smartconfig, hass-config-sync, settings update), response parsing for all response types | unit |
 | `test_fcc_lookup.py` | URL construction, HTML parsing for `fccid.io`, MHz/GHz/kHz unit conversion, error paths, lazy import behavior, `test_endpoint()` is stateless | unit + aiohttp |
-| `test_subghz.py` | State machine transitions: idle→capturing→captured→confirming→replaying→confirmed, retry, cancel, timeout, CMD_IDLE on cancel, FileAction rename updates `captured_file`, error recovery from SignalError / SignalSendingError | unit |
+| `test_subghz.py` | State machine transitions: idle→capturing→captured→confirming→replaying→confirmed, retry, cancel, timeout, CMD_IDLE on cancel, FileAction rename updates `captured_file`, error recovery from SignalError / SignalSendingError; **`start_capture()` input validation** — raises `HomeAssistantError` when `frequency <= 0`, when `modulation` is empty, when `button_name` is empty, when `target_device_id` is empty; validation runs before any state mutation so a failed validation does not bump the generation counter | unit |
 | `test_wifi_transport.py` | WebSocket lifecycle (connect/disconnect/reconnect), exponential backoff, `/api/info` parsing with missing fields, re-`hass-config-sync` on reconnect, chunked frame handling | unit + aiohttp |
 | `test_timeout_tracker.py` | `track()` returns future that resolves on `resolve()`, fires after `timeout`, `cancel_all()` fails pending, monotonic-clock usage (no `datetime.now()`), concurrent track/resolve race-freedom | unit |
 | `test_config_flow.py` | `async_step_user`, `async_step_manual`, `async_step_smartconfig`, `async_step_zeroconf`, `async_step_reauth`, `async_step_reconfigure`, options flow | HA integration test (uses `pytest-homeassistant-custom-component`) |
@@ -2299,29 +2504,29 @@ Lives at `<ha_config_dir>/evilcrow_rf.yaml`. Auto-created on first run with defa
 
 ```yaml
 # EvilCrowRF V2 — Home Assistant integration
-# Edit and save; the integration auto-reloads.
-# Click "Revert to default" in the warning notification to undo any change.
+# Edit and save; the integration auto-reloads when the file is saved.
 
-fcc_api_endpoint: "https://fccid.io/{fcc_id}"   # default; {fcc_id} is required
-fcc_test_fcc_id: "2AAR8RESEARCH"               # sample FCC ID used to validate the endpoint on reload
-request_timeout_seconds: 15                    # generic per-command timeout
-capture_timeout_seconds: 30                    # full learn -> confirm cycle timeout
-auto_revert_on_failure: false                  # if true, revert endpoint to default when scrape fails
+fcc_api_endpoint: "https://fccid.io/{fcc_id}" # default; {fcc_id} is required
+fcc_test_fcc_id: "2AAR8RESEARCH" # sample FCC ID used to validate the endpoint on reload
+request_timeout_seconds: 15 # generic per-command timeout
+capture_timeout_seconds: 30 # full learn -> confirm cycle timeout
+expose_unknown_min_occurrences: 3 # unknown signals must appear this many times before surfacing
+expose_unknown_window_seconds: 60 # time window for counting occurrences
 ```
 
 ### Behavior on load
 
 ```mermaid
 flowchart TD
-    Load["load_yaml_config()"] --> Valid{"valid YAML<br/>and schema?"}
-    Valid -->|no| NotifyErr["persistent_notification:<br/>'evilcrow_rf.yaml is malformed, ignoring.'<br/>Keep previous config."]
-    Valid -->|yes| Apply["apply to runtime:<br/>FccLookupService.endpoint = new URL"]
-    Apply --> Test["FccLookupService.test_endpoint(test_fcc_id, new_url)"]
-    Test --> Result{"scrape succeeded?"}
-    Result -->|yes| NotifyOK["persistent_notification:<br/>'FCC endpoint OK: extracted [433.92, 915.0] MHz.'"]
-    Result -->|no| NotifyFail["persistent_notification:<br/>'FCC endpoint FAILED: HTTP 404.<br/>Endpoint is still active.'<br/>[Revert to default] action"]
-    NotifyFail -.->|user clicks| WriteDefault["write default URL to YAML"] --> Reload
-    Load -->|file missing| CreateDefault["write defaults to disk"]
+Load["load_yaml_config()"] --> Valid{"valid YAML\nand schema?"}
+Valid -->|no| NotifyErr["persistent_notification:\n'evilcrow_rf.yaml is malformed, ignoring.'\nKeep previous config."]
+Valid -->|yes| Apply["apply to runtime:\nFccLookupService.endpoint = new URL"]
+Apply --> Test["FccLookupService.test_endpoint(test_fcc_id, new_url)"]
+Test --> Result{"scrape succeeded?"}
+Result -->|yes| NotifyOK["persistent_notification:\n'FCC endpoint OK: extracted [433.92, 915.0] MHz.'"]
+Result -->|no| NotifyFail["persistent_notification:\n'FCC endpoint FAILED: could not derive frequency\nfrom test FCC ID. Endpoint is still active.\nYou may need to enter the frequency manually.'\n[Revert to default] action"]
+NotifyFail -.->|user clicks| WriteDefault["write default URL to YAML"] --> Reload
+Load -->|file missing| CreateDefault["write defaults to disk"]
 ```
 
 The "Revert to default" notification action is implemented as a HA `persistent_notification` action that calls a service in `__init__.py` which writes the default endpoint to the YAML and triggers an integration reload.
@@ -2365,9 +2570,27 @@ If `fccid.io` changes its markup, `_parse_frequencies` will silently miss values
 
 **Note (per user)**: Firmware's `CMD_SCAN (0x02)` could be used as a primary frequency-discovery mechanism for unknown devices, but the FCC scraping path is sufficient and faster for the typical case where the user knows what device they are learning.
 
+---
+
+## Changelog: Addressing Integration Usability Feedback (2026-06-25 update)
+
+Edit summary applied to address 12 suggestions from the plan review (see `prompts.md` L83-L95):
+
+1. **Added the wizard** — New §2.5 "Guided Remote Onboarding Wizard" with 6-step user flow (name remote → identify frequency w/ FCC lookup and failure handling → scan-freq helper → select modulation → learn first button with confirm/retry/cancel → finish). Triggered from `AddTargetDeviceButton` on device overview page. Also added §2.5b wizard integration noting the wizard is a UI-first path backed by the same `SubGhzService` state machine used by service calls.
+2. **Frequency lookup failure UX** — Wizard Step 2a and the `learn_signal` service now surface an explicit notification when FCC lookup fails: "Could not determine frequency from FCC ID. Please enter the frequency manually." Capture does not start until the user provides a valid frequency. The notification is surfaced as a `persistent_notification` that the user must dismiss by providing a frequency via the wizard or service.
+3. **Watch HA's config directory** — §2.4 updated: integration now watches HA's config directory for file modification events (`hass.config.is_allowed_path` + `async_track` on the config file path) and reloads `evilcrow_rf.yaml` automatically when the file is saved.
+5. **Auto-populate monitoring frequency** — §3.1b updated: `start_monitoring` service and `SignalMonitor.start()` auto-read the frequency from `TargetDeviceStore` when `target_device_id` is provided.
+6. **CC1101 < 2 — feature simply unavailable** — §3.1b updated: if fewer than 2 CC1101 modules, the integration does not attempt a degraded sender-mode fallback (which would require a new firmware command and ambiguous semantics). Instead, the Options flow surfaces a `persistent_notification` explaining that monitoring is unavailable on this hardware and the `StartMonitoringButton` entity stays disabled with an explanatory tooltip.
+7. **Capture-in-progress indicator** — New `CaptureStateSensor` in §3.3 `sensor.py`: per-target-device sensor with states `idle`/`capturing`/`captured`/`confirming`/`confirmed`/`error` for automations.
+8. **Add Target Device button** — §3.3 `button.py` updated: new `AddTargetDeviceButton` launches wizard; new `StartMonitoringButton` auto-starts monitoring using the most-recent target device frequency. §3.3.5 lifecycle updated to name this button as the primary entry point.
+9. **Configurable expose_unknown buffering** — §3.1b: `expose_unknown_min_occurrences` (default 3) and `expose_unknown_window_seconds` (default 60s) added to `MonitorConfig`, YAML config, and `OPTIONS_SCHEMA`.
+10. **Removed `auto_revert_on_failure`** — Removed from YAML schema block and the associated flowchart branch.
+11. **Scan frequency first path** — Wizard Step 3 makes `scan_frequency` service the recommended first step for generic remotes without FCC IDs. Service description updated accordingly.
+12. **Entity lifecycle for unlearned buttons** — §3.3.5 updated: `delete_signal` removes entity from HA entity registry in addition to JSON store cleanup. All buttons removed for a target device also removes the `CaptureStateSensor` for that target. Factory-reset orphaned entries are surfaced to user for cleanup.
+
 ### Dependency on the mobile-app-compatible protocol
 
-The new commands `CMD_FILE_LOAD (0xA2)`, `CMD_SMART_CONFIG (0x18)`, `CMD_HA_CONFIG_SYNC (0xC2)`, and `CMD_HA_SETTINGS_WRITE_SD (0xC4)` must NOT change the existing mobile-app wire format. They are additive: the mobile app never sends `0xA2`, `0x18`, `0xC2`, or `0xC4` and ignores the corresponding response codes (`0xA2`, `0xC3`, `0xC5`, `0xC6`). If we ever need to repurpose any byte in the ranges that overlap with the mobile app, we must coordinate with the mobile-app team first.
+The new commands `CMD_FILE_LOAD (0xA5)`, `CMD_SMART_CONFIG (0xDC)`, `CMD_HA_CONFIG_SYNC (0xD8)`, and `CMD_HA_SETTINGS_WRITE_SD (0xDA)` must NOT change the existing mobile-app wire format. They are additive: the mobile app never sends `0xA5`, `0xDC`, `0xD8`, or `0xDA` and ignores the corresponding response codes (`0xA6`, `0xD9`, `0xDB`, `0xDD`). If we ever need to repurpose any byte in the ranges that overlap with the mobile app, we must coordinate with the mobile-app team first.
 
 ### Reconnect storm protection
 
@@ -2400,13 +2623,14 @@ These caveats are surfaced to the user in the integration's documentation and in
 
 ### Multi-Device Support
 
-The architecture is designed for multi-device from day one:
+The architecture supports multi-device from Phase 1 onward, with the dispatch identity upgrading in Phase 5:
 
-- `hass.data[DOMAIN]` is a `dict[str, EvilCrowCoordinator]` keyed by `device_id`.
-- `WiFiTransport` is single-device; multiple coordinators = multiple transports.
+- **Phases 1–4**: `hass.data[DOMAIN]` is a `dict[str, EvilCrowCoordinator]` keyed by the config-entry `entry_id`. Two EvilCrowRF devices at distinct `host:port` are unambiguously distinct because each gets its own config entry via the manual-entry flow. The firmware's WS server is single-host-per-device, so `host:port` collision is not a practical concern.
+- **Phase 5**: dispatch key upgrades to the SD-card-backed UUID from `CMD_HA_CONFIG_SYNC (0xD8)`. This is required for the factory-reset-survival scenario (where a device gets a new `host` after re-provisioning but should still be matched to its existing entity).
+- `WiFiTransport` is single-device; multiple coordinators = multiple transports (one WS connection per device).
 - Config flow allows adding multiple devices (each gets a config entry).
 - Services accept `ec_device_id` and route to the right coordinator.
-- mDNS discovery returns all devices on the network.
+- HA's built-in zeroconf returns all devices on the network; the user picks which one(s) to add.
 
 ### BLE Transport
 
@@ -2442,24 +2666,166 @@ The integration already handles:
 
 ## Implementation Order
 
-| Phase | Components | Estimated Effort |
-|---|---|---|
-| **0. Firmware Prerequisites** | Eight new firmware commands (`CMD_HA_CONFIG_SYNC 0xC2`, `RESP_HA_CONFIG_SYNC 0xC3`, `CMD_HA_SETTINGS_WRITE_SD 0xC4`, `RESP_HA_SETTINGS_WRITE_SD_ACK 0xC5`, `CMD_SMART_CONFIG 0x18`, `CMD_START_MONITOR 0x0C`, `CMD_STOP_MONITOR 0x0D`, `RESP_SIGNAL_MONITOR 0x95`, `CMD_FILE_LOAD 0xA2`) | Small — additive, no refactor |
-| **1. Foundation** | `manifest.json`, `const.py`, `binary_protocol.py`, `wifi_transport.py`, `device.py`, `coordinator.py`, `discovery.py`, `timeout_tracker.py`, `flipper_sub.py`, `smartconfig.py`, `target_device_store.py`, `signal_monitor.py` | Medium — core plumbing |
-| **2. Config Flow** | `config_flow.py`, `fcc_lookup.py`, `yaml_config.py`, `smartconfig.py` wiring, `strings.json`, `translations/en.json` | Medium — wizard UX |
-| **3. Capture/Replay** | `subghz.py`, `services.py`, `sensor.py`, `button.py`, `select.py`, `text.py`, `target_device_store.py`, `__init__.py` wiring | Medium — core workflow |
-| **4. Makefile & DX** | `pyproject.toml`, `Makefile` (uv targets), `tests/`, `.gitignore` updates | Small — tooling |
-| **5. Polish** | Error handling, reconnection backoff, version-warning UX, NOT_READY retry, factory-reset reconciliation, diagnostics | Medium — reliability |
+Phases are sequenced so that every feature in Phases 1–4 works against the **current, unmodified** EvilCrowRF firmware (WebSocket `/api/ws`, `/api/info`, `CMD_GET_STATE`, `CMD_SCAN`, `CMD_IDLE`, `CMD_START_RECORDING`, `CMD_STOP_RECORDING`, `CMD_SEND_SIGNAL`, `CMD_FILE_LIST`, `CMD_FILE_RENAME`). All features that require **new firmware commands** are consolidated into Phase 5, which can only ship after the corresponding firmware PRs land. This lets Phases 1–4 be developed, reviewed, and tested in parallel with the firmware work.
+
+| Phase | Components | Firmware Changes | What Ships |
+|---|---|---|---|
+| **1. Foundation** | `manifest.json`, `const.py`, `binary_protocol.py`, `wifi_transport.py`, `coordinator.py` (host:port identity — UUID deferred), `timeout_tracker.py`, `flipper_sub.py` (parser/serializer only — file-load via CMD_FILE_LOAD deferred), `target_device_store.py` | **None** | WebSocket transport, binary protocol encode/decode, TimeoutTracker, device identified by host:port (no UUID), Flipper Sub parser working against local fixture `.sub` files |
+| **2. Config Flow** | `config_flow.py` (manual IP + HA-built-in `async_step_zeroconf` — no custom `EvilCrowDiscovery`), `fcc_lookup.py`, `yaml_config.py`, `strings.json`, `translations/en.json` | **None** | User can add the integration by entering IP/FQDN or accepting an mDNS-discovered device, FCC lookup from YAML-configured endpoint works end-to-end, YAML reload with scrape-once-and-revert |
+| **3. Capture/Replay** | `subghz.py` (with input validation — see §3.1), `services.py`, `sensor.py`, `button.py`, `select.py`, `text.py`, `__init__.py` wiring, wizard (§2.5 — SmartConfig step omitted, replaced with "put device in SmartConfig mode via the BOOT button") | **None** | Full learn → confirm → cancel → scan → replay loop, `learn_signal` / `confirm_capture` / `cancel_capture` / `replay_signal` / `rename_signal` / `delete_signal` / `refresh_files` / `scan_frequency` services, `CapturedSignalEntity` created from locally-known metadata (file attributes populated from local `.sub` fixtures; CMD_FILE_LOAD-based population deferred) |
+| **4. Makefile & DX** | `pyproject.toml`, `Makefile` (uv targets), `tests/`, `.gitignore` updates | **None** | `make dev-env && make test && make install && make run` works against the existing firmware; full test suite (with placeholders for Phase 5 features marked `pytest.skip`) passes |
+| **5. Firmware-dependent features** | `device.py` (`hass-config-sync` round-trip), `smartconfig.py` (broadcast helper), `signal_monitor.py`, multi-device dispatch by UUID, `CMD_FILE_LOAD`-based entity attribute population, Options flow additions (`monitor_enabled`, `module`, `expose_unknown`, etc.), `StartMonitoringButton` entity | **Yes** — the eleven new firmware commands listed in [Firmware Prerequisites](#firmware-prerequisites): `CMD_HA_CONFIG_SYNC 0xD8`, `RESP_HA_CONFIG_SYNC 0xD9`, `CMD_HA_SETTINGS_WRITE_SD 0xDA`, `RESP_HA_SETTINGS_WRITE_SD_ACK 0xDB`, `CMD_SMART_CONFIG 0xDC`, `RESP_SMART_CONFIG_STATUS 0xDD`, `CMD_START_MONITOR 0x1B`, `CMD_STOP_MONITOR 0x1C`, `RESP_SIGNAL_MONITOR 0x95`, `CMD_FILE_LOAD 0xA5`, `RESP_FILE_CONTENT 0xA6` | Devices identified by stable UUID persisted on SD card (survives factory reset), SmartConfig onboarding from inside the integration wizard, persistent RF monitoring with known-signal matching and configurable unknown-signal exposure, full Flipper Sub attribute population on entities |
+| **6. Polish** | Diagnostics, refined error handling, factory-reset reconciliation edge cases, version-warning UX tuning, additional NOT_READY retry paths | **None** | Integration handles device reboot, DHCP IP change, firmware version mismatch, factory reset, and a hung capture without leaving the user staring at a perpetual "capturing" state |
+
+### Why this phasing
+
+- **Parallel work streams**: The firmware PRs (11 additive commands — see §Firmware Prerequisites) and the integration Phases 1–4 can be developed concurrently. Code review of integration PRs does not block on firmware review, and vice versa.
+- **Early user value**: A user running the current production firmware gets the full capture/replay workflow in Phase 3 — the integration is already useful even if the firmware PRs are delayed or rejected.
+- **Deferral of risky features**: The features requiring new firmware commands (UUID persistence, monitoring, SmartConfig-from-integration, file-load-for-entity-attributes) all involve either a new transport path, a new firmware-side state machine, or both. Isolating them in Phase 5 makes failures easier to attribute.
+- **Graceful degradation**: When Phase 5 ships, devices running older firmware still work — the integration detects the missing commands at runtime and disables the Phase 5 features with a `persistent_notification` (see `test_coordinator.py` entry: version negotiation falls back to Phase 1–4 capability set).
 
 ### Milestone checkpoints
 
-- **M0** (end of Phase 0): Firmware PRs merged — the eight new commands are available in EvilCrowRF firmware `>=3.x`.
-- **M1** (end of Phase 1): binary protocol + transport + timeout tracker + hass-config-sync + flipper_sub + target_device_store round-trip work against a real EvilCrowRF device. No UI yet.
-- **M2** (end of Phase 2): a user can onboard a device via manual IP entry, sees it in HA's device registry, can reconfigure on IP change. FCC lookup from YAML works end-to-end.
-- **M3** (end of Phase 3): the full learn → confirm → cancel → scan → replay loop works; a captured `.sub` file can be renamed and replayed from the mobile app. Multi-device ready. Learned signals survive HA restart via `evilcrow_rf_targets.json`.
-- **M4** (end of Phase 4): `make dev-env && make test && make install && make run` produces a working dev environment in under 5 minutes.
-- **M5** (end of Phase 5): the integration handles device reboot, DHCP IP change, firmware version mismatch, factory reset, and a hung capture without leaving the user staring at a perpetual "capturing" state.
+- **M1** (end of Phase 1): Binary protocol + transport + TimeoutTracker round-trip work against a real EvilCrowRF device. No UI yet.
+- **M2** (end of Phase 2): A user can onboard a device via manual IP entry (or via HA's built-in zeroconf integration). The device shows in HA's device registry. FCC lookup from YAML works end-to-end. Reconfigure flow handles IP changes.
+- **M3** (end of Phase 3): The full learn → confirm → cancel → scan → replay loop works against the **current** firmware (no firmware changes required). A captured `.sub` file can be renamed and replayed from the mobile app. Learned signals survive HA restart via `evilcrow_rf_targets.json`. This is the first milestone a typical end-user can productively use.
+- **M4** (end of Phase 4): `make dev-env && make test && make install && make run` produces a working dev environment in under 5 minutes. CI green.
+- **M5** (end of Phase 5): All eleven firmware commands are merged. Firmware ships `>=3.x` with the new commands. Integration detects the capability, enables the Phase 5 features, and surfaces a one-time migration `persistent_notification` for existing Phase 3 users (offering to backfill UUIDs from host:port mappings).
+- **M6** (end of Phase 6): The integration handles device reboot, DHCP IP change, firmware version mismatch, factory reset, SD-card hot-swap, and a hung capture without leaving the user stranded.
 
 ---
 
-*Last updated: 2026-06-23. See `firmware/docs/architecture.md` and `mobile_app/docs/architecture.md` for companion architecture docs.*
+*Last updated: 2026-06-25. See `firmware/docs/architecture.md` and `mobile_app/docs/architecture.md` for companion architecture docs.*
+
+---
+
+## Changelog: Addressing Integration Usability Feedback
+
+**Edit Summary** (applied to address 12 suggestions from the plan review):
+
+1. **Added the wizard** — New §2.5 "Guided Remote Onboarding Wizard" with 5-step flow (name remote → identify frequency w/ FCC lookup failure handling → scan helper → select modulation → learn first button → finish). Triggered from `AddTargetDeviceButton` on device page. Also added §2.5b wizard integration with underlying services.
+2. **Frequency lookup failure UX** — Wizard Step 2 and `learn_signal` service now surface explicit notification: "Could not determine frequency from FCC ID. Please enter the frequency manually" when lookup fails. Capture does not start until a valid frequency is provided.
+3. **Watch HA's config directory** — §2.4 updated: integration now watches HA's config directory for file modification events (`hass.config.is_allowed_path` + `async_track`) and reloads `evilcrow_rf.yaml` automatically on save.
+4. *(No action taken.)*
+5. **Auto-populate monitoring frequency** — §3.1b updated: `start_monitoring` service and `SignalMonitor.start()` read frequency from `TargetDeviceStore` when `target_device_id` is provided.
+6. **CC1101 < 2 — feature simply unavailable** — §3.1b updated: if fewer than 2 CC1101 modules, the integration does not attempt a degraded sender-mode fallback. Options flow surfaces a `persistent_notification` explaining that monitoring is unavailable on this hardware; `StartMonitoringButton` entity stays disabled with an explanatory tooltip.
+7. **Capture in progress indicator** — New `CaptureStateSensor` in §3.3: per-target-device binary sensor that shows `idle`/`capturing`/`captured`/`confirming`/`confirmed`/`error` state for automations.
+8. **Add Target Device button** — §3.3 `button.py` updated: new `AddTargetDeviceButton` launches the wizard; new `StartMonitoringButton` starts monitoring with most-recent target device frequency. §3.3.5 lifecycle updated to name this button as the entry point.
+9. **Configurable expose_unknown buffering** — §3.1b: `expose_unknown_min_occurrences` (default 3) and `expose_unknown_window_seconds` (default 60) added to `MonitorConfig`, YAML config, and `OPTIONS_SCHEMA`.
+10. **Removed `auto_revert_on_failure`** — Removed from YAML schema block and the associated flowchart branch.
+11. **Scan frequency first path** — Wizard Step 3 explicitly uses `scan_frequency` service as the recommended first step for generic remotes. Service description updated.
+12. **Entity lifecycle for unlearned buttons** — §3.3.5 updated: `delete_signal` removes entity from HA's entity registry in addition to JSON store cleanup. Orphaned entries after factory reset are surfaced for user cleanup.
+
+---
+
+## Changelog: Protocol Byte Reassignment (2026-06-25 follow-up #2)
+
+Applied to address the P0 protocol-byte collisions identified in the plan critique. All new firmware commands (Phase 5) are reassigned to byte values that are **not used by the existing mobile-app or web-app firmware protocols**. The reassignment is based on an exhaustive byte map extracted from `mobile_app/lib/providers/firmware_protocol.dart` (commands) and `mobile_app/lib/services/binary_message_parser.dart` (responses).
+
+### Reassigned bytes
+
+| Constant | Old | New | Direction | Rationale |
+|---|---|---|---|---|
+| `CMD_START_MONITOR` | `0x0C` | **`0x1B`** | app→device | Old 0x0C collided with mobile's `MSG_RENAME_FILE`. 0x1B is in the unused gap after `MSG_APPLY_WIFI` (0x1A) and before NRF24 commands (0x20). |
+| `CMD_STOP_MONITOR` | `0x0D` | **`0x1C`** | app→device | Old 0x0D collided with mobile's `MSG_UPLOAD_FILE`. 0x1C is adjacent to `CMD_START_MONITOR`. |
+| `CMD_FILE_LOAD` | `0xA2` | **`0xA5`** | app→device | Old 0xA2 collided with mobile's `directoryTree` response (0xA2). 0xA5 is in the unused gap after `fileActionResult` (0xA3) and before Bruter responses (0xB0). |
+| `RESP_FILE_CONTENT` | `0xA2` | **`0xA6`** | device→app | Old 0xA2 collided with mobile's `directoryTree` response. 0xA6 pairs with `CMD_FILE_LOAD` (0xA5). The original `CMD_FILE_LOAD = RESP_FILE_CONTENT = 0xA2` (same byte, opposite directions) was technically valid at the wire level but confusing; splitting them into adjacent bytes makes the protocol easier to read. |
+| `RESP_SIGNAL_MONITOR` | `0x95` | **`0x95`** *(no change)* | device→app | Was already free — not in the mobile enum. Kept to extend the existing 0x90–0x94 Sub-GHz response range. |
+| `CMD_HA_CONFIG_SYNC` | `0xC2` | **`0xD8`** | app→device | Old 0xC2 collided with mobile's `MSG_VERSION_INFO` (command) and `versionInfo` (response). 0xD8 is in the clearly unused gap after NRF24 events (0xD7) and before OTA events (0xE0). |
+| `RESP_HA_CONFIG_SYNC` | `0xC3` | **`0xD9`** | device→app | Old 0xC3 collided with mobile's `batteryStatus` response. 0xD9 pairs with `CMD_HA_CONFIG_SYNC`. |
+| `CMD_HA_SETTINGS_WRITE_SD` | `0xC4` | **`0xDA`** | app→device | Old 0xC4 collided with mobile's `sdrStatus` response (and `MSG_SDR_ENABLE` is at 0x50, so the SD-prefix was misleading). 0xDA pairs with the previous byte. |
+| `RESP_HA_SETTINGS_WRITE_SD_ACK` | `0xC5` | **`0xDB`** | device→app | Old 0xC5 collided with mobile's `MSG_SDR_SPECTRUM_DATA` response. 0xDB pairs with `CMD_HA_SETTINGS_WRITE_SD`. |
+| `CMD_SMART_CONFIG` | `0x18` | **`0xDC`** | app→device | Old 0x18 collided with mobile's `MSG_FORMAT_SD`. 0xDC keeps all HA-related commands/responses in a coherent 0xD8–0xDD block. |
+| `RESP_SMART_CONFIG_STATUS` | `0xC6` | **`0xDD`** | device→app | Old 0xC6 collided with mobile's `MSG_SDR_RAW_DATA` response. 0xDD pairs with `CMD_SMART_CONFIG`. **This constant was missing from §Firmware Prerequisites in the prior version** — added here with placeholder payload format (`provisioning_started` / `credentials_received` / `wifi_joined` / `failed` lifecycle events, TBD by firmware team). |
+
+### Where the new bytes appear in the plan
+
+- **`const.py`** (lines 240–272) — all 11 constants updated with inline comments pointing to the §Firmware Prerequisites safe-harbor map.
+- **§Firmware Prerequisites table** (lines 175–185) — table updated with the new IDs and an added "Collision-avoidance analysis" subsection that documents the full mobile/web-app byte map and the gaps this plan uses.
+- **§Firmware Prerequisites "Backward compatibility"** — line now reads "all new commands live in ranges the mobile app does not use (`0x1B`–`0x1C`, `0xA4`–`0xA6`, `0xD8`–`0xDD`)" instead of the prior incorrect claim about `0xA2` and `0xC2`–`0xC5` (which were actively used by mobile).
+- **§Firmware Prerequisites "Runtime detection"** — bullet list updated with new byte values.
+- **§1.3 `binary_protocol.py`** — docstrings on `build_start_monitor_command`, `build_stop_monitor_command`, `build_smartconfig_command`, `build_ha_config_sync_command` updated. Wire-compatibility note at the end of §1.3 now lists the full set of new bytes.
+- **§1.5 `device.py`** — sequence diagram (App ↔ Transport ↔ Firmware ↔ SD card) updated with new byte values; the prose explanation under "Why a dedicated command instead of reusing `settingsUpdate`" is updated.
+- **§1.10 `smartconfig.py`** — protocol overview step 1 and the firmware prerequisite paragraph updated.
+- **§2.1 Step 2b SmartConfig Onboarding** — flow description updated.
+- **§2.1 Step 3 Device Registration** — flow description updated. Also fixed the pre-existing inconsistency where the old text referenced `CMD_SETTINGS_UPDATE (0xC1)` + `RESP_SETTINGS_SYNC (0xC9)` for the UUID write (which writes to LittleFS and does not survive factory reset); the step now uses the new `CMD_HA_SETTINGS_WRITE_SD (0xDA)` + `RESP_HA_SETTINGS_WRITE_SD_ACK (0xDB)`, consistent with §1.5.
+- **§3.1b `signal_monitor.py`** — `start()` docstring, `stop()` docstring, and the firmware prerequisite paragraph updated.
+- **§3.2 HA Services** — `start_monitoring` and `stop_monitoring` Behavior sections updated.
+- **§Implementation Order** Phase 5 row — firmware command list updated with the new 11-command set.
+
+### Out-of-scope collisions (pre-existing, not addressed in this round)
+
+The plan's pre-existing commands and responses also collide with mobile-app bytes, but these were not introduced by Phase 5 and remain to be addressed in a separate round before any firmware PR is opened:
+
+- `RESP_VERSION_INFO = 0xC0` collides with mobile's `settingsSync` (response). Note: `settingsSync` is also a command at 0xC0, so this collision is bidirectional in the existing protocol — likely a real bug in either the mobile app or the plan's assumed protocol mapping that warrants separate investigation.
+- `RESP_DEVICE_NAME = 0xC8` collides with mobile's `hwButtonStatus`.
+- `RESP_SETTINGS_SYNC = 0xC9` collides with mobile's `sdStatus`.
+- `CMD_FILE_RENAME = 0xA4` matches mobile's `MSG_RENAME_FILE = 0x0C` semantically but uses a different byte (not a collision, just an inconsistency).
+- `CMD_START_RECORDING / CMD_STOP_RECORDING / CMD_SEND_SIGNAL / CMD_FILE_LIST` use bytes that the mobile app uses for entirely different operations (file list vs record vs file delete, etc.). The plan's intent appears to be a different protocol mapping than the mobile app's; this should be reconciled with the firmware team before the integration is finalized.
+
+A separate review pass should:
+1. Confirm with the firmware team which version of the byte map is canonical (the mobile app's `firmware_protocol.dart` or some other source).
+2. Reassign the pre-existing collisions to safe bytes.
+3. Add a `test_protocol_ids.py` test module that locks every byte in `const.py` against the canonical byte map to prevent regressions.
+
+---
+
+## Changelog: Plan Restructure — Defer Firmware-Dependent Features (2026-06-25 follow-up)
+
+Applied to address the four follow-up notes from the plan review:
+
+1. **Removed single-CC1101 sender-mode fallback** — §3.1b no longer describes a degraded sender-mode monitoring path. The original idea (one CC1101 module toggling between TX and RX) required new firmware semantics that weren't well-defined and would have created ambiguous state. The integration now simply **disables the monitoring feature on single-CC1101 hardware**: `StartMonitoringButton` is hidden, the Options flow shows a `persistent_notification`, and `CMD_START_MONITOR` is never sent. The hardware requirement is documented up front so users with single-CC1101 boards aren't left wondering why the feature is missing. The two duplicate "CC1101 < 2" entries in the two prior changelogs are corrected to say "feature simply unavailable" instead of describing the removed sender-mode fallback.
+
+2. **Dropped `EvilCrowDiscovery` and rely on HA's built-in zeroconf** — The custom `discovery.py` module (§1.7 in the prior version) is removed entirely. The custom browser was redundant: the manifest's `"zeroconf": ["_evilcrow._tcp.local."]` already causes HA core to run a zeroconf browser, and `async_step_zeroconf` in `config_flow.py` consumes the discovered services. Running a second browser in the integration would have raced with HA's and provided no benefit. The directory tree no longer lists `discovery.py`, and §2.1 Step 2c now describes the discovery step as "Triggered by HA's built-in zeroconf integration" with no reference to a custom class.
+
+3. **`SubGhzService.start_capture()` validates required inputs** — Added an early validation block that raises `HomeAssistantError` (instead of silently starting a doomed capture) when:
+   - `frequency <= 0` or `None` — message: "Cannot start capture: frequency must be > 0 MHz. Use the scan_frequency service or enter the frequency manually."
+   - `modulation` is empty — message: "Cannot start capture: modulation is required (e.g. 'OOK_FIX')."
+   - `button_name` is empty — message: "Cannot start capture: button_name is required."
+   - `target_device_id` is empty — message: "Cannot start capture: target_device_id is required. Use AddTargetDeviceButton to register a target first."
+   
+   Validation runs **before** any state mutation, so a failed validation does not bump the `CaptureState.generation` counter and does not leave the state machine in `CAPTURING`. Callers (wizard, services) are still expected to validate at the UI layer; this is a last-line guard against misconfigured automations. The required `HomeAssistantError` import is noted in the `SubGhzService` class. `test_subghz.py` is updated to cover all four validation paths.
+
+4. **Phased firmware-dependent features to the end of the implementation order** — The §Implementation Order table is restructured from `Phase 0 (firmware) → 1 (foundation) → 2 (config) → 3 (capture) → 4 (DX) → 5 (polish)` to:
+   - **Phase 1**: Foundation (no firmware changes) — WebSocket transport, binary protocol, TimeoutTracker, coordinator keyed by `host:port`, Flipper Sub parser against local fixtures.
+   - **Phase 2**: Config Flow (no firmware changes) — manual IP entry, HA's built-in zeroconf (`async_step_zeroconf`), FCC lookup, YAML config.
+   - **Phase 3**: Capture/Replay (no firmware changes) — full learn → confirm → cancel → scan → replay loop using existing `CMD_START_RECORDING / CMD_STOP_RECORDING / CMD_SEND_SIGNAL / CMD_FILE_LIST / CMD_FILE_RENAME / CMD_SCAN`. **SmartConfig wizard step is omitted**; the wizard instructs users to put the device in SmartConfig mode via the BOOT button (which the firmware already supports without the new command).
+   - **Phase 4**: Makefile & DX.
+   - **Phase 5**: Firmware-dependent features — `hass-config-sync` device UUID, `smartconfig.py` broadcast helper, `signal_monitor.py`, multi-device dispatch upgrade from `entry_id` to SD-card UUID, `CMD_FILE_LOAD`-based entity attribute population, Options-flow additions for monitoring. Requires the 11 new firmware commands in §Firmware Prerequisites.
+   - **Phase 6**: Polish.
+   
+   Rationale (documented in the new "Why this phasing" subsection under Implementation Order):
+   - **Parallel work streams**: firmware PRs and integration Phases 1–4 can be developed concurrently.
+   - **Early user value**: a user running the current production firmware gets the full capture/replay workflow in Phase 3.
+   - **Deferral of risky features**: monitoring, UUID persistence, and SmartConfig-from-integration all involve new firmware state machines — isolating them in Phase 5 makes failures easier to attribute.
+   - **Graceful degradation**: when Phase 5 ships, devices running older firmware still work — the integration detects missing commands at runtime via `RESP_VERSION_INFO` capability flags and disables Phase 5 features with a `persistent_notification` (documented in §Firmware Prerequisites "Runtime detection").
+   
+   Section markers added: §1.5 `device.py`, §1.9 `flipper_sub.py` (CMD_FILE_LOAD deferred), §1.10 `smartconfig.py`, §3.1b `signal_monitor.py` are all tagged `*(Phase 5 — firmware-dependent)*` with inline notes explaining what ships in earlier phases. §2.1 wizard steps 2b (SmartConfig) and 2c (Discovery) are clarified to reflect the Phase 5 gating. The §Architecture "Key Design Decisions" row for "multi-device dispatch" is updated to reflect the host:port → UUID transition. The §Future Considerations "Multi-Device Support" subsection is rewritten to describe the phased rollout.
+
+---
+
+## Changelog: Plan Evaluation Fixes (2026-06-25)
+
+Applied after the pre-implementation plan evaluation. These fixes address implementation-correctness and consistency issues in the plan document — no design changes.
+
+**1. `SubGhzService` no longer reaches into transport private state** — `SubGhzService.__init__` now accepts `ec_device_id` as a constructor parameter instead of accessing `self._transport._device_id`. The coordinator passes `device_info.device_id`. The `_reset()` helper was also updated to use `self._ec_device_id`.
+
+**2. `smartconfig.py` blocking sockets moved to executor** — The UDP broadcast loop now runs inside `loop.run_in_executor(None, _send_loop)` so the HA event loop is never blocked. `import time` added for `time.sleep()` inside the executor function. A comment notes the `hash()` non-determinism issue on Python 3.12+.
+
+**3. `TargetDeviceStore` lifecycle added to `__init__.py`** — `async_setup_entry` now instantiates `TargetDeviceStore`, calls `async_load()` before entity creation, and stores it on the coordinator (accessible via the new `target_store` property). This ensures learned signals survive HA restarts.
+
+**4. Missing `const.py` constants added** — `CONF_MONITOR_RSSI_THRESHOLD`, `CONF_EXPOSE_UNKNOWN_MIN_OCCURRENCES`, and `CONF_EXPOSE_UNKNOWN_WINDOW_SECONDS` are now defined, matching the `OPTIONS_SCHEMA` and `MonitorConfig` references.
+
+**5. Command count inconsistency fixed** — "8" → "11" in the "Why this phasing" bullet and the M5 milestone description, consistent with the 11 entries in §Firmware Prerequisites.
+
+**6. Missing test files added to directory tree** — `test_target_device_store.py`, `test_signal_monitor.py`, `test_yaml_config.py`, and `test_options_flow.py` are now listed.
+
+**7. `CaptureStateSensor` device class corrected** — `_attr_device_class = "enum"` → `_attr_device_class = SensorDeviceClass.ENUM` (HA's canonical constant).
+
+**8. `_async_update_listener` weight noted** — A comment documents that full `async_reload` is heavyweight (WebSocket teardown + re-setup) and should be optimized to a lighter refresh path for YAML-only changes in a future iteration.
+
+**9. YAML file-watch mechanism documented** — `__init__.py` now includes a comment noting that YAML reload uses `hass.config.is_allowed_path` + `async_track`, not polling.
+
+**10. `asyncio` import added to `fcc_lookup.py` snippet** — The module-level imports now include `import asyncio` since `FccLookupService.lookup` catches `asyncio.TimeoutError`.
+
+**11. Duplicate `**Behavior**` label removed** — The `learn_signal` service docs had a stray duplicate subheading.

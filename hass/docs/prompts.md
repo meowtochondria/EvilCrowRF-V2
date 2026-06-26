@@ -77,3 +77,27 @@ Update document to add suggestions.
 Gotchas
 Add some fixes for them, unless they aren't already covered by changes or suggestions mentioned above.
 12 - we utilize scraping FCC website for this.
+
+---
+
+Address suggestions as follows:
+1. Add the wizard
+2. apply suggestion. Also add flow to inform user if frequency lookup failed and that they have to manually do the lookup and provide the frequency.
+3. Watch HA's config directory for file modification events
+4. ignore
+5. apply suggestion
+6. if `<2` cc11101 devices are available, the device will switch to sender mode for the duration of transmission and return to monitoring mode when not sending.
+7. apply suggestion.
+8. Via a "Add Target Device" button on the device page?
+9. apply suggestion.
+10. Remove `auto_revert_on_failure`**
+11. apply suggestion.
+12. Apply your judgement.
+
+The "single CC1101 sender-mode fallback" is hand-waved and probably wrong - remove support for single CC11101
+
+`discovery.py` and SmartConfig both want the zeroconf instance, and the manifest may double-register - drop `EvilCrowDiscovery` and rely entirely on `async_step_zeroconf` (HA's built-in path)
+
+"Frequency = 0.0" and `generation = 0` defaults can pass silently - Validate `frequency > 0` and `modulation != ""` in `start_capture` and raise `HomeAssistantError`
+
+phase the plan such that features requiring changes to firmware are done at the end.
