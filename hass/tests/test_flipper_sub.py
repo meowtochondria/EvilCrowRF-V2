@@ -88,18 +88,18 @@ class TestFlipperSubParsing:
     ) -> None:
         raw = sample_flipper_sub_files["with_comments.sub"]
         sub = FlipperSubFile.parse(raw)
-        # Comments should be stored in _extra_lines
-        comment_lines = [line for line in sub._extra_lines if line.strip().startswith("#")]
+        # Comments should be preserved in _lines
+        comment_lines = [line for line in sub._lines if line.strip().startswith("#")]
         assert len(comment_lines) >= 2
 
     def test_parse_blank_lines_preserved(self) -> None:
-        """Blank lines in the file are preserved in _extra_lines."""
+        """Blank lines in the file are preserved."""
         raw = b"Filetype: Flipper SubGhz Key File\nVersion: 1\n\nFrequency: 433920000\n"
         sub = FlipperSubFile.parse(raw)
-        assert any(line.strip() == "" for line in sub._extra_lines)
+        assert any(line.strip() == "" for line in sub._lines)
 
     def test_unrecognized_key_preserved(self) -> None:
-        """Unknown key/value pairs are preserved in _extra_lines."""
+        """Unknown key/value pairs are preserved."""
         raw = (
             b"Filetype: Flipper SubGhz Key File\n"
             b"Version: 1\n"
@@ -107,7 +107,7 @@ class TestFlipperSubParsing:
             b"Frequency: 433920000\n"
         )
         sub = FlipperSubFile.parse(raw)
-        custom_lines = [line for line in sub._extra_lines if "CustomField" in line]
+        custom_lines = [line for line in sub._lines if "CustomField" in line]
         assert len(custom_lines) == 1
         assert "some_value" in custom_lines[0]
 

@@ -120,8 +120,10 @@ class TestTimeoutTrackerTimeout:
     async def test_expired_entries_cleaned_up(self) -> None:
         """Timed-out entries are removed from the pending dict."""
         tracker = TimeoutTracker(default_timeout=0.02)
-        await tracker.track(1)
-        await asyncio.sleep(0.05)
+        fut = await tracker.track(1)
+        # Wait for the timeout to fire
+        with pytest.raises(TimeoutError):
+            await fut
         # Pending should be empty after timeout fires
         assert len(tracker._pending) == 0
 

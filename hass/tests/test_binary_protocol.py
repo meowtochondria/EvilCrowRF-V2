@@ -194,16 +194,18 @@ class TestChunking:
     def test_multiple_frames_for_large_payload(self) -> None:
         """Large payloads are split across multiple chunks."""
         proto = EvilCrowBinaryProtocol()
-        # Build a file list with a very long path to force chunking
-        long_path = "/" + "a" * (MAX_PAYLOAD_SIZE * 2)
-        frames = proto.build_file_list_command(path=long_path)
+        # Build a settings update with a large value to force chunking.
+        # build_settings_update_command uses uint16 for value length, so it
+        # can hold payloads larger than the 500-byte max chunk size.
+        large_value = b"x" * (MAX_PAYLOAD_SIZE * 2)
+        frames = proto.build_settings_update_command(setting_key=1, setting_value=large_value)
         assert len(frames) > 1
 
     def test_chunked_metadata_consistency(self) -> None:
         """All chunks share the same chunk_id and correct chunk numbering."""
         proto = EvilCrowBinaryProtocol()
-        long_path = "/" + "b" * (MAX_PAYLOAD_SIZE * 3)
-        frames = proto.build_file_list_command(path=long_path)
+        large_value = b"y" * (MAX_PAYLOAD_SIZE * 3)
+        frames = proto.build_settings_update_command(setting_key=1, setting_value=large_value)
         assert len(frames) >= 2
 
         decoded_frames = [BinaryFrame.decode(f) for f in frames]
@@ -219,20 +221,20 @@ class TestChunking:
     def test_chunked_first_chunk_contains_command_byte(self) -> None:
         """The first chunk of a chunked command carries the command byte."""
         proto = EvilCrowBinaryProtocol()
-        long_path = "/" + "c" * (MAX_PAYLOAD_SIZE * 2)
-        frames = proto.build_file_list_command(path=long_path)
+        large_value = b"z" * (MAX_PAYLOAD_SIZE * 2)
+        frames = proto.build_settings_update_command(setting_key=1, setting_value=large_value)
         first = BinaryFrame.decode(frames[0])
-        assert first.data[0] == CMD_FILE_LIST
+        assert first.data[0] == CMD_SETTINGS_UPDATE
 
     def test_chunked_subsequent_chunks_no_command_byte(self) -> None:
         """Chunks after the first carry only continuation data."""
         proto = EvilCrowBinaryProtocol()
-        long_path = "/" + "d" * (MAX_PAYLOAD_SIZE * 2)
-        frames = proto.build_file_list_command(path=long_path)
+        large_value = b"w" * (MAX_PAYLOAD_SIZE * 2)
+        frames = proto.build_settings_update_command(setting_key=1, setting_value=large_value)
         assert len(frames) > 1
         second = BinaryFrame.decode(frames[1])
         # No command byte prefix in continuation chunks
-        assert second.data[0] != CMD_FILE_LIST
+        assert second.data[0] != CMD_SETTINGS_UPDATE
 
 
 # ---------------------------------------------------------------------------
@@ -260,7 +262,7 @@ class TestCommandBuilders:
         frames = proto.build_request_record_command(frequency=433920000, module=1, preset=0)
         self.assert_valid_frames(frames, CMD_START_RECORDING)
         decoded = BinaryFrame.decode(frames[0])
-        _, freq, mod, preset = struct.unpack_from("B<IBB", decoded.data, 0)
+        _, freq, mod, preset = struct.unpack_from("<BIBB", decoded.data, 0)
         assert freq == 433920000
         assert mod == 1
         assert preset == 0
@@ -511,9 +513,7 @@ class TestResponseParsing:
         uuid_str = "550e8400-e29b-41d4-a716-446655440000"
         uuid_bytes = uuid_str.encode("utf-8")
         payload = (
-            struct.pack("BB", RESP_HA_CONFIG_SYNC, len(uuid_bytes))
-            + struct.pack("<H", len(uuid_bytes))
-            + uuid_bytes
+            struct.pack("B", RESP_HA_CONFIG_SYNC) + struct.pack("<H", len(uuid_bytes)) + uuid_bytes
         )
         frame = self._make_frame(payload)
         result = EvilCrowBinaryProtocol.parse_response(frame)
@@ -563,7 +563,7 @@ class TestResponseParsing:
 
     def test_request_id_preserved(self) -> None:
         """The response dict includes the original chunk_id as request_id."""
-        payload = struct.pack("BB", RESP_SIGNAL_DETECTED, -50)
+        payload = struct.pack("Bb", RESP_SIGNAL_DETECTED, -50)
         frame = self._make_frame(payload, chunk_id=127)
         result = EvilCrowBinaryProtocol.parse_response(frame)
         assert result["request_id"] == 127

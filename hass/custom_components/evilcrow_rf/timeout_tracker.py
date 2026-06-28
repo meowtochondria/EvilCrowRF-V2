@@ -20,6 +20,7 @@ class TimeoutTracker:
         self._pending: dict[int, tuple[asyncio.Future[Any], float]] = {}
         self._lock = asyncio.Lock()
         self._watcher: asyncio.Task[None] | None = None
+        self._wake: asyncio.Event = asyncio.Event()
 
     async def track(self, request_id: int, *, timeout: float | None = None) -> asyncio.Future[Any]:
         """Register a future for the given request_id.
@@ -43,6 +44,7 @@ class TimeoutTracker:
         # Start the watcher if not already running
         if self._watcher is None or self._watcher.done():
             self._watcher = asyncio.create_task(self._watcher_loop())
+        self._wake.set()
 
         return fut
 
@@ -62,6 +64,7 @@ class TimeoutTracker:
             fut, _ = entry
             if not fut.done():
                 fut.set_result(value)
+            self._wake.set()
         else:
             _LOGGER.debug(
                 "No pending request for ID %d (already resolved or timed out)",
@@ -110,8 +113,15 @@ class TimeoutTracker:
                             )
 
                 if not expired:
-                    # No expired entries — sleep before next check
-                    await asyncio.sleep(0.5)
+                    # No expired entries — wait for a wake signal
+                    self._wake.clear()
+                    async with self._lock:
+                        if not self._pending:
+                            return
+                    try:
+                        await asyncio.wait_for(self._wake.wait(), timeout=0.05)
+                    except TimeoutError:
+                        pass
                 else:
                     # Yield control to event loop after handling timeouts
                     await asyncio.sleep(0)

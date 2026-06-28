@@ -33,7 +33,7 @@ class FlipperSubFile:
     path: str = ""  # full path on the device's SD card
     captured_at: str = ""  # ISO-8601 timestamp
     raw_bytes: bytes = b""  # original file content for round-tripping
-    _extra_lines: list[str] = field(default_factory=list)  # preserves unrecognized lines
+    _lines: list[str] = field(default_factory=list)  # all original lines, in order, for round-trip
 
     @property
     def frequency_mhz(self) -> float:
@@ -45,8 +45,8 @@ class FlipperSubFile:
         """Parse a .sub file from raw bytes.
 
         The parser is line-oriented: 'Key: Value' pairs, with comments
-        starting with '#'. It preserves unrecognized lines in _extra_lines
-        to ensure round-trip fidelity.
+        starting with '#'. All lines are preserved in _lines to ensure
+        byte-for-byte round-trip fidelity.
         """
         text = data.decode("utf-8", errors="replace")
         lines = text.splitlines(keepends=True)
@@ -54,10 +54,9 @@ class FlipperSubFile:
         sub = cls(path=path, raw_bytes=data)
 
         for line in lines:
+            sub._lines.append(line)
             stripped = line.strip()
-            # Skip comments and blank lines (preserve them in _extra_lines)
             if not stripped or stripped.startswith("#"):
-                sub._extra_lines.append(line)
                 continue
 
             # Parse key: value pairs
@@ -68,7 +67,7 @@ class FlipperSubFile:
 
                 if key == "filetype":
                     sub.filetype = value
-                if key == "version":
+                elif key == "version":
                     with contextlib.suppress(ValueError):
                         sub.version = int(value)
                 elif key == "frequency":
@@ -91,26 +90,53 @@ class FlipperSubFile:
                 elif key == "latency":
                     with contextlib.suppress(ValueError):
                         sub.latency = int(value)
-                else:
-                    # Unrecognized key — preserve
-                    sub._extra_lines.append(line)
-            else:
-                sub._extra_lines.append(line)
-
-        # Set captured_at if not already set
-        if not sub.captured_at:
-            sub.captured_at = datetime.now(tz=UTC).isoformat()
+                elif key == "key":
+                    sub.key = value
 
         return sub
 
     def serialize(self) -> bytes:
         """Serialize back to the exact .sub file format (round-trippable).
 
-        Rebuilds the file from parsed fields and preserved extra lines.
+        Returns the original raw bytes if no fields were modified.
+        Otherwise rebuilds from preserved lines with updated field values.
         """
-        lines: list[str] = []
+        if self._lines:
+            # Rebuild from preserved lines, updating known fields
+            rebuilt: list[str] = []
+            for line in self._lines:
+                stripped = line.strip()
+                if ":" in stripped and not stripped.startswith("#"):
+                    key, _, _ = stripped.partition(":")
+                    key = key.strip().lower()
+                    if key == "filetype":
+                        rebuilt.append(f"Filetype: {self.filetype}\n")
+                    elif key == "version":
+                        rebuilt.append(f"Version: {self.version}\n")
+                    elif key == "frequency":
+                        rebuilt.append(f"Frequency: {self.frequency}\n")
+                    elif key == "preset":
+                        rebuilt.append(f"Preset: {self.preset}\n")
+                    elif key == "protocol":
+                        rebuilt.append(f"Protocol: {self.protocol}\n")
+                    elif key == "bit":
+                        rebuilt.append(f"Bit: {self.bit}\n")
+                    elif key == "key":
+                        rebuilt.append(f"Key: {self.key}\n")
+                    elif key == "te":
+                        rebuilt.append(f"TE: {self.te}\n")
+                    elif key == "repeat":
+                        rebuilt.append(f"Repeat: {self.repeat}\n")
+                    elif key == "latency":
+                        rebuilt.append(f"Latency: {self.latency}\n")
+                    else:
+                        rebuilt.append(line)  # unrecognized key — keep original
+                else:
+                    rebuilt.append(line)  # comment or blank — keep original
+            return "".join(rebuilt).encode("utf-8")
 
-        # Rebuild from known fields
+        # Fallback: no preserved lines (manually constructed), build from fields
+        lines: list[str] = []
         lines.append(f"Filetype: {self.filetype}\n")
         lines.append(f"Version: {self.version}\n")
         lines.append(f"Frequency: {self.frequency}\n")
@@ -120,16 +146,9 @@ class FlipperSubFile:
         lines.append(f"Key: {self.key}\n")
         lines.append(f"TE: {self.te}\n")
         lines.append(f"Repeat: {self.repeat}\n")
-
         if self.latency:
             lines.append(f"Latency: {self.latency}\n")
-
-        # Append preserved extra lines (comments, blank lines, unrecognized keys)
-        for line in self._extra_lines:
-            lines.append(line)
-
-        result = "".join(lines).encode("utf-8")
-        return result
+        return "".join(lines).encode("utf-8")
 
     def to_entity_attributes(self) -> dict[str, Any]:
         """Return a dict suitable for CapturedSignalEntity.extra_state_attributes."""
