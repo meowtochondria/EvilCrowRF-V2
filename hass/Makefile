@@ -4,7 +4,7 @@ HA_CONFIG_DIR ?= ~/.homeassistant
 CUSTOM_COMPONENT_DIR := custom_components/evilcrow_rf
 SYMLINK_TARGET := $(HA_CONFIG_DIR)/custom_components/evilcrow_rf
 
-.PHONY: help install uninstall reinstall dev-env lock refresh-deps test lint fmt check typecheck clean run run-full logs ci
+.PHONY: help install uninstall reinstall ensure-python dev-env lock refresh-deps test lint fmt check typecheck clean run run-full logs ci
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -31,7 +31,10 @@ uninstall: ## Remove the symlink from the Home Assistant config directory
 
 reinstall: uninstall install ## Reinstall the symlink
 
-dev-env: ## Create a virtual environment and sync dependencies (uv sync)
+ensure-python: ## Ensure a Python matching pyproject.toml is available (installs via uv if missing)
+	@uv python install
+
+dev-env: ensure-python ## Create a virtual environment and sync dependencies (uv sync)
 	uv sync --all-extras --prerelease allow
 
 lock: ## Generate/update uv.lock
