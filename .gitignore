@@ -3,6 +3,7 @@
 .venv
 .pio_core
 .idea
+.zed
 .cursor
 .github
 logs/

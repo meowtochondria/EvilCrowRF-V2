@@ -1,7 +1,7 @@
 {
   "domain": "evilcrow_rf",
   "name": "EvilCrowRF V2",
-  "codeowners": ["@your-gh-handle"],
+  "codeowners": ["@meowtochondria"],
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/...",

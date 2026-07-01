@@ -1,10 +1,10 @@
 .DEFAULT_GOAL := help
 
-HA_CONFIG_DIR ?= ~/.homeassistant
+HA_CONFIG_DIR ?= $(HOME)/.homeassistant
 CUSTOM_COMPONENT_DIR := custom_components/evilcrow_rf
 SYMLINK_TARGET := $(HA_CONFIG_DIR)/custom_components/evilcrow_rf
 
-.PHONY: help install uninstall reinstall ensure-python dev-env lock refresh-deps test lint fmt check typecheck clean run run-full logs ci
+.PHONY: help install uninstall reinstall ensure-python dev-env lock refresh-deps test lint fmt check typecheck clean run run-full logs ci deploy
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -64,13 +64,13 @@ clean: ## Remove generated files and caches
 	find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name '*.pyc' -delete
 
-run: ## Start Home Assistant (core) pointing at this config
-	hass -c "$(HA_CONFIG_DIR)" --debug
+run: ensure-python ## Start Home Assistant (core) pointing at this config
+	uv run hass -c "$(HA_CONFIG_DIR)" --debug
 
-run-full: ## Start Home Assistant with full debug logging for the component
+run-full: ensure-python ## Start Home Assistant with full debug logging for the component
 	@echo "Starting Home Assistant with EvilCrowRF debug logging..."
 	HASS_LOG_LEVEL=debug \
-	hass -c "$(HA_CONFIG_DIR)" \
+	uv run hass -c "$(HA_CONFIG_DIR)" \
 		--log-level custom_components.evilcrow_rf=debug \
 		--log-level aiohttp=debug
 
@@ -78,5 +78,15 @@ logs: ## Tail the Home Assistant log
 	tail -f "$(HA_CONFIG_DIR)/home-assistant.log" 2>/dev/null || \
 		tail -f "$(HA_CONFIG_DIR)/home-assistant/home-assistant.log" 2>/dev/null || \
 		echo "Log file not found"
+
+deploy: ## Copy the custom component to a remote server via scp (usage: make deploy SERVER=host SERVER_PATH=/path)
+	@if [ -z "$(SERVER)" ] || [ -z "$(SERVER_PATH)" ]; then \
+		echo "Usage: make deploy SERVER=<host> SERVER_PATH=<path>"; \
+		echo "  e.g. make deploy SERVER=500w.ghai.co SERVER_PATH=/srv/homeassistant"; \
+		exit 1; \
+	fi
+	ssh "$(SERVER)" "mkdir -p $(SERVER_PATH)/$(dir $(CUSTOM_COMPONENT_DIR))"
+	scp -r "$(CUSTOM_COMPONENT_DIR)" "$(SERVER):$(SERVER_PATH)/$(dir $(CUSTOM_COMPONENT_DIR))"
+	@echo "Deployed $(CUSTOM_COMPONENT_DIR) to $(SERVER):$(SERVER_PATH)/$(CUSTOM_COMPONENT_DIR)"
 
 ci: dev-env check test ## Run all CI checks (dev-env, lint, format-check, typecheck, test)
