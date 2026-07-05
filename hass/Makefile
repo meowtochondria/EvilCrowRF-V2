@@ -60,8 +60,8 @@ fmt-check: ## Check formatting without making changes
 
 clean: ## Remove generated files and caches
 	rm -rf .venv __pycache__ .ruff_cache .mypy_cache .coverage htmlcov
-	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
-	find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name __pycache__ -exec rm -rf {} +
+	find . -type d -name .pytest_cache -exec rm -rf {} +
 	find . -type f -name '*.pyc' -delete
 
 run: ensure-python ## Start Home Assistant (core) pointing at this config
@@ -90,3 +90,12 @@ deploy: ## Copy the custom component to a remote server via scp (usage: make dep
 	@echo "Deployed $(CUSTOM_COMPONENT_DIR) to $(SERVER):$(SERVER_PATH)/$(CUSTOM_COMPONENT_DIR)"
 
 ci: dev-env check test ## Run all CI checks (dev-env, lint, format-check, typecheck, test)
+
+deploy: ## SCP the component to a remote HA server. Usage: make deploy SERVER=user@host PATH=/config/custom_components/evilcrow_rf
+	@if [ -z "$(SERVER)" ]; then echo "Error: SERVER is required. Usage: make deploy SERVER=user@host REMOTE_PATH=/config/custom_components/evilcrow_rf"; exit 1; fi
+	@if [ -z "$(REMOTE_PATH)" ]; then echo "Error: REMOTE_PATH is required. Usage: make deploy SERVER=user@host REMOTE_PATH=/config/custom_components/evilcrow_rf"; exit 1; fi
+	@case "$(REMOTE_PATH)" in *custom_components/evilcrow_rf) ;; *) echo "Error: REMOTE_PATH must end with 'custom_components/evilcrow_rf' (got: $(REMOTE_PATH))"; exit 1;; esac
+	@echo "==> Deploying $(CUSTOM_COMPONENT_DIR) to $(SERVER):$(REMOTE_PATH)..."
+	ssh $(SERVER) "mkdir -p $(REMOTE_PATH)"
+	tar --exclude-from=$$(pwd)/.gitignore --directory $(CUSTOM_COMPONENT_DIR) --create --file - . | ssh $(SERVER) "tar --directory $(REMOTE_PATH) --extract --file -"
+	@echo "Done. Restart Home Assistant on the remote server to pick up changes."
