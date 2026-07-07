@@ -131,7 +131,7 @@ void WifiConfigManager::clearCredentials() {
 
 bool WifiConfigManager::hasSavedCredentials() {
     Preferences prefs;
-    prefs.begin(NVS_NAMESPACE, true);
+    prefs.begin(NVS_NAMESPACE, false);
     bool hasSsid = prefs.isKey(NVS_KEY_SSID);
     prefs.end();
     return hasSsid;
@@ -170,7 +170,7 @@ void WifiConfigManager::softAPOnly() {
 
 bool WifiConfigManager::tryConnectSaved() {
     Preferences prefs;
-    prefs.begin(NVS_NAMESPACE, true);
+    prefs.begin(NVS_NAMESPACE, false);
 
     String ssid = prefs.getString(NVS_KEY_SSID, "");
     String pass = prefs.getString(NVS_KEY_PASS, "");

@@ -115,14 +115,12 @@ private:
         return true;
     }
     
-    // Request idle
+    // Request idle — default to module 0 if no module byte is provided.
     static bool handleRequestIdle(const uint8_t* data, size_t len) {
-        if (len < 1) {
-            ESP_LOGW("StateCommands", "Insufficient data for requestIdle");
-            return false;
+        uint8_t module = 0;
+        if (len >= 1) {
+            module = data[0];
         }
-        
-        uint8_t module = data[0];
         
         if (!moduleExists(module)) {
             ESP_LOGE("StateCommands", "Invalid module number: %d", module);

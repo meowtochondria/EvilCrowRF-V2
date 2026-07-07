@@ -1,7 +1,8 @@
 .PHONY: help setup setup-esptoolpy build build-bt build-wifi \
         clean flash flash-bt flash-wifi \
         monitor flash-monitor flash-monitor-bt flash-monitor-wifi \
-        show-device-mac test update
+        show-device-mac test update \
+        build-littlefs-wifi flash-littlefs-wifi
 
 PYTHON := python
 ENV_DIR := .venv
@@ -24,6 +25,8 @@ help:
 	@echo "  flash-monitor-bt   - Flash BT then open serial monitor"
 	@echo "  flash-monitor-wifi - Flash WiFi then open serial monitor"
 	@echo "  show-device-mac    - Read ESP32 MAC address via esptool"
+	@echo "  build-littlefs-wifi - Build blank LittleFS filesystem (WiFi mode)"
+	@echo "  flash-littlefs-wifi - Build and upload blank LittleFS filesystem (WiFi mode)"
 	@echo "  test               - Run tests"
 	@echo "  update             - Update PlatformIO and dependencies"
 
@@ -106,6 +109,19 @@ update:
 
 test:
 	@uv run platformio test
+
+build-littlefs-wifi: setup
+	@mkdir -p data
+	@echo "Building blank LittleFS filesystem (WiFi mode)..."
+	@uv run platformio run --target buildfs --environment evilcrow-wifi
+	@echo ""
+	@echo "LittleFS filesystem built successfully!"
+
+flash-littlefs-wifi: build-littlefs-wifi
+	@echo "Uploading blank LittleFS filesystem (WiFi mode)..."
+	@uv run platformio run --target uploadfs --environment evilcrow-wifi
+	@echo ""
+	@echo "LittleFS filesystem uploaded successfully!"
 
 show-device-wifi-mac:
 	@uv run esptool --chip esp32 read_mac
