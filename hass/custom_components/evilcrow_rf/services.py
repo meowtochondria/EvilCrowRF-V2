@@ -1,6 +1,6 @@
 """Home Assistant service definitions for the EvilCrowRF V2 integration.
 
-Registers 10 services that operate on individual EvilCrowRF devices.
+Registers 11 services that operate on individual EvilCrowRF devices.
 Each service looks up its coordinator via ``hass.data[DOMAIN][ec_device_id]``
 and delegates to the appropriate method on `SubGhzService`.
 """
@@ -16,13 +16,19 @@ from homeassistant.exceptions import HomeAssistantError
 
 from .const import (
     ATTR_BUTTON_NAME,
+    ATTR_CANCEL,
+    ATTR_CONFIRMED,
     ATTR_DEVICE_ID,
+    ATTR_FCC_ID,
     ATTR_FREQUENCY,
     ATTR_MODULATION,
     ATTR_NEW_NAME,
+    ATTR_NEXT_BUTTON,
     ATTR_SIGNAL_FILE,
     ATTR_TARGET_DEVICE_ID,
+    ATTR_TARGET_DEVICE_NAME,
     DOMAIN,
+    NOTIFY_WIZARD_STEP,
     SERVICE_CANCEL_CAPTURE,
     SERVICE_CONFIRM_CAPTURE,
     SERVICE_DELETE_SIGNAL,
@@ -32,6 +38,7 @@ from .const import (
     SERVICE_REPLAY_SIGNAL,
     SERVICE_SCAN_FREQUENCY,
     SERVICE_START_MONITORING,
+    SERVICE_START_WIZARD,
     SERVICE_STOP_MONITORING,
 )
 
@@ -51,10 +58,31 @@ DEVICE_ID_SCHEMA = vol.Schema(
 LEARN_SIGNAL_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_DEVICE_ID): str,
-        vol.Optional(ATTR_FREQUENCY, default=433920000): vol.All(
+        vol.Required(ATTR_TARGET_DEVICE_ID): str,
+        vol.Required(ATTR_BUTTON_NAME): str,
+        vol.Optional(ATTR_FCC_ID): str,
+        vol.Exclusive(ATTR_FREQUENCY, "frequency_source"): vol.All(
             vol.Coerce(int), vol.Range(min=1, max=10_000_000_000)
         ),
         vol.Optional(ATTR_MODULATION, default="OOK_FIX"): str,
+        vol.Optional(ATTR_TARGET_DEVICE_NAME, default=""): str,
+    },
+    extra=vol.PREVENT_EXTRA,
+)
+
+CONFIRM_CAPTURE_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_DEVICE_ID): str,
+        vol.Required(ATTR_CONFIRMED, default=True): bool,
+        vol.Optional(ATTR_CANCEL, default=False): bool,
+        vol.Optional(ATTR_NEXT_BUTTON): str,
+    },
+    extra=vol.PREVENT_EXTRA,
+)
+
+CANCEL_CAPTURE_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_DEVICE_ID): str,
     },
     extra=vol.PREVENT_EXTRA,
 )
@@ -63,23 +91,6 @@ REPLAY_SIGNAL_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_DEVICE_ID): str,
         vol.Required(ATTR_SIGNAL_FILE): str,
-    },
-    extra=vol.PREVENT_EXTRA,
-)
-
-CONFIRM_CAPTURE_SCHEMA = vol.Schema(
-    {
-        vol.Required(ATTR_DEVICE_ID): str,
-        vol.Required(ATTR_TARGET_DEVICE_ID): str,
-        vol.Required(ATTR_BUTTON_NAME): str,
-        vol.Required(ATTR_SIGNAL_FILE): str,
-    },
-    extra=vol.PREVENT_EXTRA,
-)
-
-CANCEL_CAPTURE_SCHEMA = vol.Schema(
-    {
-        vol.Required(ATTR_DEVICE_ID): str,
     },
     extra=vol.PREVENT_EXTRA,
 )
@@ -132,6 +143,18 @@ STOP_MONITORING_SCHEMA = vol.Schema(
     extra=vol.PREVENT_EXTRA,
 )
 
+START_WIZARD_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_DEVICE_ID): str,
+        vol.Optional(ATTR_TARGET_DEVICE_NAME, default=""): str,
+        vol.Optional(ATTR_FCC_ID): str,
+        vol.Optional(ATTR_FREQUENCY): vol.All(
+            vol.Coerce(int), vol.Range(min=1, max=10_000_000_000)
+        ),
+    },
+    extra=vol.PREVENT_EXTRA,
+)
+
 
 # ---------------------------------------------------------------------------
 # Service registration
@@ -169,29 +192,139 @@ def async_register_services(hass: HomeAssistant) -> None:
             )
         return coordinator
 
+    # ------------------------------------------------------------------
+    # learn_signal — Full capture workflow: FCC lookup → capture →
+    #   auto-replay → confirm
+    # ------------------------------------------------------------------
+
     async def _handle_learn_signal(call: ServiceCall) -> None:
-        """Start capturing an RF signal on the given frequency."""
+        """Start capturing a button on a target RF remote.
+
+        Full workflow:
+          1. If *fcc_id* is given and no *frequency*, look up frequency
+             from the configured FCC API endpoint.
+          2. Send ``CMD_START_RECORDING`` to the device.
+          3. On ``SignalRecorded``, the state machine auto-advances to
+             replay the captured signal (verification).
+          4. On ``SignalSent``, the state machine transitions to
+             CONFIRMING — the user calls ``confirm_capture`` to
+             accept/reject the capture.
+
+        Raises:
+            HomeAssistantError: If no frequency could be determined.
+        """
         data = call.data
         coordinator = await _get_coordinator(data[ATTR_DEVICE_ID])
         subghz = coordinator.subghz
         if subghz is None:
             raise HomeAssistantError("SubGhzService not initialized.")
+
+        target_device_id: str = data[ATTR_TARGET_DEVICE_ID]
+        button_name: str = data[ATTR_BUTTON_NAME]
+        target_device_name: str = data.get(ATTR_TARGET_DEVICE_NAME, "")
+        fcc_id: str = data.get(ATTR_FCC_ID, "")
+        modulation: str = data.get(ATTR_MODULATION, "OOK_FIX")
+
+        # Determine frequency
+        frequency: int | None = data.get(ATTR_FREQUENCY)
+        if frequency is None and fcc_id:
+            # FCC lookup
+            fcc = coordinator.fcc_lookup
+            if fcc is None:
+                from .fcc_lookup import FccLookup
+
+                fcc = FccLookup(hass)
+                coordinator.fcc_lookup = fcc
+
+            try:
+                result = await fcc.async_lookup(fcc_id)
+                if result and result > 0:
+                    frequency = int(result * 1_000_000)
+                    _LOGGER.info(
+                        "FCC lookup for %s returned %.1f MHz",
+                        fcc_id,
+                        result,
+                    )
+                else:
+                    raise HomeAssistantError(
+                        f"Could not determine frequency from FCC ID '{fcc_id}'. "
+                        "Please enter the frequency manually (e.g. 433920000 Hz).",
+                        translation_domain=DOMAIN,
+                        translation_key="fcc_lookup_failed",
+                        translation_placeholders={"fcc_id": fcc_id},
+                    )
+            except HomeAssistantError:
+                raise
+            except Exception as exc:
+                raise HomeAssistantError(
+                    f"FCC lookup failed for '{fcc_id}': {exc}",
+                    translation_domain=DOMAIN,
+                    translation_key="fcc_lookup_error",
+                    translation_placeholders={"fcc_id": fcc_id},
+                ) from exc
+
+        if frequency is None:
+            raise HomeAssistantError(
+                "No frequency provided and no FCC ID given. Provide a frequency (Hz) or an FCC ID.",
+                translation_domain=DOMAIN,
+                translation_key="no_frequency",
+            )
+
+        # Validate the target device exists in TargetDeviceStore
+        store = coordinator.target_store
+        if store is not None:
+            target = store.get(target_device_id)
+            if target is None:
+                # Auto-register the target device if not already known
+                from .target_device_store import TargetDevice
+
+                device = TargetDevice(
+                    target_device_id=target_device_id,
+                    name=target_device_name or button_name,
+                    ec_device_id=data[ATTR_DEVICE_ID],
+                    fcc_id=fcc_id or None,
+                    frequency=frequency / 1_000_000,
+                    modulation=modulation,
+                    buttons={},
+                )
+                store.register(device)
+                await store.async_save()
+
         await subghz.start_capture(
-            frequency=data[ATTR_FREQUENCY],
+            frequency=frequency,
+            target_device_id=target_device_id,
+            target_device_name=target_device_name,
+            button_name=button_name,
+            fcc_id=fcc_id,
         )
 
+    # ------------------------------------------------------------------
+    # confirm_capture — Accept/retry/cancel the last capture
+    # ------------------------------------------------------------------
+
     async def _handle_confirm_capture(call: ServiceCall) -> None:
-        """Confirm a captured signal and associate it with a button."""
+        """Confirm, retry, or cancel the last capture.
+
+        Called after the user has verified the replayed signal.
+
+        - ``confirmed=True``: persist the button-to-signal mapping.
+        - ``confirmed=False, cancel=False``: retry capturing the same button.
+        - ``cancel=True``: abort the entire capture.
+        """
         data = call.data
         coordinator = await _get_coordinator(data[ATTR_DEVICE_ID])
         subghz = coordinator.subghz
         if subghz is None:
             raise HomeAssistantError("SubGhzService not initialized.")
         await subghz.confirm_capture(
-            target_device_id=data[ATTR_TARGET_DEVICE_ID],
-            button_name=data[ATTR_BUTTON_NAME],
-            signal_file=data[ATTR_SIGNAL_FILE],
+            confirmed=data[ATTR_CONFIRMED],
+            cancel=data.get(ATTR_CANCEL, False),
+            next_button=data.get(ATTR_NEXT_BUTTON),
         )
+
+    # ------------------------------------------------------------------
+    # cancel_capture — Abort any in-progress capture/replay
+    # ------------------------------------------------------------------
 
     async def _handle_cancel_capture(call: ServiceCall) -> None:
         """Cancel any in-progress capture or replay."""
@@ -202,6 +335,10 @@ def async_register_services(hass: HomeAssistant) -> None:
             raise HomeAssistantError("SubGhzService not initialized.")
         await subghz.cancel_capture()
 
+    # ------------------------------------------------------------------
+    # replay_signal — Replay a .sub file (arbitrary, not verification)
+    # ------------------------------------------------------------------
+
     async def _handle_replay_signal(call: ServiceCall) -> None:
         """Replay a previously captured .sub signal."""
         data = call.data
@@ -211,7 +348,12 @@ def async_register_services(hass: HomeAssistant) -> None:
             raise HomeAssistantError("SubGhzService not initialized.")
         await subghz.replay_signal(
             file_path=data[ATTR_SIGNAL_FILE],
+            verify=False,
         )
+
+    # ------------------------------------------------------------------
+    # rename_signal — Rename a .sub file on the SD card
+    # ------------------------------------------------------------------
 
     async def _handle_rename_signal(call: ServiceCall) -> None:
         """Rename a .sub file on the device's SD card."""
@@ -222,16 +364,19 @@ def async_register_services(hass: HomeAssistant) -> None:
             raise HomeAssistantError("SubGhzService not initialized.")
         old_path = data[ATTR_SIGNAL_FILE]
         new_name = data[ATTR_NEW_NAME]
-        # Derive new path from old path: replace filename component
         parts = old_path.rsplit("/", 1)
         new_path = f"{parts[0]}/{new_name}" if len(parts) > 1 else new_name
         await subghz.rename_signal(old_path=old_path, new_path=new_path)
 
-    async def _handle_delete_signal(call: ServiceCall) -> None:
-        """Delete a .sub file from the device's SD card.
+    # ------------------------------------------------------------------
+    # delete_signal — Remove a signal from the store
+    # ------------------------------------------------------------------
 
-        Note: The device firmware may not support a file delete command at this
-        time. This service is defined for future use and currently logs a warning.
+    async def _handle_delete_signal(call: ServiceCall) -> None:
+        """Delete a .sub file entry from the target device store.
+
+        Note: Firmware file delete command may not be available (Phase 5).
+        Currently removes the entry from TargetDeviceStore only.
         """
         data = call.data
         coordinator = await _get_coordinator(data[ATTR_DEVICE_ID])
@@ -239,13 +384,6 @@ def async_register_services(hass: HomeAssistant) -> None:
         if subghz is None:
             raise HomeAssistantError("SubGhzService not initialized.")
         signal_file = data[ATTR_SIGNAL_FILE]
-        _LOGGER.warning(
-            "Delete signal not yet implemented on device %s for file %s",
-            data[ATTR_DEVICE_ID],
-            signal_file,
-        )
-        # In Phase 5, this would send a file delete command.
-        # For now, we just remove the entry from TargetDeviceStore.
         store = coordinator.target_store
         if store is not None:
             for target in store.get_all_for_ec_device(data[ATTR_DEVICE_ID]):
@@ -254,6 +392,10 @@ def async_register_services(hass: HomeAssistant) -> None:
                         store.remove_button(target.target_device_id, btn)
                         break
             await store.async_save()
+
+    # ------------------------------------------------------------------
+    # refresh_files — Re-fetch the SD card file list
+    # ------------------------------------------------------------------
 
     async def _handle_refresh_files(call: ServiceCall) -> None:
         """Refresh the list of .sub files from the device."""
@@ -264,11 +406,12 @@ def async_register_services(hass: HomeAssistant) -> None:
             raise HomeAssistantError("SubGhzService not initialized.")
         await subghz.refresh_files()
 
-    async def _handle_scan_frequency(call: ServiceCall) -> None:
-        """Request a frequency scan on the device.
+    # ------------------------------------------------------------------
+    # scan_frequency — Scan for the strongest RF frequency
+    # ------------------------------------------------------------------
 
-        Note: Full frequency scanning may be a Phase 5 feature.
-        """
+    async def _handle_scan_frequency(call: ServiceCall) -> None:
+        """Request a frequency scan on the device."""
         data = call.data
         coordinator = await _get_coordinator(data[ATTR_DEVICE_ID])
         frames = coordinator.transport.protocol.build_scan_command()
@@ -280,11 +423,12 @@ def async_register_services(hass: HomeAssistant) -> None:
                 translation_key="scan_failed",
             )
 
-    async def _handle_start_monitoring(call: ServiceCall) -> None:
-        """Start continuous monitoring on the device.
+    # ------------------------------------------------------------------
+    # start_monitoring / stop_monitoring — Phase 5
+    # ------------------------------------------------------------------
 
-        Phase 5 feature. Falls back gracefully on older firmware.
-        """
+    async def _handle_start_monitoring(call: ServiceCall) -> None:
+        """Start continuous monitoring (Phase 5 feature)."""
         data = call.data
         coordinator = await _get_coordinator(data[ATTR_DEVICE_ID])
         monitor = coordinator.signal_monitor
@@ -299,7 +443,7 @@ def async_register_services(hass: HomeAssistant) -> None:
             )
 
     async def _handle_stop_monitoring(call: ServiceCall) -> None:
-        """Stop continuous monitoring on the device."""
+        """Stop continuous monitoring."""
         data = call.data
         coordinator = await _get_coordinator(data[ATTR_DEVICE_ID])
         monitor = coordinator.signal_monitor
@@ -311,6 +455,90 @@ def async_register_services(hass: HomeAssistant) -> None:
                 "Stop monitoring not supported on device %s (Phase 5 feature)",
                 data[ATTR_DEVICE_ID],
             )
+
+    # ------------------------------------------------------------------
+    # start_wizard — Launch the guided learning wizard
+    # ------------------------------------------------------------------
+
+    async def _handle_start_wizard(call: ServiceCall) -> None:
+        """Launch the guided target-device learning wizard.
+
+        Shows a step-by-step persistent_notification that guides the
+        user through the capture workflow:
+
+        1. Name the target remote.
+        2. Enter FCC ID or frequency.
+        3. Start capture and press the remote button.
+        4. Confirm the replayed signal.
+
+        The user progresses through the wizard by calling the
+        appropriate services (learn_signal, confirm_capture, etc.).
+        """
+        data = call.data
+        device_id: str = data[ATTR_DEVICE_ID]
+        coordinator = await _get_coordinator(device_id)
+
+        device_name = coordinator.device_info.name
+        target_name: str = data.get(ATTR_TARGET_DEVICE_NAME, "")
+        fcc_id: str = data.get(ATTR_FCC_ID, "")
+        freq: int | None = data.get(ATTR_FREQUENCY)
+
+        # Build the notification message
+        lines = [
+            "## EvilCrowRF V2 \u2014 Learn a New Remote",
+            "",
+            f"Device: **{device_name}** ({device_id})",
+            "",
+            "### Step-by-step instructions",
+            "",
+            "1. **Call `evilcrow_rf.learn_signal`** with:",
+            f"   - `device_id`: `{device_id}`",
+            f"   - `target_device_id`: `{target_name or '<your-remote-name>'}`",
+            "   - `button_name`: e.g. `power`",
+        ]
+
+        if fcc_id:
+            lines.append(f"   - `fcc_id`: `{fcc_id}`")
+        if freq:
+            lines.append(f"   - `frequency`: `{freq}` (Hz)")
+        if not fcc_id and not freq:
+            lines.append("   - `fcc_id`: optional, or")
+            lines.append("   - `frequency`: e.g. `433920000` (Hz)")
+
+        lines.extend(
+            [
+                "",
+                "2. When prompted, **press the remote button** near the device.",
+                "",
+                "3. The device will replay the captured signal for verification.",
+                "",
+                "4. **Call `evilcrow_rf.confirm_capture`** with:",
+                f"   - `device_id`: `{device_id}`",
+                "   - `confirmed`: `true` (if the device responded)",
+                "   - or `confirmed`: `false` to retry",
+                "   - or `cancel`: `true` to abort",
+                "",
+                "5. Repeat for each button you want to learn.",
+                "",
+                "---",
+                "",
+                "> **Tip**: Use Developer Tools → Services in Home Assistant ",
+                "> to call these services. You can also create automations",
+                "> that call them.",
+            ]
+        )
+
+        notify_id = f"{NOTIFY_WIZARD_STEP}_{device_id}"
+        hass.services.async_call(
+            "persistent_notification",
+            "create",
+            {
+                "notification_id": notify_id,
+                "title": "EvilCrowRF — Learn a New Remote",
+                "message": "\n".join(lines),
+            },
+            blocking=False,
+        )
 
     # ---- register services ----
 
@@ -384,4 +612,13 @@ def async_register_services(hass: HomeAssistant) -> None:
         schema=STOP_MONITORING_SCHEMA,
     )
 
-    _LOGGER.debug("Registered %d EvilCrowRF services", 10)
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_START_WIZARD,
+        _handle_start_wizard,
+        schema=START_WIZARD_SCHEMA,
+    )
+
+    from .const import NUM_SERVICES
+
+    _LOGGER.debug("Registered %d EvilCrowRF services", NUM_SERVICES)

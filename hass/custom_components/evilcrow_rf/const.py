@@ -34,12 +34,8 @@ CMD_FILE_LIST = 0xA0  # request SD-card file listing
 CMD_FILE_LOAD = 0xA5  # Phase 5: read a .sub file from the SD card (chunked response)
 CMD_FILE_RENAME = 0xA4  # rename a file on the SD card
 CMD_SETTINGS_UPDATE = 0xC1
-CMD_HA_CONFIG_SYNC = (
-    0xD8  # Phase 5: ask device for its HA-assigned UUID (response 0xD9)
-)
-CMD_HA_SETTINGS_WRITE_SD = (
-    0xDA  # Phase 5: write a key=value pair to /config/ on the SD card
-)
+CMD_HA_CONFIG_SYNC = 0xD8  # Phase 5: ask device for its HA-assigned UUID (response 0xD9)
+CMD_HA_SETTINGS_WRITE_SD = 0xDA  # Phase 5: write a key=value pair to /config/ on the SD card
 CMD_SMART_CONFIG = 0xDC  # Phase 5: put device into SmartConfig WiFi provisioning mode
 
 # Message types (response → app, 0x80+).
@@ -50,18 +46,14 @@ RESP_SIGNAL_ERROR = 0x93
 RESP_SIGNAL_SENDING_ERROR = 0x94
 RESP_SIGNAL_MONITOR = 0x95  # Phase 5: signal detected during continuous monitoring
 RESP_FILE_LIST = 0xA1
-RESP_FILE_CONTENT = (
-    0xA6  # Phase 5: chunked file content response for CMD_FILE_LOAD (0xA5)
-)
+RESP_FILE_CONTENT = 0xA6  # Phase 5: chunked file content response for CMD_FILE_LOAD (0xA5)
 RESP_FILE_ACTION = 0xA3
 RESP_VERSION_INFO = 0xC0
 RESP_HA_CONFIG_SYNC = (
     0xD9  # Phase 5: payload: [length:uint16][uuid-string-bytes] or 0x0000 if unset
 )
 RESP_HA_SETTINGS_WRITE_SD_ACK = 0xDB  # Phase 5: ack for CMD_HA_SETTINGS_WRITE_SD (0xDA)
-RESP_SMART_CONFIG_STATUS = (
-    0xDD  # Phase 5: status notification for CMD_SMART_CONFIG (0xDC)
-)
+RESP_SMART_CONFIG_STATUS = 0xDD  # Phase 5: status notification for CMD_SMART_CONFIG (0xDC)
 RESP_DEVICE_NAME = 0xC8
 RESP_SETTINGS_SYNC = 0xC9
 
@@ -87,6 +79,10 @@ SERVICE_REFRESH_FILES = "refresh_files"
 SERVICE_SCAN_FREQUENCY = "scan_frequency"
 SERVICE_START_MONITORING = "start_monitoring"
 SERVICE_STOP_MONITORING = "stop_monitoring"
+SERVICE_START_WIZARD = "start_wizard"
+
+# Number of registered services
+NUM_SERVICES = 11
 
 # Config entry versioning
 CONFIG_ENTRY_VERSION = 1
@@ -103,7 +99,10 @@ ATTR_BUTTON_NAME = "button_name"
 ATTR_SIGNAL_FILE = "signal_file"
 ATTR_NEW_NAME = "new_name"
 ATTR_CONFIRMED = "confirmed"
+ATTR_CANCEL = "cancel"
+ATTR_NEXT_BUTTON = "next_button"
 ATTR_TARGET_DEVICE_ID = "target_device_id"
+ATTR_TARGET_DEVICE_NAME = "target_device_name"
 ATTR_SCAN = "scan"
 ATTR_STRONGEST_FREQUENCY = "strongest_frequency"
 ATTR_EXPOSE_UNKNOWN = "expose_unknown"
@@ -126,3 +125,6 @@ CONF_EXPOSE_UNKNOWN_WINDOW_SECONDS = "expose_unknown_window_seconds"
 NOTIFY_VERSION_WARNING = "evilcrow_rf_version_warning"
 NOTIFY_CAPTURE_TIMEOUT = "evilcrow_rf_capture_timeout"
 NOTIFY_SIGNAL_MONITOR = "evilcrow_rf_signal_monitor"
+NOTIFY_ONBOARDING = "evilcrow_rf_onboarding"
+NOTIFY_CONFIRM_CAPTURE = "evilcrow_rf_confirm_capture"
+NOTIFY_WIZARD_STEP = "evilcrow_rf_wizard_step"

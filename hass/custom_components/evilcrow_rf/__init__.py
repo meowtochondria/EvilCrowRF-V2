@@ -24,6 +24,7 @@ from .const import (
 )
 from .coordinator import EvilCrowCoordinator
 from .models import DeviceInfo
+from .notification_manager import NotificationManager
 from .services import async_register_services
 from .subghz import SubGhzService
 from .target_device_store import TargetDeviceStore
@@ -146,7 +147,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             f"Unexpected error connecting to EvilCrowRF device at {host}:{port}: {exc}"
         ) from exc
 
-    # ---- 7. Store coordinator in hass.data ----
+    # ---- 7. Wire notification manager ----
+    # The NotificationManager subscribes to SubGhzService events and
+    # shows/dismisses persistent_notifications for confirm prompts,
+    # errors, and onboarding.
+    notifier = NotificationManager(hass, coordinator)
+    notifier.subscribe()
+    coordinator.notifier = notifier
+
+    # Show onboarding notification for first-time setup (no targets yet)
+    target_store = coordinator.target_store
+    if target_store is not None:
+        targets = target_store.get_all_for_ec_device(entry.entry_id)
+        if not targets:
+            notifier.show_onboarding(entry.title or device_info.name)
+
+    # ---- 8. Store coordinator in hass.data ----
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator
 

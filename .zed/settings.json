@@ -2,7 +2,7 @@
   "lsp": {
     "clangd": {
       "binary": {
-        "path": "/usr/bin/clangd-22",
+        "path": "/home/dev/.local/bin/clangd",
         "arguments": [
           "--query-driver=/home/dev/.platformio/packages/toolchain-xtensa-esp32/bin/xtensa-esp32-elf-g++",
           "--background-index",

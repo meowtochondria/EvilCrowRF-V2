@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import time
 from typing import Any
@@ -118,10 +119,8 @@ class TimeoutTracker:
                     async with self._lock:
                         if not self._pending:
                             return
-                    try:
+                    with contextlib.suppress(TimeoutError):
                         await asyncio.wait_for(self._wake.wait(), timeout=0.05)
-                    except TimeoutError:
-                        pass
                 else:
                     # Yield control to event loop after handling timeouts
                     await asyncio.sleep(0)

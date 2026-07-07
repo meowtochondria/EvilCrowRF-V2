@@ -70,8 +70,7 @@ def _build_smartconfig_packet(ssid: str, password: str, channel: int | None) -> 
     # Use a stable hash for the token (hash() is not deterministic across runs on 3.12+)
     token = struct.pack(
         "!I",
-        int(hashlib.sha256((ssid + password).encode()).hexdigest()[:8], 16)
-        & 0xFFFFFFFF,
+        int(hashlib.sha256((ssid + password).encode()).hexdigest()[:8], 16) & 0xFFFFFFFF,
     )
 
     body = struct.pack("B", len(ssid)) + ssid.encode("utf-8")
@@ -79,8 +78,4 @@ def _build_smartconfig_packet(ssid: str, password: str, channel: int | None) -> 
     body += struct.pack("B", len(token)) + token
     total_len = len(body) + 2  # magic + cmd + body
     checksum = (SMARTCONFIG_MAGIC + total_len + 1 + sum(body)) & 0xFF
-    return (
-        struct.pack("BBB", SMARTCONFIG_MAGIC, total_len, 1)
-        + body
-        + struct.pack("B", checksum)
-    )
+    return struct.pack("BBB", SMARTCONFIG_MAGIC, total_len, 1) + body + struct.pack("B", checksum)

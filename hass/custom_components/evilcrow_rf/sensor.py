@@ -180,6 +180,12 @@ class CaptureStateSensor(CoordinatorEntity, SensorEntity):
             "generation": capture_state.generation,
             "error_message": capture_state.error_message,
             "last_file_list_count": len(capture_state.last_file_list),
+            "target_device_id": capture_state.target_device_id,
+            "target_device_name": capture_state.target_device_name,
+            "button_name": capture_state.button_name,
+            "frequency_mhz": capture_state.frequency_mhz,
+            "fcc_id": capture_state.fcc_id,
+            "modulation": capture_state.modulation,
         }
         if capture_state.raw_response:
             attrs["last_response"] = capture_state.raw_response

@@ -115,5 +115,63 @@
       "invalid_occurrences": "Minimum occurrences must be between 1 and 100.",
       "invalid_window": "Detection window must be between 5 and 3600 seconds."
     }
+  },
+  "entity": {
+    "button": {
+      "add_target_device": {
+        "name": "Add Target Remote",
+        "description": "Launch the guided wizard to learn a new RF remote."
+      },
+      "learn_signal": {
+        "name": "Learn Signal",
+        "description": "Start capturing an RF signal at 433.92 MHz with no target context."
+      },
+      "cancel_capture": {
+        "name": "Cancel Capture",
+        "description": "Cancel any in-progress capture or replay."
+      },
+      "replay_signal": {
+        "name": "Replay Signal",
+        "description": "Replay the last captured signal."
+      },
+      "start_monitoring": {
+        "name": "Start Monitoring",
+        "description": "Start/stop continuous RF signal monitoring (Phase 5)."
+      },
+      "confirm_yes": {
+        "name": "Confirm Yes",
+        "description": "Confirm that the replayed signal triggered the target device."
+      },
+      "confirm_no": {
+        "name": "Confirm No",
+        "description": "Reject the capture and retry for the same button."
+      },
+      "confirm_cancel": {
+        "name": "Confirm Cancel",
+        "description": "Abort the capture and return to idle."
+      }
+    },
+    "sensor": {
+      "device_status": {
+        "name": "Device Status",
+        "description": "Connection status and firmware info for the EvilCrowRF device."
+      },
+      "capture_state": {
+        "name": "Capture State",
+        "description": "Current state of the signal capture state machine."
+      }
+    },
+    "select": {
+      "captured_signal": {
+        "name": "Captured Signal",
+        "description": "Currently selected .sub file for replay."
+      }
+    },
+    "text": {
+      "rename_signal": {
+        "name": "Rename Signal",
+        "description": "Enter a new filename for the selected .sub file."
+      }
+    }
   }
 }

@@ -79,23 +79,21 @@ logs: ## Tail the Home Assistant log
 		tail -f "$(HA_CONFIG_DIR)/home-assistant/home-assistant.log" 2>/dev/null || \
 		echo "Log file not found"
 
-deploy: ## Copy the custom component to a remote server via scp (usage: make deploy SERVER=host SERVER_PATH=/path)
-	@if [ -z "$(SERVER)" ] || [ -z "$(SERVER_PATH)" ]; then \
-		echo "Usage: make deploy SERVER=<host> SERVER_PATH=<path>"; \
-		echo "  e.g. make deploy SERVER=500w.ghai.co SERVER_PATH=/srv/homeassistant"; \
-		exit 1; \
-	fi
-	ssh "$(SERVER)" "mkdir -p $(SERVER_PATH)/$(dir $(CUSTOM_COMPONENT_DIR))"
-	scp -r "$(CUSTOM_COMPONENT_DIR)" "$(SERVER):$(SERVER_PATH)/$(dir $(CUSTOM_COMPONENT_DIR))"
-	@echo "Deployed $(CUSTOM_COMPONENT_DIR) to $(SERVER):$(SERVER_PATH)/$(CUSTOM_COMPONENT_DIR)"
-
 ci: dev-env check test ## Run all CI checks (dev-env, lint, format-check, typecheck, test)
 
-deploy: ## SCP the component to a remote HA server. Usage: make deploy SERVER=user@host PATH=/config/custom_components/evilcrow_rf
+deploy: ## SCP the component to a remote HA server and restart. Usage: make deploy SERVER=user@host REMOTE_PATH=/config/custom_components/evilcrow_rf [HASS_TOKEN=xxx]
 	@if [ -z "$(SERVER)" ]; then echo "Error: SERVER is required. Usage: make deploy SERVER=user@host REMOTE_PATH=/config/custom_components/evilcrow_rf"; exit 1; fi
 	@if [ -z "$(REMOTE_PATH)" ]; then echo "Error: REMOTE_PATH is required. Usage: make deploy SERVER=user@host REMOTE_PATH=/config/custom_components/evilcrow_rf"; exit 1; fi
 	@case "$(REMOTE_PATH)" in *custom_components/evilcrow_rf) ;; *) echo "Error: REMOTE_PATH must end with 'custom_components/evilcrow_rf' (got: $(REMOTE_PATH))"; exit 1;; esac
 	@echo "==> Deploying $(CUSTOM_COMPONENT_DIR) to $(SERVER):$(REMOTE_PATH)..."
 	ssh $(SERVER) "mkdir -p $(REMOTE_PATH)"
 	tar --exclude-from=$$(pwd)/.gitignore --directory $(CUSTOM_COMPONENT_DIR) --create --file - . | ssh $(SERVER) "tar --directory $(REMOTE_PATH) --extract --file -"
-	@echo "Done. Restart Home Assistant on the remote server to pick up changes."
+	@echo "==> Deploy complete. Restarting Home Assistant..."
+	@if [ -n "$(HASS_TOKEN)" ]; then \
+		echo "Calling restart API on $(SERVER)..."; \
+		curl -X POST -H "Authorization: Bearer $(HASS_TOKEN)" -H "Content-Type: application/json" $(SERVER)/api/services/homeassistant/restart; \
+		echo ""; \
+	else \
+		echo "HASS_TOKEN is unset — cannot restart automatically."; \
+		echo "Restart Home Assistant manually to pick up the changes."; \
+	fi

@@ -179,3 +179,12 @@ class EvilCrowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     @target_store.setter
     def target_store(self, value: TargetDeviceStore) -> None:
         self._target_store = value
+
+    @property
+    def fcc_lookup(self) -> Any | None:
+        """Return the FCC lookup helper, if set."""
+        return getattr(self, "_fcc_lookup", None)
+
+    @fcc_lookup.setter
+    def fcc_lookup(self, value: Any) -> None:
+        self._fcc_lookup = value

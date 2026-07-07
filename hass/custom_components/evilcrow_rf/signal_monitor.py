@@ -24,15 +24,9 @@ class MonitorConfig:
     enabled: bool = False
     module: int = 1  # which CC1101 module (0 or 1; default 1 = second module)
     rssi_threshold: int = -80  # dBm; signals below this are ignored
-    expose_unknown: bool = (
-        False  # if True, create transient entities for unmatched signals
-    )
-    expose_unknown_min_occurrences: int = (
-        3  # minimum detections before surfacing unknown
-    )
-    expose_unknown_window_seconds: int = (
-        60  # time window (seconds) for counting occurrences
-    )
+    expose_unknown: bool = False  # if True, create transient entities for unmatched signals
+    expose_unknown_min_occurrences: int = 3  # minimum detections before surfacing unknown
+    expose_unknown_window_seconds: int = 60  # time window (seconds) for counting occurrences
 
 
 @dataclass
@@ -66,15 +60,11 @@ class SignalMonitor:
         self._hass = hass
         self._config = MonitorConfig()
         self._active: bool = False
-        self._known_signals: dict[
-            str, str
-        ] = {}  # raw_key -> target_device_id:button_name
+        self._known_signals: dict[str, str] = {}  # raw_key -> target_device_id:button_name
         self._pending_unknown: list[DetectedSignal] = []
         self._update_lock = asyncio.Lock()
 
-    async def start(
-        self, frequency: float, *, config: MonitorConfig | None = None
-    ) -> bool:
+    async def start(self, frequency: float, *, config: MonitorConfig | None = None) -> bool:
         """Start persistent monitoring on the given frequency (MHz).
 
         Phase 5: Sends CMD_START_MONITOR (0x1B) with module, frequency (Hz),
@@ -95,9 +85,7 @@ class SignalMonitor:
 
         Phases 1-4: no-op, returns False.
         """
-        _LOGGER.debug(
-            "SignalMonitor.stop() called — Phase 5 feature, not yet implemented"
-        )
+        _LOGGER.debug("SignalMonitor.stop() called — Phase 5 feature, not yet implemented")
         return False
 
     async def handle_signal(self, signal: DetectedSignal) -> None:
@@ -107,9 +95,7 @@ class SignalMonitor:
 
         Phases 1-4: no-op.
         """
-        _LOGGER.debug(
-            "SignalMonitor.handle_signal() called — Phase 5 feature, not yet implemented"
-        )
+        _LOGGER.debug("SignalMonitor.handle_signal() called — Phase 5 feature, not yet implemented")
 
     def rebuild_known_map(self) -> None:
         """Re-read TargetDeviceStore and rebuild the raw_key -> entity map.

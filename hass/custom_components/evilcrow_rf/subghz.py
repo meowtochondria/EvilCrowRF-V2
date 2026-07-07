@@ -3,6 +3,28 @@
 Manages the lifecycle of capturing, confirming, and replaying RF signals
 on an EvilCrowRF device. State transitions are driven by WebSocket messages
 from the device and service calls from Home Assistant.
+
+State machine (from plan.md §3.1):
+
+    IDLE --> CAPTURING: learn_signal service
+    IDLE --> REPLAYING: replay_signal service (arbitrary replay)
+
+    CAPTURING --> CAPTURING: SignalDetected (RSSI live feed)
+    CAPTURING --> SIGNAL_CAPTURED: SignalRecorded
+    CAPTURING --> IDLE: capture_timeout / SignalError / cancel
+
+    SIGNAL_CAPTURED --> REPLAYING: auto-advance (replay for verification)
+
+    REPLAYING --> CONFIRMING: SignalSent (await user yes/no)  [verification replay]
+    REPLAYING --> IDLE: SignalSent                             [arbitrary replay]
+    REPLAYING --> IDLE: SignalSendingError / replay_timeout / cancel
+
+    CONFIRMING --> CONFIRMED: confirm_capture(confirmed=True)
+    CONFIRMING --> CAPTURING: confirm_capture(confirmed=False, retry=True)
+    CONFIRMING --> IDLE: confirm_capture(cancel=True)
+
+    CONFIRMED --> IDLE: signal saved (optionally renamed)
+    CONFIRMED --> CAPTURING: learn another button
 """
 
 from __future__ import annotations
@@ -51,6 +73,15 @@ class CaptureState:
         generation: Monotonic counter incremented on each new operation.
         error_message: Human-readable error message when state is ERROR.
         last_file_list: Most recent file list result from refresh_files().
+        target_device_id: The HA device registry ID of the target RF remote.
+        target_device_name: Friendly name of the target remote (e.g. "Garage Door").
+        button_name: Name of the button being learned (e.g. "power").
+        fcc_id: FCC ID used for frequency lookup (if any).
+        frequency_mhz: Operating frequency in MHz for the capture.
+        modulation: Modulation type (e.g. "OOK_FIX").
+        is_verification_replay: True if the replay is for capture verification
+            (auto-advance). When True, SignalSent transitions to CONFIRMING
+            instead of IDLE.
     """
 
     state: str = CaptureStateValue.IDLE
@@ -60,6 +91,13 @@ class CaptureState:
     generation: int = 0
     error_message: str = ""
     last_file_list: list[str] = field(default_factory=list)
+    target_device_id: str = ""
+    target_device_name: str = ""
+    button_name: str = ""
+    fcc_id: str = ""
+    frequency_mhz: float = 0.0
+    modulation: str = "OOK_FIX"
+    is_verification_replay: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -79,6 +117,15 @@ class SubGhzService:
 
     A **generation counter** is incremented on every new operation so that
     stale or out-of-order device responses are safely ignored.
+
+    Callers can subscribe to state transitions via :meth:`on`::
+
+        def on_captured(signal_file: str): ...
+        subghz.on("signal_captured", on_captured)
+
+    Supported events:
+        ``capturing``, ``signal_captured``, ``confirming``, ``confirmed``,
+        ``replaying``, ``idle``, ``error``, ``files_refreshed``
     """
 
     def __init__(
@@ -98,6 +145,32 @@ class SubGhzService:
         self._state = CaptureState()
         self._lock = asyncio.Lock()
         self._response_event = asyncio.Event()
+        self._event_callbacks: dict[str, list[Any]] = {}
+
+    def on(self, event: str, callback: Any) -> None:
+        """Register a callback for a state-transition event.
+
+        Args:
+            event: One of ``capturing``, ``signal_captured``, ``confirming``,
+                ``confirmed``, ``replaying``, ``idle``, ``error``,
+                ``files_refreshed``.
+            callback: Async or sync callable. If async, it is scheduled
+                via ``hass.async_create_task``.
+        """
+        self._event_callbacks.setdefault(event, []).append(callback)
+
+    def _emit(self, event: str, *args: Any) -> None:
+        """Fire an event to all registered callbacks.
+
+        Args:
+            event: The event name.
+            args: Passed to each callback.
+        """
+        for cb in self._event_callbacks.get(event, []):
+            try:
+                cb(*args)
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("SubGhz event callback for %s failed", event)
 
     # ------------------------------------------------------------------
     # Public properties
@@ -117,17 +190,28 @@ class SubGhzService:
         frequency: int,
         module: int = 0,
         preset: int = 0,
+        *,
+        target_device_id: str = "",
+        target_device_name: str = "",
+        button_name: str = "",
+        fcc_id: str = "",
     ) -> CaptureState:
-        """Begin capturing an RF signal.
+        """Begin capturing an RF signal for a target device button.
 
         Sends a CMD_START_RECORDING frame to the device. Returns the
         current state snapshot immediately; the device will respond
-        asynchronously via :meth:`handle_response`.
+        asynchronously via :meth:`handle_response`. On SignalRecorded,
+        the state machine auto-advances to replay the captured signal
+        for verification.
 
         Args:
             frequency: Frequency in Hz.
             module: CC1101 module index (0 or 1).
             preset: Flipper SubGhz preset value.
+            target_device_id: HA device registry ID of the target RF remote.
+            target_device_name: Friendly name (e.g. "Garage Door").
+            button_name: Name of the button being learned (e.g. "power").
+            fcc_id: FCC ID used for frequency lookup (informational).
 
         Returns:
             The updated CaptureState (CAPTURING on success, ERROR on failure).
@@ -168,6 +252,15 @@ class SubGhzService:
             self._increment_generation()
             self._state.state = CaptureStateValue.CAPTURING
             self._state.error_message = ""
+            self._state.signal_file = ""
+            self._state.raw_response = {}
+            # Store capture context
+            self._state.target_device_id = target_device_id
+            self._state.target_device_name = target_device_name
+            self._state.button_name = button_name
+            self._state.fcc_id = fcc_id
+            self._state.frequency_mhz = frequency / 1_000_000
+            self._state.is_verification_replay = False
 
             frames = self._protocol.build_request_record_command(
                 frequency=frequency,
@@ -182,13 +275,16 @@ class SubGhzService:
                 return self._state
 
         _LOGGER.debug(
-            "Capture started on device %s: freq=%d Hz, module=%d, preset=%d",
+            "Capture started on device %s: freq=%d Hz, module=%d, preset=%d, target=%s, button=%s",
             self._coordinator.device_info.device_id,
             frequency,
             module,
             preset,
+            target_device_id,
+            button_name,
         )
         self._coordinator.async_update_listeners()
+        self._emit("capturing", frequency)
         return self._state
 
     async def cancel_capture(self) -> CaptureState:
@@ -216,13 +312,21 @@ class SubGhzService:
             prev_state,
         )
         self._coordinator.async_update_listeners()
+        self._emit("idle", "cancelled")
         return self._state
 
-    async def replay_signal(self, file_path: str) -> CaptureState:
+    async def replay_signal(self, file_path: str, verify: bool = False) -> CaptureState:
         """Replay a previously captured .sub signal.
+
+        When *verify* is True (capture-verification replay), the state
+        machine expects a ``SignalSent`` response to transition to
+        CONFIRMING instead of IDLE. This is set automatically by
+        :meth:`handle_response` after a capture completes.
 
         Args:
             file_path: Full path to the .sub file on the device's SD card.
+            verify: If True, marks this replay as a verification replay
+                so SignalSent goes to CONFIRMING, not IDLE.
 
         Returns:
             The updated CaptureState (REPLAYING on success, ERROR on failure).
@@ -242,6 +346,7 @@ class SubGhzService:
             if self._state.state not in (
                 CaptureStateValue.IDLE,
                 CaptureStateValue.CONFIRMED,
+                CaptureStateValue.SIGNAL_CAPTURED,
             ):
                 raise HomeAssistantError(
                     f"Cannot replay signal while in state '{self._state.state}'. "
@@ -255,6 +360,7 @@ class SubGhzService:
             self._state.state = CaptureStateValue.REPLAYING
             self._state.signal_file = file_path
             self._state.error_message = ""
+            self._state.is_verification_replay = verify
 
             frames = self._protocol.build_send_signal_command(file_path)
             sent = await self._coordinator.transport.send_frame(frames)
@@ -264,11 +370,13 @@ class SubGhzService:
                 return self._state
 
         _LOGGER.debug(
-            "Replaying signal on device %s: %s",
+            "Replaying signal on device %s: %s (verify=%s)",
             self._coordinator.device_info.device_id,
             file_path,
+            verify,
         )
         self._coordinator.async_update_listeners()
+        self._emit("replaying", file_path)
         return self._state
 
     async def rename_signal(self, old_path: str, new_path: str) -> CaptureState:
@@ -342,80 +450,138 @@ class SubGhzService:
 
     async def confirm_capture(
         self,
-        target_device_id: str,
-        button_name: str,
-        signal_file: str,
+        confirmed: bool,
+        *,
+        cancel: bool = False,
+        next_button: str | None = None,
     ) -> CaptureState:
-        """Confirm a captured signal and associate it with a target device.
+        """Confirm, retry, or cancel the last capture.
 
-        Transitions the state machine to CONFIRMED and persists the
-        button-to-signal mapping in the TargetDeviceStore.
+        Called after the user has verified the replayed signal:
+
+        - ``confirmed=True``: persist the button-to-signal mapping in
+          TargetDeviceStore, transition to CONFIRMED, then return to
+          IDLE. If *next_button* is provided, keep state in CONFIRMED
+          so the caller can call :meth:`start_capture` again for the
+          next button.
+        - ``confirmed=False, cancel=False``: transition back to
+          CAPTURING to retry the same button.
+        - ``cancel=True``: same as :meth:`cancel_capture`.
 
         Args:
-            target_device_id: The HA device registry ID of the target remote.
-            button_name: The name of the button on the remote (e.g. "button_a").
-            signal_file: The .sub file path on the device's SD card.
+            confirmed: Whether the target device responded to the replay.
+            cancel: If True, abort capture and return to IDLE.
+            next_button: If confirmed and more buttons to learn, the
+                name of the next button to capture.
 
         Returns:
-            The updated CaptureState (CONFIRMED on success, ERROR on failure).
+            The updated CaptureState.
 
         Raises:
-            HomeAssistantError: If inputs are invalid or no signal is currently
-                captured.
+            HomeAssistantError: If the state machine is not in
+                CONFIRMING state.
         """
-        if not target_device_id or not target_device_id.strip():
-            raise HomeAssistantError(
-                "Target device ID must not be empty.",
-                translation_domain=DOMAIN,
-                translation_key="empty_target_device_id",
-            )
-        if not button_name or not button_name.strip():
-            raise HomeAssistantError(
-                "Button name must not be empty.",
-                translation_domain=DOMAIN,
-                translation_key="empty_button_name",
-            )
-        if not signal_file or not signal_file.strip():
-            raise HomeAssistantError(
-                "Signal file path must not be empty.",
-                translation_domain=DOMAIN,
-                translation_key="empty_file_path",
-            )
+        if cancel:
+            return await self.cancel_capture()
 
         async with self._lock:
             if self._state.state not in (
-                CaptureStateValue.SIGNAL_CAPTURED,
+                CaptureStateValue.CONFIRMING,
                 CaptureStateValue.CAPTURING,
+                CaptureStateValue.SIGNAL_CAPTURED,
             ):
                 raise HomeAssistantError(
                     f"Cannot confirm capture while in state '{self._state.state}'. "
-                    f"A capture must be in progress.",
+                    f"Expected CONFIRMING state.",
                     translation_domain=DOMAIN,
                     translation_key="confirm_not_capturing",
                     translation_placeholders={"state": self._state.state},
                 )
 
-            self._state.state = CaptureStateValue.CONFIRMING
-            self._state.signal_file = signal_file
+            if not confirmed:
+                # Retry: go back to CAPTURING for the same button
+                self._state.state = CaptureStateValue.CAPTURING
+                self._state.error_message = ""
+                self._state.signal_file = ""
+                self._state.is_verification_replay = False
 
-        # Persist the button mapping
-        store = self._coordinator.target_store
-        if store is not None:
-            store.add_button(target_device_id, button_name, signal_file)
-            await store.async_save()
+                # Re-arm the recording command
+                freq_hz = (
+                    int(self._state.frequency_mhz * 1_000_000)
+                    if (self._state.frequency_mhz)
+                    else 433920000
+                )
+                frames = self._protocol.build_request_record_command(
+                    frequency=freq_hz,
+                    module=0,
+                    preset=0,
+                )
+                sent = await self._coordinator.transport.send_frame(frames)
+                if not sent:
+                    self._state.state = CaptureStateValue.ERROR
+                    self._state.error_message = "Failed to re-send capture command for retry."
 
-        async with self._lock:
-            self._state.state = CaptureStateValue.CONFIRMED
+                _LOGGER.debug(
+                    "Capture retry on device %s: button=%s",
+                    self._coordinator.device_info.device_id,
+                    self._state.button_name,
+                )
+                self._coordinator.async_update_listeners()
+                self._emit("capturing", "retry")
+                return self._state
+
+            # ---- confirmed=True ----
+            target_device_id = self._state.target_device_id
+            button_name = self._state.button_name
+            signal_file = self._state.signal_file
+
+            if not target_device_id:
+                raise HomeAssistantError(
+                    "No target device set. Use start_capture with a target_device_id first.",
+                    translation_domain=DOMAIN,
+                    translation_key="empty_target_device_id",
+                )
+            if not button_name:
+                raise HomeAssistantError(
+                    "No button name set.",
+                    translation_domain=DOMAIN,
+                    translation_key="empty_button_name",
+                )
+            if not signal_file:
+                raise HomeAssistantError(
+                    "No signal file captured.",
+                    translation_domain=DOMAIN,
+                    translation_key="empty_file_path",
+                )
+
+            # Persist the button mapping
+            store = self._coordinator.target_store
+            if store is not None:
+                store.add_button(target_device_id, button_name, signal_file)
+                await store.async_save()
+
+            if next_button:
+                # Keep CONFIRMED so the caller can call start_capture for the next button
+                self._state.state = CaptureStateValue.CONFIRMED
+                self._state.button_name = next_button
+                self._state.signal_file = ""
+                self._state.is_verification_replay = False
+            else:
+                # Done with all buttons
+                self._state.state = CaptureStateValue.IDLE
+
             self._increment_generation()
 
         _LOGGER.debug(
-            "Capture confirmed on device %s: target=%s, button=%s, file=%s",
+            "Capture confirmed on device %s: target=%s, button=%s, file=%s, next_button=%s",
             self._coordinator.device_info.device_id,
             target_device_id,
             button_name,
             signal_file,
+            next_button,
         )
         self._coordinator.async_update_listeners()
+        self._emit("confirmed", self._state.signal_file)
         return self._state
 
     # ------------------------------------------------------------------
@@ -468,18 +634,34 @@ class SubGhzService:
                 filename,
             )
             self._coordinator.async_update_listeners()
+            self._emit("signal_captured", filename)
+            # Auto-advance: replay the captured signal for verification
+            if self._state.state == CaptureStateValue.SIGNAL_CAPTURED:
+                hass = self._coordinator.hass
+                if hass is not None:
+                    hass.async_create_task(self.replay_signal(filename, verify=True))
 
         elif response_type == "SignalSent":
             async with self._lock:
                 if self._state.generation != current_gen:
                     return  # Stale
-                self._state.state = CaptureStateValue.IDLE
+                # Verification replay → go to CONFIRMING
+                # Arbitrary replay → go to IDLE
+                if self._state.is_verification_replay:
+                    self._state.state = CaptureStateValue.CONFIRMING
+                else:
+                    self._state.state = CaptureStateValue.IDLE
                 self._state.raw_response = data
             _LOGGER.info(
-                "Signal sent on device %s",
+                "Signal sent on device %s (verification=%s)",
                 self._coordinator.device_info.device_id,
+                self._state.is_verification_replay,
             )
             self._coordinator.async_update_listeners()
+            if self._state.state == CaptureStateValue.CONFIRMING:
+                self._emit("confirming", self._state.signal_file)
+            else:
+                self._emit("idle", "signal_sent")
 
         elif response_type in ("SignalError", "SignalSendingError"):
             message = data.get("message", "Unknown error")
@@ -495,6 +677,7 @@ class SubGhzService:
                 message,
             )
             self._coordinator.async_update_listeners()
+            self._emit("error", message)
 
         elif response_type == "FileList":
             files = data.get("files", [])
@@ -508,6 +691,7 @@ class SubGhzService:
                 len(files),
             )
             self._coordinator.async_update_listeners()
+            self._emit("files_refreshed", len(files))
 
         elif response_type == "FileAction":
             action = data.get("action", "")

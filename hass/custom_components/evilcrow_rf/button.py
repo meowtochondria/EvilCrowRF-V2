@@ -4,7 +4,9 @@ Provides button entities for triggering device actions:
   - ``LearnButtonEntity`` — start capturing an RF signal.
   - ``CancelCaptureButtonEntity`` — cancel any in-progress capture/replay.
   - ``ReplayButtonEntity`` — replay the last captured signal.
-  - ``AddTargetDeviceButton`` — add a target device (placeholder).
+  - ``AddTargetDeviceButton`` — launches guided learning wizard.
+  - ``ConfirmYesButton`` / ``ConfirmNoButton`` / ``ConfirmCancelButton``
+    — confirm/retry/cancel a capture.
   - ``StartMonitoringButton`` — start/stop monitoring (Phase 5).
 """
 
@@ -22,6 +24,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import EvilCrowCoordinator
+from .subghz import CaptureStateValue
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -184,10 +187,11 @@ class ReplayButtonEntity(EvilCrowButtonBase):
 
 
 class AddTargetDeviceButton(EvilCrowButtonBase):
-    """Button to add a new target RF remote device (placeholder).
+    """Button to add a new target RF remote device.
 
-    In a full implementation, this would open a config flow or dialog
-    to define a new target remote. Currently it logs the press.
+    Pressing this button calls the ``evilcrow_rf.start_wizard`` service,
+    which shows a step-by-step persistent_notification guiding the user
+    through the process of learning an RF remote.
     """
 
     _attr_translation_key = "add_target_device"
@@ -202,16 +206,151 @@ class AddTargetDeviceButton(EvilCrowButtonBase):
 
     @override
     async def async_press(self) -> None:
-        """Handle the button press."""
+        """Handle the button press — launch the learning wizard."""
+        device_id = self.coordinator.device_info.device_id
+        hass = self.coordinator.hass
         _LOGGER.info(
-            "Add target device button pressed on device %s (placeholder)",
-            self.coordinator.device_info.device_id,
+            "Add target device button pressed on device %s — launching wizard",
+            device_id,
+        )
+        await hass.services.async_call(
+            DOMAIN,
+            "start_wizard",
+            {"device_id": device_id},
+            blocking=False,
         )
 
 
 # ---------------------------------------------------------------------------
-# StartMonitoringButton — toggle monitoring (Phase 5)
+# ConfirmYesButton / ConfirmNoButton / ConfirmCancelButton — capture feedback
 # ---------------------------------------------------------------------------
+
+
+class ConfirmYesButton(EvilCrowButtonBase):
+    """Confirm that the replayed signal worked.
+
+    Calls ``confirm_capture(confirmed=True)`` on the SubGhzService.
+    Only functional when the state machine is in CONFIRMING state.
+    """
+
+    _attr_translation_key = "confirm_yes"
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(
+        self,
+        coordinator: EvilCrowCoordinator,
+        entry_id: str,
+    ) -> None:
+        """Initialize the confirm yes button."""
+        super().__init__(coordinator, entry_id, "confirm_yes")
+
+    @override
+    async def async_press(self) -> None:
+        """Handle the button press."""
+        device_id = self.coordinator.device_info.device_id
+        hass = self.coordinator.hass
+        await hass.services.async_call(
+            DOMAIN,
+            "confirm_capture",
+            {
+                "device_id": device_id,
+                "confirmed": True,
+            },
+            blocking=False,
+        )
+
+    @property  # type: ignore
+    def available(self) -> bool:
+        """Return True only when waiting for confirmation."""
+        subghz = self.coordinator.subghz
+        if subghz is None:
+            return False
+        return subghz.state.state == CaptureStateValue.CONFIRMING
+
+
+class ConfirmNoButton(EvilCrowButtonBase):
+    """Reject the replayed signal and retry capture.
+
+    Calls ``confirm_capture(confirmed=False)`` on the SubGhzService,
+    which transitions back to CAPTURING for the same button.
+    """
+
+    _attr_translation_key = "confirm_no"
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(
+        self,
+        coordinator: EvilCrowCoordinator,
+        entry_id: str,
+    ) -> None:
+        """Initialize the confirm no button."""
+        super().__init__(coordinator, entry_id, "confirm_no")
+
+    @override
+    async def async_press(self) -> None:
+        """Handle the button press."""
+        device_id = self.coordinator.device_info.device_id
+        hass = self.coordinator.hass
+        await hass.services.async_call(
+            DOMAIN,
+            "confirm_capture",
+            {
+                "device_id": device_id,
+                "confirmed": False,
+            },
+            blocking=False,
+        )
+
+    @property  # type: ignore
+    def available(self) -> bool:
+        """Return True only when waiting for confirmation."""
+        subghz = self.coordinator.subghz
+        if subghz is None:
+            return False
+        return subghz.state.state == CaptureStateValue.CONFIRMING
+
+
+class ConfirmCancelButton(EvilCrowButtonBase):
+    """Cancel the in-progress capture confirmation.
+
+    Calls ``confirm_capture(cancel=True)``, which aborts the entire
+    capture and returns to IDLE.
+    """
+
+    _attr_translation_key = "confirm_cancel"
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(
+        self,
+        coordinator: EvilCrowCoordinator,
+        entry_id: str,
+    ) -> None:
+        """Initialize the confirm cancel button."""
+        super().__init__(coordinator, entry_id, "confirm_cancel")
+
+    @override
+    async def async_press(self) -> None:
+        """Handle the button press."""
+        device_id = self.coordinator.device_info.device_id
+        hass = self.coordinator.hass
+        await hass.services.async_call(
+            DOMAIN,
+            "confirm_capture",
+            {
+                "device_id": device_id,
+                "confirmed": False,
+                "cancel": True,
+            },
+            blocking=False,
+        )
+
+    @property  # type: ignore
+    def available(self) -> bool:
+        """Return True only when waiting for confirmation."""
+        subghz = self.coordinator.subghz
+        if subghz is None:
+            return False
+        return subghz.state.state == CaptureStateValue.CONFIRMING
 
 
 class StartMonitoringButton(EvilCrowButtonBase):
@@ -269,8 +408,17 @@ async def async_setup_entry(
     ]
 
     async_add_entities(entities)
+
+    # Add confirm buttons for the capture confirmation flow
+    confirm_entities: list[ButtonEntity] = [
+        ConfirmYesButton(coordinator, config_entry.entry_id),
+        ConfirmNoButton(coordinator, config_entry.entry_id),
+        ConfirmCancelButton(coordinator, config_entry.entry_id),
+    ]
+    async_add_entities(confirm_entities)
+
     _LOGGER.debug(
         "Added %d button entities for device %s",
-        len(entities),
+        len(entities) + len(confirm_entities),
         coordinator.device_info.device_id,
     )
