@@ -40,6 +40,7 @@
 #include "modules/nrf/NrfJammer.h"
 #include "driver/gpio.h"
 #include "nvs_flash.h"
+#include "esp_system.h"
 
 #if BATTERY_MODULE_ENABLED
 #include "modules/battery/BatteryModule.h"
@@ -596,6 +597,25 @@ void serialCommandTask(void* pvParameters) {
 
 void setup()
 {
+    // ── Diagnostic: log the reason for the last reset ──────────────────
+    // Helps identify brownout resets, watchdog panics, etc. on boot.
+    esp_reset_reason_t reason = esp_reset_reason();
+    const char* reasonStr = "";
+    switch (reason) {
+        case ESP_RST_UNKNOWN:    reasonStr = "Unknown"; break;
+        case ESP_RST_POWERON:    reasonStr = "Power-on"; break;
+        case ESP_RST_EXT:        reasonStr = "External pin"; break;
+        case ESP_RST_SW:         reasonStr = "Software restart"; break;
+        case ESP_RST_PANIC:      reasonStr = "Panic (exception)"; break;
+        case ESP_RST_INT_WDT:    reasonStr = "Interrupt watchdog"; break;
+        case ESP_RST_TASK_WDT:   reasonStr = "Task watchdog"; break;
+        case ESP_RST_WDT:        reasonStr = "Other watchdog"; break;
+        case ESP_RST_DEEPSLEEP:  reasonStr = "Deep sleep wake"; break;
+        case ESP_RST_BROWNOUT:   reasonStr = "Brownout"; break;
+        case ESP_RST_SDIO:       reasonStr = "SDIO"; break;
+    }
+    ESP_LOGI(TAG, "Reset reason: %s (%d)", reasonStr, reason);
+
     // Initialize NVS (Non-Volatile Storage) — required by Preferences, NimBLE, and WiFi.
     // After erase_flash the NVS partition is empty and needs to be (re-)initialized.
     {
