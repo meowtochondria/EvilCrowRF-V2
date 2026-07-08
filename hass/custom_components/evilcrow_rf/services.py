@@ -231,19 +231,20 @@ def async_register_services(hass: HomeAssistant) -> None:
             # FCC lookup
             fcc = coordinator.fcc_lookup
             if fcc is None:
-                from .fcc_lookup import FccLookup
+                from .fcc_lookup import FccLookupService
 
-                fcc = FccLookup(hass)
+                fcc = FccLookupService()
                 coordinator.fcc_lookup = fcc
 
             try:
-                result = await fcc.async_lookup(fcc_id)
-                if result and result > 0:
-                    frequency = int(result * 1_000_000)
+                result = await fcc.lookup(fcc_id)
+                if result.frequencies_hz:
+                    freq_hz = result.frequencies_hz[0]
+                    frequency = freq_hz
                     _LOGGER.info(
                         "FCC lookup for %s returned %.1f MHz",
                         fcc_id,
-                        result,
+                        freq_hz / 1_000_000,
                     )
                 else:
                     raise HomeAssistantError(
@@ -463,25 +464,42 @@ def async_register_services(hass: HomeAssistant) -> None:
     async def _handle_start_wizard(call: ServiceCall) -> None:
         """Launch the guided target-device learning wizard.
 
-        Shows a step-by-step persistent_notification that guides the
-        user through the capture workflow:
+        Starts an interactive wizard session on the SubGhzService and
+        shows a persistent_notification guiding the user through the
+        capture workflow:
 
         1. Name the target remote.
         2. Enter FCC ID or frequency.
         3. Start capture and press the remote button.
         4. Confirm the replayed signal.
 
-        The user progresses through the wizard by calling the
-        appropriate services (learn_signal, confirm_capture, etc.).
+        The user progresses through the wizard by pressing the
+        'Learn Signal' button and the Confirm Yes/No/Cancel buttons.
         """
         data = call.data
         device_id: str = data[ATTR_DEVICE_ID]
         coordinator = await _get_coordinator(device_id)
+        subghz = coordinator.subghz
+        if subghz is None:
+            raise HomeAssistantError(
+                "SubGhzService not initialized.",
+                translation_domain=DOMAIN,
+                translation_key="subghz_not_initialized",
+            )
+
+        target_name: str = data.get(ATTR_TARGET_DEVICE_NAME, "")
+        freq: int | None = data.get(ATTR_FREQUENCY)
+
+        # Start the wizard session on the SubGhzService
+        if subghz.wizard_is_active:
+            await subghz.wizard_cancel()
+        await subghz.wizard_start(
+            target_device_name=target_name or "",
+            frequency=freq or 433920000,
+        )
 
         device_name = coordinator.device_info.name
-        target_name: str = data.get(ATTR_TARGET_DEVICE_NAME, "")
         fcc_id: str = data.get(ATTR_FCC_ID, "")
-        freq: int | None = data.get(ATTR_FREQUENCY)
 
         # Build the notification message
         lines = [
@@ -529,15 +547,17 @@ def async_register_services(hass: HomeAssistant) -> None:
         )
 
         notify_id = f"{NOTIFY_WIZARD_STEP}_{device_id}"
-        hass.services.async_call(
-            "persistent_notification",
-            "create",
-            {
-                "notification_id": notify_id,
-                "title": "EvilCrowRF — Learn a New Remote",
-                "message": "\n".join(lines),
-            },
-            blocking=False,
+        hass.async_create_task(
+            hass.services.async_call(
+                "persistent_notification",
+                "create",
+                {
+                    "notification_id": notify_id,
+                    "title": "EvilCrowRF — Learn a New Remote",
+                    "message": "\n".join(lines),
+                },
+                blocking=False,
+            )
         )
 
     # ---- register services ----

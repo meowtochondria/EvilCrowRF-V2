@@ -187,6 +187,17 @@ class CaptureStateSensor(CoordinatorEntity, SensorEntity):
             "fcc_id": capture_state.fcc_id,
             "modulation": capture_state.modulation,
         }
+        # Add wizard state info if active
+        try:
+            if subghz.wizard_is_active:
+                wiz = subghz.wizard
+                attrs["wizard_active"] = True
+                attrs["wizard_step"] = wiz.step
+                attrs["wizard_target_name"] = wiz.target_device_name
+                attrs["wizard_button_index"] = wiz.button_index
+                attrs["wizard_buttons_learned"] = wiz.total_buttons_learned
+        except Exception:  # noqa: BLE001
+            pass
         if capture_state.raw_response:
             attrs["last_response"] = capture_state.raw_response
         return attrs

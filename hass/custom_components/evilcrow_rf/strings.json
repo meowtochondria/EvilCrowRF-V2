@@ -46,6 +46,30 @@
           "port": "The new HTTP/WebSocket port (default: 80)."
         }
       },
+      "device": {
+        "title": "EvilCrowRF V2 — Select Device",
+        "description": "Select which EvilCrowRF device to add the target remote to.",
+        "data": {
+          "ec_entry_id": "EvilCrowRF device"
+        },
+        "data_description": {
+          "ec_entry_id": "Choose the device that will capture the RF signals."
+        }
+      },
+      "capture_setup": {
+        "title": "Add Target RF Remote",
+        "description": "Configure a new RF remote to learn via the EvilCrowRF device.\n\nEnter a name for the remote (e.g. \"Garage Door\") and optionally an FCC ID or frequency.\n\nAfter saving, press the **'Learn Signal'** button on the device page to start capturing.",
+        "data": {
+          "target_device_name": "Remote name",
+          "fcc_id": "FCC ID",
+          "frequency_mhz": "Frequency (MHz)"
+        },
+        "data_description": {
+          "target_device_name": "A friendly name for the target remote (e.g. 'Garage Door', 'Gate', 'Projector Screen').",
+          "fcc_id": "Optional FCC ID for automatic frequency lookup.",
+          "frequency_mhz": "Optional frequency in MHz (e.g. 433.92). Overrides FCC lookup if provided."
+        }
+      },
       "options": {
         "title": "EvilCrowRF V2 — Monitoring Settings",
         "description": "Configure signal monitoring and unknown signal exposure for this device.",
@@ -71,14 +95,19 @@
       "cannot_connect": "Failed to connect to the device. Check the IP address and ensure the device is powered on.",
       "invalid_host": "The hostname or IP address is not valid.",
       "unknown": "An unexpected error occurred. Please try again.",
-      "no_devices_found": "No EvilCrowRF devices were discovered on the network. Try manual configuration."
+      "no_devices_found": "No EvilCrowRF devices were discovered on the network. Try manual configuration.",
+      "invalid_frequency": "The frequency value is not valid. Please enter a number, e.g. 433.92."
     },
     "abort": {
       "already_configured": "This device is already configured.",
       "no_devices_found": "No EvilCrowRF devices were found on the network.",
       "no_discovery_info": "No discovery information received.",
       "reconfigure_successful": "Device configuration updated successfully. The integration will reload.",
-      "already_in_progress": "Configuration is already in progress for this device."
+      "already_in_progress": "Configuration is already in progress for this device.",
+      "no_ec_devices_configured": "No EvilCrowRF devices are configured. Please set up an EvilCrowRF device first.",
+      "coordinator_not_found": "Could not find the selected EvilCrowRF device. It may have been removed.",
+      "subghz_not_initialized": "The capture service is not ready. Please try again in a moment.",
+      "wizard_started": "**{target_name}** is ready to learn!\n\n1. Go to **Settings → Devices & Services → EvilCrowRF V2 → {device_name}**\n2. Click the **'Learn Signal'** button on the device page\n3. Press the button on your **{target_name}** remote\n4. Follow the on-screen prompts to confirm the capture\n\n> The wizard will guide you through learning each button."
     },
     "create_entry": {
       "default": "Successfully connected to the EvilCrowRF device."
@@ -120,11 +149,11 @@
     "button": {
       "add_target_device": {
         "name": "Add Target Remote",
-        "description": "Launch the guided wizard to learn a new RF remote."
+        "description": "Start an interactive step-by-step wizard to learn a new RF remote and its buttons."
       },
       "learn_signal": {
         "name": "Learn Signal",
-        "description": "Start capturing an RF signal at 433.92 MHz with no target context."
+        "description": "Start capturing an RF signal. Works with the 'Add Target Remote' wizard to learn named buttons."
       },
       "cancel_capture": {
         "name": "Cancel Capture",

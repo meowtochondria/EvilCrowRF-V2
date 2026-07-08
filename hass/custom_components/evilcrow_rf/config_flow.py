@@ -18,6 +18,7 @@ from typing import Any
 import voluptuous as vol
 from homeassistant.config_entries import (
     ConfigEntry,
+    ConfigEntryState,
     ConfigFlow,
     ConfigFlowResult,
     OptionsFlow,
@@ -28,6 +29,8 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 
 from .const import (
+    ATTR_FCC_ID,
+    ATTR_TARGET_DEVICE_NAME,
     CONF_EXPOSE_UNKNOWN,
     CONF_EXPOSE_UNKNOWN_MIN_OCCURRENCES,
     CONF_EXPOSE_UNKNOWN_WINDOW_SECONDS,
@@ -37,6 +40,8 @@ from .const import (
     DEFAULT_NAME,
     DEFAULT_PORT,
     DOMAIN,
+    STEP_CAPTURE_SETUP,
+    STEP_DEVICE,
     STEP_DISCOVERY,
     STEP_MANUAL,
     STEP_OPTIONS,
@@ -90,6 +95,26 @@ def _build_manual_schema(host: str = "", port: int = DEFAULT_PORT) -> vol.Schema
         {
             vol.Required(CONF_HOST, default=host): cv.string,
             vol.Required(CONF_PORT, default=port): vol.All(cv.port, vol.Coerce(int)),
+        }
+    )
+
+
+def _build_capture_setup_schema() -> vol.Schema:
+    """Build the schema for the capture setup step (add target remote).
+
+    Presents fields for:
+      - Target device name (e.g. "Garage Door")
+      - FCC ID (optional, for frequency lookup)
+      - Frequency in MHz (optional, overrides FCC lookup)
+
+    Returns:
+        Voluptuous schema.
+    """
+    return vol.Schema(
+        {
+            vol.Required(ATTR_TARGET_DEVICE_NAME, default=""): cv.string,
+            vol.Optional(ATTR_FCC_ID, default=""): cv.string,
+            vol.Optional("frequency_mhz", default=""): cv.string,
         }
     )
 
@@ -337,6 +362,133 @@ class EvilCrowRfConfigFlowHandler(ConfigFlow, domain=DOMAIN):  # type: ignore[ca
     ) -> OptionsFlow:
         """Create the options flow for this config entry."""
         return EvilCrowRfOptionsFlowHandler(config_entry)
+
+    # ---- Device flow (Add device on device page) ----
+
+    async def async_step_device(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Handle the 'Add device' button on the EvilCrowRF device page.
+
+        This is called when the user clicks 'Add device' on the integration's
+        device page in Home Assistant. It starts an interactive flow to learn
+        a new target RF remote by capturing signals.
+
+        The flow presents a form where the user:
+          1. Names the target remote (e.g. "Garage Door", "Gate")
+          2. Optionally enters an FCC ID or frequency
+
+        On submission, the guided learning wizard is started on the
+        coordinator, and the user is directed to press the 'Learn Signal'
+        button on the device page to begin capturing RF signals.
+        """
+        # Find EC config entries
+        entries = self.hass.config_entries.async_entries(DOMAIN)
+        configured_entries = [e for e in entries if e.state == ConfigEntryState.LOADED]
+
+        if not configured_entries:
+            return self.async_abort(reason="no_ec_devices_configured")
+
+        if user_input is not None:
+            # Store the selected entry_id and proceed to capture setup
+            entry_id = user_input.get("ec_entry_id", configured_entries[0].entry_id)
+            await self.async_set_unique_id(f"evilcrow_rf_add_device_{entry_id}")
+            self._ec_entry_id = entry_id
+            return await self.async_step_capture_setup()
+
+        if len(configured_entries) == 1:
+            # Only one EC device — skip selection, go straight to setup
+            entry = configured_entries[0]
+            await self.async_set_unique_id(f"evilcrow_rf_add_device_{entry.entry_id}")
+            self._ec_entry_id = entry.entry_id
+            return await self.async_step_capture_setup()
+
+        # Multiple EC devices — let the user pick one
+        options = {
+            e.entry_id: e.title or f"EvilCrowRF {e.data.get(CONF_HOST, '')}"
+            for e in configured_entries
+        }
+        return self.async_show_form(
+            step_id=STEP_DEVICE,
+            data_schema=vol.Schema(
+                {
+                    vol.Required("ec_entry_id"): vol.In(options),
+                }
+            ),
+            description_placeholders={"num_devices": str(len(options))},
+        )
+
+    async def async_step_capture_setup(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Configure a new target RF remote device.
+
+        Prompts the user for:
+          - Target device name (e.g. "Garage Door", "Gate")
+          - Optional FCC ID for frequency lookup
+          - Optional frequency in MHz (overrides FCC lookup)
+
+        On submit, starts the learning wizard on the coordinator and
+        directs the user to press 'Learn Signal' on the device page.
+        """
+        if user_input is not None:
+            target_name: str = user_input.get(ATTR_TARGET_DEVICE_NAME, "").strip()
+            frequency_str: str = user_input.get("frequency_mhz", "").strip()
+
+            # Determine frequency
+            frequency: int = 433920000  # default
+            if frequency_str:
+                try:
+                    frequency = int(float(frequency_str) * 1_000_000)
+                except ValueError:
+                    return self.async_show_form(
+                        step_id=STEP_CAPTURE_SETUP,
+                        data_schema=_build_capture_setup_schema(),
+                        errors={"frequency_mhz": "invalid_frequency"},
+                    )
+
+            # Generate a friendly target device name if not provided
+            if not target_name:
+                import time
+
+                target_name = f"Remote {int(time.time())}"
+
+            # Start the wizard on the selected EC device coordinator
+            entry_id: str = self._ec_entry_id
+            coordinator = self.hass.data.get(DOMAIN, {}).get(entry_id)
+            if coordinator is None:
+                return self.async_abort(reason="coordinator_not_found")
+
+            subghz = coordinator.subghz
+            if subghz is None:
+                return self.async_abort(reason="subghz_not_initialized")
+
+            # Cancel any existing wizard session
+            if subghz.wizard_is_active:
+                await subghz.wizard_cancel()
+
+            # Start the wizard with user's settings
+            await subghz.wizard_start(
+                target_device_name=target_name,
+                frequency=frequency,
+            )
+
+            device_name = coordinator.device_info.name
+
+            # Show instructions and complete the device flow.
+            # We use async_abort with a success reason so the user sees
+            # a clean completion message with next-step instructions.
+            return self.async_abort(
+                reason="wizard_started",
+                description_placeholders={
+                    "target_name": target_name,
+                    "device_name": device_name,
+                    "entry_id": entry_id,
+                },
+            )
+
+        return self.async_show_form(
+            step_id=STEP_CAPTURE_SETUP,
+            data_schema=_build_capture_setup_schema(),
+        )
 
     # ---- Zeroconf integration ----
 

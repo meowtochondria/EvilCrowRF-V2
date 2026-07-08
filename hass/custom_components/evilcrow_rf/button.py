@@ -80,8 +80,9 @@ class EvilCrowButtonBase(CoordinatorEntity, ButtonEntity):
 class LearnButtonEntity(EvilCrowButtonBase):
     """Button that starts capturing an RF signal.
 
-    Pressing this button will send a CMD_START_RECORDING to the device
-    using a default frequency of 433.92 MHz.
+    When a wizard session is active (started via 'Add Target Remote'),
+    this button uses the wizard's frequency and target context.
+    When no wizard is active, this does a standalone capture at 433.92 MHz.
     """
 
     _attr_translation_key = "learn_signal"
@@ -101,8 +102,31 @@ class LearnButtonEntity(EvilCrowButtonBase):
         if subghz is None:
             _LOGGER.warning("SubGhzService not initialized; cannot learn signal.")
             return
+
+        # If a wizard is active, use its context
+        if subghz.wizard_is_active:
+            wiz = subghz.wizard
+            await subghz.wizard_advance_to_capture()
+            await subghz.start_capture(
+                frequency=wiz.frequency,
+                target_device_id=wiz.target_device_id,
+                target_device_name=wiz.target_device_name,
+                button_name=wiz.last_button_name or f"button_{wiz.button_index}",
+            )
+            _LOGGER.debug(
+                "Learn button pressed in wizard mode on device %s: target=%s, button=%s",
+                self.coordinator.device_info.device_id,
+                wiz.target_device_name,
+                wiz.last_button_name,
+            )
+            return
+
+        # No wizard: standalone capture with default frequency
         await subghz.start_capture(frequency=433920000)
-        _LOGGER.debug("Learn button pressed on device %s", self.coordinator.device_info.device_id)
+        _LOGGER.debug(
+            "Learn button pressed (standalone) on device %s",
+            self.coordinator.device_info.device_id,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -189,9 +213,12 @@ class ReplayButtonEntity(EvilCrowButtonBase):
 class AddTargetDeviceButton(EvilCrowButtonBase):
     """Button to add a new target RF remote device.
 
-    Pressing this button calls the ``evilcrow_rf.start_wizard`` service,
-    which shows a step-by-step persistent_notification guiding the user
-    through the process of learning an RF remote.
+    Pressing this button starts an interactive multi-step wizard that
+    guides the user through learning an RF remote:
+      1. Names the remote (auto-generated)
+      2. Prompts the user to press 'Learn Signal'
+      3. Captures each button
+      4. Saves the button-to-signal mapping
     """
 
     _attr_translation_key = "add_target_device"
@@ -206,18 +233,31 @@ class AddTargetDeviceButton(EvilCrowButtonBase):
 
     @override
     async def async_press(self) -> None:
-        """Handle the button press — launch the learning wizard."""
+        """Handle the button press — launch the interactive learning wizard."""
+        subghz = self.coordinator.subghz
+        if subghz is None:
+            _LOGGER.warning("SubGhzService not initialized; cannot start wizard.")
+            return
+
         device_id = self.coordinator.device_info.device_id
-        hass = self.coordinator.hass
         _LOGGER.info(
-            "Add target device button pressed on device %s — launching wizard",
+            "Add target device button pressed on device %s — starting interactive wizard",
             device_id,
         )
-        await hass.services.async_call(
-            DOMAIN,
-            "start_wizard",
-            {"device_id": device_id},
-            blocking=False,
+
+        # Cancel any existing wizard
+        if subghz.wizard_is_active:
+            await subghz.wizard_cancel()
+
+        # Start a new wizard with default settings
+        await subghz.wizard_start(
+            target_device_name="",
+            frequency=433920000,
+        )
+        _LOGGER.info(
+            "Interactive wizard started on device %s: target='%s'",
+            device_id,
+            subghz.wizard.target_device_name,
         )
 
 

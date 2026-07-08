@@ -45,6 +45,43 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# Wizard step names
+# ---------------------------------------------------------------------------
+
+
+class WizardStep:
+    """Named steps for the guided target-device learning wizard."""
+
+    IDLE = "idle"
+    STARTED = "started"          # Wizard just launched — prompts user to press Learn
+    CAPTURING = "capturing"      # Device is listening for a button press
+    CONFIRMING = "confirming"    # Signal replayed, awaiting user confirm/retry
+    NAMING_BUTTON = "naming"     # Awaiting user to name the captured button
+    NEXT_PROMPT = "next_prompt"  # Asking if user wants to learn another button
+    COMPLETE = "complete"        # Wizard finished successfully
+
+
+@dataclass
+class WizardData:
+    """State for the guided target-device learning wizard.
+
+    Created when the user presses "Add Target Remote" and persists until
+    the wizard is completed or cancelled.
+    """
+
+    active: bool = False
+    step: str = WizardStep.IDLE
+    target_device_id: str = ""       # auto-generated HA device registry ID
+    target_device_name: str = ""     # user-friendly name (e.g. "Garage Door")
+    frequency: int = 433920000       # capture frequency in Hz
+    modulation: str = "OOK_FIX"
+    button_index: int = 0            # which button we're learning (1-based)
+    total_buttons_learned: int = 0
+    last_button_name: str = ""       # name of the most recently captured button
+    error_message: str = ""
+
+
+# ---------------------------------------------------------------------------
 # Capture state
 # ---------------------------------------------------------------------------
 
@@ -291,6 +328,7 @@ class SubGhzService:
         """Cancel any in-progress capture or replay operation.
 
         Sends CMD_IDLE to stop radio activity and resets the state to IDLE.
+        Also cancels any active wizard session.
 
         Returns:
             The updated CaptureState.
@@ -305,6 +343,16 @@ class SubGhzService:
 
             frames = self._protocol.build_idle_command()
             await self._coordinator.transport.send_frame(frames)
+
+        # Cancel wizard if active
+        self.__init_wizard()
+        if self._wizard.active:
+            self._wizard.active = False
+            self._wizard.step = WizardStep.IDLE
+            _LOGGER.debug(
+                "Wizard cancelled via cancel_capture on device %s",
+                self._coordinator.device_info.device_id,
+            )
 
         _LOGGER.debug(
             "Capture cancelled on device %s (was %s)",
@@ -485,11 +533,7 @@ class SubGhzService:
             return await self.cancel_capture()
 
         async with self._lock:
-            if self._state.state not in (
-                CaptureStateValue.CONFIRMING,
-                CaptureStateValue.CAPTURING,
-                CaptureStateValue.SIGNAL_CAPTURED,
-            ):
+            if self._state.state != CaptureStateValue.CONFIRMING:
                 raise HomeAssistantError(
                     f"Cannot confirm capture while in state '{self._state.state}'. "
                     f"Expected CONFIRMING state.",
@@ -500,6 +544,7 @@ class SubGhzService:
 
             if not confirmed:
                 # Retry: go back to CAPTURING for the same button
+                self._increment_generation()
                 self._state.state = CaptureStateValue.CAPTURING
                 self._state.error_message = ""
                 self._state.signal_file = ""
@@ -554,11 +599,16 @@ class SubGhzService:
                     translation_key="empty_file_path",
                 )
 
-            # Persist the button mapping
-            store = self._coordinator.target_store
-            if store is not None:
-                store.add_button(target_device_id, button_name, signal_file)
-                await store.async_save()
+            # Check if wizard is active — wizard_on_confirmed handles persistence
+            self.__init_wizard()
+            wizard_active = self._wizard.active
+
+            if not wizard_active:
+                # Non-wizard mode: persist the button mapping directly
+                store = self._coordinator.target_store
+                if store is not None:
+                    store.add_button(target_device_id, button_name, signal_file)
+                    await store.async_save()
 
             if next_button:
                 # Keep CONFIRMED so the caller can call start_capture for the next button
@@ -582,6 +632,13 @@ class SubGhzService:
         )
         self._coordinator.async_update_listeners()
         self._emit("confirmed", self._state.signal_file)
+        # Notify wizard state machine — wizard_on_confirmed persists the mapping
+        if wizard_active:
+            hass = self._coordinator.hass
+            if hass is not None:
+                hass.async_create_task(self.wizard_on_confirmed())
+            else:
+                self._wizard.step = WizardStep.NEXT_PROMPT
         return self._state
 
     # ------------------------------------------------------------------
@@ -635,6 +692,11 @@ class SubGhzService:
             )
             self._coordinator.async_update_listeners()
             self._emit("signal_captured", filename)
+            # Notify wizard state machine
+            self.__init_wizard()
+            if self._wizard.active:
+                self._wizard.step = WizardStep.NAMING_BUTTON
+                self._coordinator.async_update_listeners()
             # Auto-advance: replay the captured signal for verification
             if self._state.state == CaptureStateValue.SIGNAL_CAPTURED:
                 hass = self._coordinator.hass
@@ -660,6 +722,12 @@ class SubGhzService:
             self._coordinator.async_update_listeners()
             if self._state.state == CaptureStateValue.CONFIRMING:
                 self._emit("confirming", self._state.signal_file)
+                # Notify wizard state machine
+                self.__init_wizard()
+                if self._wizard.active:
+                    self._wizard.step = WizardStep.CONFIRMING
+                    self._coordinator.async_update_listeners()
+                    self._emit("wizard_confirming", self._wizard.last_button_name)
             else:
                 self._emit("idle", "signal_sent")
 
@@ -724,3 +792,212 @@ class SubGhzService:
             CaptureStateValue.CONFIRMED,
             CaptureStateValue.ERROR,
         )
+
+    # ------------------------------------------------------------------
+    # Guided wizard (Add Target Remote -> interactive multi-step flow)
+    # ------------------------------------------------------------------
+
+    def __init_wizard(self) -> None:
+        """Initialize wizard dataclass if not already present."""
+        if not hasattr(self, "_wizard"):
+            self._wizard = WizardData()
+
+    @property
+    def wizard(self) -> WizardData:
+        """Return the current wizard session data."""
+        self.__init_wizard()
+        return self._wizard
+
+    async def wizard_start(
+        self,
+        target_device_name: str = "",
+        frequency: int = 433920000,
+        modulation: str = "OOK_FIX",
+    ) -> None:
+        """Start a guided target-device learning wizard session.
+
+        Creates a new wizard session, auto-generates a target_device_id,
+        and sets the step to STARTED. Call this when the user presses
+        "Add Target Remote".
+
+        Args:
+            target_device_name: Friendly name for the remote (e.g. "Garage Door").
+            frequency: Operating frequency in Hz (default 433920000).
+            modulation: Modulation type (default "OOK_FIX").
+        """
+        self.__init_wizard()
+        self._wizard.active = True
+        self._wizard.step = WizardStep.STARTED
+        self._wizard.target_device_id = (
+            f"ec_target_{int(time.time())}_{id(self)}"
+        )
+        self._wizard.target_device_name = (
+            target_device_name or f"Remote #{self._wizard.target_device_id[-6:]}"
+        )
+        self._wizard.frequency = frequency
+        self._wizard.modulation = modulation
+        self._wizard.button_index = 0
+        self._wizard.total_buttons_learned = 0
+        self._wizard.last_button_name = ""
+        self._wizard.error_message = ""
+
+        _LOGGER.info(
+            "Wizard started on device %s: target='%s', id='%s'",
+            self._coordinator.device_info.device_id,
+            self._wizard.target_device_name,
+            self._wizard.target_device_id,
+        )
+        self._coordinator.async_update_listeners()
+        self._emit("wizard_started", self._wizard.target_device_name)
+
+    async def wizard_cancel(self) -> None:
+        """Cancel an active wizard session and return to IDLE."""
+        self.__init_wizard()
+        if not self._wizard.active:
+            return
+        self._wizard.active = False
+        self._wizard.step = WizardStep.IDLE
+        _LOGGER.info(
+            "Wizard cancelled on device %s",
+            self._coordinator.device_info.device_id,
+        )
+        self._coordinator.async_update_listeners()
+        self._emit("wizard_cancelled")
+
+    async def wizard_advance_to_capture(self) -> None:
+        """Advance wizard to capture step and start listening.
+
+        Called when the user presses Learn Signal during an active wizard.
+        Increments the button index and sets the wizard step to CAPTURING.
+        """
+        if not self._wizard.active:
+            return
+        self._wizard.button_index += 1
+        self._wizard.step = WizardStep.CAPTURING
+        self._wizard.last_button_name = f"button_{self._wizard.button_index}"
+        _LOGGER.debug(
+            "Wizard advancing to capture: button #%d on device %s",
+            self._wizard.button_index,
+            self._coordinator.device_info.device_id,
+        )
+        self._coordinator.async_update_listeners()
+        self._emit("wizard_capturing", self._wizard.button_index)
+
+    async def wizard_on_signal_captured(self) -> None:
+        """Called when a signal is captured during wizard mode.
+
+        Moves wizard to naming step so the user can name the button
+        after the verification replay completes.
+        """
+        if not self._wizard.active:
+            return
+        self._wizard.step = WizardStep.NAMING_BUTTON
+        self._coordinator.async_update_listeners()
+
+    async def wizard_on_confirming(self) -> None:
+        """Called when capture enters CONFIRMING state during wizard mode."""
+        if not self._wizard.active:
+            return
+        self._wizard.step = WizardStep.CONFIRMING
+        self._coordinator.async_update_listeners()
+        self._emit("wizard_confirming", self._wizard.last_button_name)
+
+    async def wizard_set_button_name(self, name: str) -> None:
+        """Set the name for the most recently captured button.
+
+        Args:
+            name: The button name (e.g. "power", "open").
+        """
+        if not self._wizard.active:
+            return
+        name = name.strip() or f"button_{self._wizard.button_index}"
+        self._wizard.last_button_name = name
+        self._coordinator.async_update_listeners()
+
+    async def wizard_on_confirmed(self) -> None:
+        """Called after the user confirms a capture in wizard mode.
+
+        Persists the button mapping to TargetDeviceStore and prompts
+        for the next button.
+        """
+        if not self._wizard.active:
+            return
+        self._wizard.total_buttons_learned += 1
+
+        # Persist button mapping
+        store = self._coordinator.target_store
+        if store is not None:
+            # Register target device if not yet known
+            from .target_device_store import TargetDevice
+
+            existing = store.get(self._wizard.target_device_id)
+            if existing is None:
+                device = TargetDevice(
+                    target_device_id=self._wizard.target_device_id,
+                    name=self._wizard.target_device_name,
+                    ec_device_id=self._coordinator.device_info.device_id,
+                    frequency=self._wizard.frequency / 1_000_000,
+                    modulation=self._wizard.modulation,
+                    buttons={},
+                )
+                store.register(device)
+
+            # Add the button mapping
+            store.add_button(
+                self._wizard.target_device_id,
+                self._wizard.last_button_name,
+                self._state.signal_file,
+            )
+
+            try:
+                await store.async_save()
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("Failed to save target device store")
+                self._wizard.error_message = "Failed to save button mapping."
+
+        _LOGGER.info(
+            "Wizard: button '%s' saved for target '%s' on device %s (file: %s)",
+            self._wizard.last_button_name,
+            self._wizard.target_device_name,
+            self._coordinator.device_info.device_id,
+            self._state.signal_file,
+        )
+        self._wizard.step = WizardStep.NEXT_PROMPT
+        self._coordinator.async_update_listeners()
+        self._emit("wizard_button_saved", self._wizard.last_button_name)
+
+    async def wizard_next_button(self) -> None:
+        """Advance the wizard to capture the next button.
+
+        Resets the capture state and increments the button index,
+        ready for the next :meth:`start_capture` call.
+        """
+        if not self._wizard.active:
+            return
+        self._wizard.step = WizardStep.STARTED
+        self._coordinator.async_update_listeners()
+        self._emit("wizard_next_button", self._wizard.button_index + 1)
+
+    async def wizard_complete(self) -> None:
+        """Mark the wizard as complete.
+
+        Finalizes the session: sets step to COMPLETE, emits event.
+        """
+        if not self._wizard.active:
+            return
+        self._wizard.step = WizardStep.COMPLETE
+        self._wizard.active = False
+        _LOGGER.info(
+            "Wizard completed on device %s: target='%s', %d buttons learned",
+            self._coordinator.device_info.device_id,
+            self._wizard.target_device_name,
+            self._wizard.total_buttons_learned,
+        )
+        self._coordinator.async_update_listeners()
+        self._emit("wizard_complete", self._wizard.total_buttons_learned)
+
+    @property
+    def wizard_is_active(self) -> bool:
+        """Return True if a wizard session is currently active."""
+        self.__init_wizard()
+        return self._wizard.active

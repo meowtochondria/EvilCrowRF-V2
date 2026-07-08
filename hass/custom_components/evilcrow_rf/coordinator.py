@@ -62,6 +62,7 @@ class EvilCrowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._version_warning_dismissed: bool = False
         self._cancel_event = asyncio.Event()
         self._target_store: TargetDeviceStore | None = None
+        self.notifier: Any | None = None  # NotificationManager — set after init
 
         super().__init__(
             hass,
