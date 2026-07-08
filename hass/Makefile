@@ -91,7 +91,12 @@ deploy: ## SCP the component to a remote HA server and restart. Usage: make depl
 	@echo "==> Deploy complete. Restarting Home Assistant..."
 	@if [ -n "$(HASS_TOKEN)" ]; then \
 		echo "Calling restart API on $(SERVER)..."; \
-		curl -X POST -H "Authorization: Bearer $(HASS_TOKEN)" -H "Content-Type: application/json" $(SERVER)/api/services/homeassistant/restart; \
+		http_code=$$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Authorization: Bearer $(HASS_TOKEN)" -H "Content-Type: application/json" https://$(SERVER)/api/services/homeassistant/restart); \
+		if [ "$$http_code" = "200" ]; then \
+			printf "Response code: \033[32m%s\033[0m\n" "$$http_code"; \
+		else \
+			printf "Response code: \033[31m%s\033[0m\n" "$$http_code"; \
+		fi; \
 		echo ""; \
 	else \
 		echo "HASS_TOKEN is unset — cannot restart automatically."; \
