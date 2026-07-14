@@ -19,6 +19,7 @@ from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -40,7 +41,6 @@ class EvilCrowButtonBase(CoordinatorEntity, ButtonEntity):
     Subclasses must override ``async_press`` and set ``_attr_translation_key``.
     """
 
-    _coordinator: EvilCrowCoordinator
     _attr_has_entity_name: bool = True
     _attr_entity_category: EntityCategory = EntityCategory.CONFIG  # type: ignore
 
@@ -63,13 +63,23 @@ class EvilCrowButtonBase(CoordinatorEntity, ButtonEntity):
         self._attr_unique_id = f"evilcrow_{device_id}_{suffix}"
 
     @property
-    def coordinator(self) -> EvilCrowCoordinator:
-        return self._coordinator
+    def device_info(self) -> DeviceInfo:
+        """Return device registry info for this EvilCrowRF device."""
+        info = self.coordinator.device_info
+        return DeviceInfo(
+            identifiers={(DOMAIN, info.device_id)},
+            name=info.name or "EvilCrowRF V2",
+            manufacturer="EvilCrowRF",
+            model="EvilCrowRF V2",
+            sw_version=info.firmware_version or None,
+            configuration_url=f"http://{info.host}:{info.port}" if info.host else None,
+        )
 
     @property  # type: ignore
     def available(self) -> bool:
         """Return True if the coordinator has loaded."""
         return super().available
+
 
 
 # ---------------------------------------------------------------------------

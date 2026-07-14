@@ -145,6 +145,7 @@ class EvilCrowRfConfigFlowHandler(ConfigFlow, domain=DOMAIN):  # type: ignore[ca
         self._discovered_port: int = DEFAULT_PORT
         self._discovery_name: str = DEFAULT_NAME
         self._device_info: dict[str, Any] = {}
+        self._ec_entry_id: str = ""  # target EC config entry for device flow
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Handle the initial step — setup method selection.

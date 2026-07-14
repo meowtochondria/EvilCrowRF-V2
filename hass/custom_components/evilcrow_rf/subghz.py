@@ -226,7 +226,7 @@ class SubGhzService:
         self,
         frequency: int,
         module: int = 0,
-        preset: int = 0,
+        preset: str = "",
         *,
         target_device_id: str = "",
         target_device_name: str = "",
@@ -559,7 +559,6 @@ class SubGhzService:
                 frames = self._protocol.build_request_record_command(
                     frequency=freq_hz,
                     module=0,
-                    preset=0,
                 )
                 sent = await self._coordinator.transport.send_frame(frames)
                 if not sent:
@@ -692,6 +691,9 @@ class SubGhzService:
             )
             self._coordinator.async_update_listeners()
             self._emit("signal_captured", filename)
+            # Stop recording on the device — firmware auto-restarts after each save,
+            # so we must explicitly send IDLE to prevent spam.
+            await self._send_idle()
             # Notify wizard state machine
             self.__init_wizard()
             if self._wizard.active:
@@ -783,6 +785,20 @@ class SubGhzService:
         """Increment the generation counter, wrapping to avoid overflow."""
         self._state.generation = (self._state.generation + 1) & 0xFFFFFFFF
         self._state.timestamp = time.monotonic()
+
+    async def _send_idle(self) -> None:
+        """Send CMD_IDLE to stop any active recording/replay on the device.
+
+        Does not change the HA state machine — only tells the device to
+        stop its radio activity.  The firmware auto-restarts recording
+        after each saved .sub file, so we must explicitly idle the module
+        after receiving a SignalRecorded to prevent signal spam.
+        """
+        frames = self._protocol.build_idle_command()
+        await self._coordinator.transport.send_frame(frames)
+        _LOGGER.debug(
+            "Sent IDLE to device %s", self._coordinator.device_info.device_id
+        )
 
     @property
     def is_busy(self) -> bool:
@@ -941,6 +957,18 @@ class SubGhzService:
                     buttons={},
                 )
                 store.register(device)
+
+                # Register in HA device registry so it appears on the
+                # integration page under the EC device
+                from .__init__ import _register_target_device_in_registry
+
+                _register_target_device_in_registry(
+                    hass=self._coordinator.hass,
+                    config_entry_id=self._coordinator.config_entry.entry_id,
+                    target_device_id=self._wizard.target_device_id,
+                    target_device_name=self._wizard.target_device_name,
+                    ec_device_id=self._coordinator.device_info.device_id,
+                )
 
             # Add the button mapping
             store.add_button(

@@ -13,11 +13,11 @@ from typing import Any
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
-    SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -41,10 +41,8 @@ class EvilCrowDeviceSensor(CoordinatorEntity, SensorEntity):
     attributes for firmware version, device name, capabilities, etc.
     """
 
-    _coordinator: EvilCrowCoordinator
     _attr_has_entity_name = True
     _attr_device_class: SensorDeviceClass | None = SensorDeviceClass.ENUM  # type: ignore
-    _attr_state_class: SensorStateClass | str | None = SensorStateClass.MEASUREMENT
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(
@@ -66,9 +64,17 @@ class EvilCrowDeviceSensor(CoordinatorEntity, SensorEntity):
         ]
 
     @property
-    def coordinator(self) -> EvilCrowCoordinator:
-        """Return the coordinator with narrowed type."""
-        return self._coordinator
+    def device_info(self) -> DeviceInfo:
+        """Return device registry info for this EvilCrowRF device."""
+        info = self.coordinator.device_info
+        return DeviceInfo(
+            identifiers={(DOMAIN, info.device_id)},
+            name=info.name or "EvilCrowRF V2",
+            manufacturer="EvilCrowRF",
+            model="EvilCrowRF V2",
+            sw_version=info.firmware_version or None,
+            configuration_url=f"http://{info.host}:{info.port}" if info.host else None,
+        )
 
     @property  # type: ignore
     def native_value(self) -> str:
@@ -122,10 +128,8 @@ class CaptureStateSensor(CoordinatorEntity, SensorEntity):
       - ``error_message``: human-readable error when state is ``error``.
     """
 
-    _coordinator: EvilCrowCoordinator
     _attr_has_entity_name = True
     _attr_device_class: SensorDeviceClass | None = SensorDeviceClass.ENUM  # type: ignore[override]
-    _attr_state_class: SensorStateClass | str | None = SensorStateClass.MEASUREMENT
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(
@@ -156,9 +160,17 @@ class CaptureStateSensor(CoordinatorEntity, SensorEntity):
         ]
 
     @property
-    def coordinator(self) -> EvilCrowCoordinator:
-        """Return the coordinator with narrowed type."""
-        return self._coordinator
+    def device_info(self) -> DeviceInfo:
+        """Return device registry info for this EvilCrowRF device."""
+        info = self.coordinator.device_info
+        return DeviceInfo(
+            identifiers={(DOMAIN, info.device_id)},
+            name=info.name or "EvilCrowRF V2",
+            manufacturer="EvilCrowRF",
+            model="EvilCrowRF V2",
+            sw_version=info.firmware_version or None,
+            configuration_url=f"http://{info.host}:{info.port}" if info.host else None,
+        )
 
     @property  # type: ignore
     def native_value(self) -> str:

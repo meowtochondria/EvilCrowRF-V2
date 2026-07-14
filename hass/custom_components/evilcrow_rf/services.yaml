@@ -1,0 +1,241 @@
+# EvilCrowRF V2 — Home Assistant Services
+#
+# https://developers.home-assistant.io/docs/dev_101_services/
+
+learn_signal:
+  name: Learn RF Signal
+  description: >-
+    Start capturing a button press on a target RF remote.
+    The device listens for a signal, captures it, and replays it for verification.
+  fields:
+    device_id:
+      name: Device ID
+      description: EvilCrowRF device ID (config entry ID).
+      required: true
+      example: "abc123..."
+      selector:
+        device:
+          integration: evilcrow_rf
+    target_device_id:
+      name: Target Device ID
+      description: Stable ID for the target RF remote (e.g. "garage_door").
+      required: true
+      example: "garage_door"
+    button_name:
+      name: Button Name
+      description: Name of the button being learned (e.g. "power", "open").
+      required: true
+      example: "power"
+    fcc_id:
+      name: FCC ID
+      description: Optional FCC ID for frequency lookup.
+      required: false
+      example: "2AOKM-UT1"
+    frequency:
+      name: Frequency
+      description: Frequency in Hz (overrides FCC ID lookup).
+      required: false
+      example: "433920000"
+    modulation:
+      name: Modulation
+      description: Modulation type.
+      required: false
+      default: "OOK_FIX"
+      example: "OOK_FIX"
+    target_device_name:
+      name: Target Device Name
+      description: Friendly name for the target remote (e.g. "Garage Door").
+      required: false
+      example: "Garage Door"
+
+confirm_capture:
+  name: Confirm Capture
+  description: >-
+    Accept, retry, or cancel the last captured RF signal after verification replay.
+  fields:
+    device_id:
+      name: Device ID
+      description: EvilCrowRF device ID.
+      required: true
+      example: "abc123..."
+      selector:
+        device:
+          integration: evilcrow_rf
+    confirmed:
+      name: Confirmed
+      description: Whether the replayed signal worked.
+      required: true
+      default: true
+      example: true
+      selector:
+        boolean:
+    cancel:
+      name: Cancel
+      description: If true, abort the entire capture.
+      required: false
+      default: false
+      selector:
+        boolean:
+    next_button:
+      name: Next Button
+      description: Name of the next button to learn in wizard mode.
+      required: false
+      example: "volume_up"
+
+cancel_capture:
+  name: Cancel Capture
+  description: Cancel any in-progress capture or replay operation.
+  fields:
+    device_id:
+      name: Device ID
+      description: EvilCrowRF device ID.
+      required: true
+      example: "abc123..."
+      selector:
+        device:
+          integration: evilcrow_rf
+
+replay_signal:
+  name: Replay Signal
+  description: Replay a previously captured .sub signal file.
+  fields:
+    device_id:
+      name: Device ID
+      description: EvilCrowRF device ID.
+      required: true
+      example: "abc123..."
+      selector:
+        device:
+          integration: evilcrow_rf
+    signal_file:
+      name: Signal File
+      description: Path to the .sub file on the device's SD card.
+      required: true
+      example: "/signals/power.sub"
+
+rename_signal:
+  name: Rename Signal
+  description: Rename a .sub file on the device's SD card.
+  fields:
+    device_id:
+      name: Device ID
+      description: EvilCrowRF device ID.
+      required: true
+      example: "abc123..."
+      selector:
+        device:
+          integration: evilcrow_rf
+    signal_file:
+      name: Signal File
+      description: Current path of the .sub file.
+      required: true
+      example: "/signals/old_name.sub"
+    new_name:
+      name: New Name
+      description: New filename (without path).
+      required: true
+      example: "power.sub"
+
+delete_signal:
+  name: Delete Signal
+  description: Remove a captured .sub file entry from the target device store.
+  fields:
+    device_id:
+      name: Device ID
+      description: EvilCrowRF device ID.
+      required: true
+      example: "abc123..."
+      selector:
+        device:
+          integration: evilcrow_rf
+    signal_file:
+      name: Signal File
+      description: Path to the .sub file to delete.
+      required: true
+      example: "/signals/old_signal.sub"
+
+refresh_files:
+  name: Refresh Files
+  description: Refresh the list of .sub files from the device's SD card.
+  fields:
+    device_id:
+      name: Device ID
+      description: EvilCrowRF device ID.
+      required: true
+      example: "abc123..."
+      selector:
+        device:
+          integration: evilcrow_rf
+
+scan_frequency:
+  name: Scan Frequency
+  description: Request a frequency scan to find the strongest RF signal.
+  fields:
+    device_id:
+      name: Device ID
+      description: EvilCrowRF device ID.
+      required: true
+      example: "abc123..."
+      selector:
+        device:
+          integration: evilcrow_rf
+
+start_monitoring:
+  name: Start Monitoring
+  description: Start continuous RF signal monitoring (Phase 5 feature).
+  fields:
+    device_id:
+      name: Device ID
+      description: EvilCrowRF device ID.
+      required: true
+      example: "abc123..."
+      selector:
+        device:
+          integration: evilcrow_rf
+    frequency:
+      name: Frequency
+      description: Monitoring frequency in Hz.
+      required: false
+      default: 433920000
+      example: "433920000"
+
+stop_monitoring:
+  name: Stop Monitoring
+  description: Stop continuous RF signal monitoring.
+  fields:
+    device_id:
+      name: Device ID
+      description: EvilCrowRF device ID.
+      required: true
+      example: "abc123..."
+      selector:
+        device:
+          integration: evilcrow_rf
+
+start_wizard:
+  name: Start Wizard
+  description: Launch the guided target-device learning wizard.
+  fields:
+    device_id:
+      name: Device ID
+      description: EvilCrowRF device ID.
+      required: true
+      example: "abc123..."
+      selector:
+        device:
+          integration: evilcrow_rf
+    target_device_name:
+      name: Target Device Name
+      description: Friendly name for the new remote (e.g. "Garage Door").
+      required: false
+      example: "Garage Door"
+    fcc_id:
+      name: FCC ID
+      description: FCC ID for frequency lookup.
+      required: false
+      example: "2AOKM-UT1"
+    frequency:
+      name: Frequency
+      description: Frequency in Hz.
+      required: false
+      example: "433920000"

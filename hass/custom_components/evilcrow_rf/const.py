@@ -22,21 +22,22 @@ FRAME_TYPE_NAK = 0x03
 MAX_PAYLOAD_SIZE = 500
 
 # Message types (command → device).
-CMD_GET_STATE = 0x01
-CMD_SCAN = 0x02
-CMD_IDLE = 0x03
-CMD_START_RECORDING = 0x09
-CMD_STOP_RECORDING = 0x0A
-CMD_SEND_SIGNAL = 0x0B
-CMD_START_MONITOR = 0x1B  # Phase 5: continuous listening on a dedicated CC1101 module
-CMD_STOP_MONITOR = 0x1C  # Phase 5: stop the monitoring module
-CMD_FILE_LIST = 0xA0  # request SD-card file listing
-CMD_FILE_LOAD = 0xA5  # Phase 5: read a .sub file from the SD card (chunked response)
-CMD_FILE_RENAME = 0xA4  # rename a file on the SD card
-CMD_SETTINGS_UPDATE = 0xC1
-CMD_HA_CONFIG_SYNC = 0xD8  # Phase 5: ask device for its HA-assigned UUID (response 0xD9)
+# Values match firmware command handler registrations:
+#   RecorderCommands.h, TransmitterCommands.h, FileCommands.h, StateCommands.h
+CMD_GET_STATE = 0x01          # StateCommands::handleGetState
+CMD_SCAN = 0x02               # StateCommands::handleRequestScan
+CMD_IDLE = 0x03               # StateCommands::handleRequestIdle
+CMD_FILE_LIST = 0x05          # FileCommands::handleGetFilesList
+CMD_SEND_SIGNAL = 0x07        # TransmitterCommands::handleTransmitFromFile
+CMD_START_RECORDING = 0x08    # RecorderCommands::handleRequestRecord
+CMD_FILE_LOAD = 0x09          # FileCommands::handleLoadFileData
+CMD_FILE_RENAME = 0x0C        # FileCommands::handleRenameFile
+CMD_SETTINGS_UPDATE = 0xC1    # StateCommands::handleSettingsUpdate
+CMD_START_MONITOR = 0x1B      # Phase 5: continuous listening on a dedicated CC1101 module
+CMD_STOP_MONITOR = 0x1C       # Phase 5: stop the monitoring module
+CMD_HA_CONFIG_SYNC = 0xD8     # Phase 5: ask device for its HA-assigned UUID (response 0xD9)
 CMD_HA_SETTINGS_WRITE_SD = 0xDA  # Phase 5: write a key=value pair to /config/ on the SD card
-CMD_SMART_CONFIG = 0xDC  # Phase 5: put device into SmartConfig WiFi provisioning mode
+CMD_SMART_CONFIG = 0xDC       # Phase 5: put device into SmartConfig WiFi provisioning mode
 
 # SubGhz config commands (0x70-0x71) — Phase 8: key-value config
 CMD_SUBGHZ_SET_CONFIG = 0x70
@@ -52,23 +53,21 @@ KEY_DECODER_FILTER      = 0x06
 KEY_DECODER_FILTER_RAW  = 0x07
 
 # Message types (response → app, 0x80+).
-RESP_SIGNAL_DETECTED = 0x90
-RESP_SIGNAL_RECORDED = 0x91
-RESP_SIGNAL_SENT = 0x92
-RESP_SIGNAL_ERROR = 0x93
-RESP_SIGNAL_SENDING_ERROR = 0x94
-RESP_SIGNAL_MONITOR = 0x95  # Phase 5: signal detected during continuous monitoring
-RESP_FILE_LIST = 0xA1
-RESP_FILE_CONTENT = 0xA6  # Phase 5: chunked file content response for CMD_FILE_LOAD (0xA5)
-RESP_FILE_ACTION = 0xA3
-RESP_VERSION_INFO = 0xC0
-RESP_HA_CONFIG_SYNC = (
-    0xD9  # Phase 5: payload: [length:uint16][uuid-string-bytes] or 0x0000 if unset
-)
-RESP_HA_SETTINGS_WRITE_SD_ACK = 0xDB  # Phase 5: ack for CMD_HA_SETTINGS_WRITE_SD (0xDA)
-RESP_SMART_CONFIG_STATUS = 0xDD  # Phase 5: status notification for CMD_SMART_CONFIG (0xDC)
-RESP_DEVICE_NAME = 0xC8
-RESP_SETTINGS_SYNC = 0xC9
+# Values match firmware BinaryMessages.h enum BinaryMessageType.
+RESP_SIGNAL_DETECTED = 0x90     # MSG_SIGNAL_DETECTED
+RESP_SIGNAL_RECORDED = 0x91     # MSG_SIGNAL_RECORDED
+RESP_SIGNAL_SENT = 0x92         # MSG_SIGNAL_SENT
+RESP_SIGNAL_ERROR = 0x93        # MSG_SIGNAL_SEND_ERROR
+RESP_SIGNAL_MONITOR = 0x95      # Phase 5: signal detected during continuous monitoring
+RESP_FILE_CONTENT = 0xA0        # MSG_FILE_CONTENT
+RESP_FILE_LIST = 0xA1           # MSG_FILE_LIST
+RESP_FILE_ACTION = 0xA3         # MSG_FILE_ACTION_RESULT
+RESP_VERSION_INFO = 0xC2        # MSG_VERSION_INFO
+RESP_DEVICE_NAME = 0xC7         # MSG_DEVICE_NAME
+RESP_SETTINGS_SYNC = 0xC0       # MSG_SETTINGS_SYNC
+RESP_HA_CONFIG_SYNC = 0xD9      # Phase 5 (no firmware handler yet)
+RESP_HA_SETTINGS_WRITE_SD_ACK = 0xDB  # Phase 5 (no firmware handler yet)
+RESP_SMART_CONFIG_STATUS = 0xDD # Phase 5 (no firmware handler yet)
 
 # Config flow steps
 STEP_USER = "user"

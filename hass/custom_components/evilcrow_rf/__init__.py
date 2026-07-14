@@ -14,6 +14,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers import device_registry as dr
 
 from .const import (
     CONF_MONITOR_ENABLED,
@@ -39,6 +40,41 @@ PLATFORMS: list[str] = [
 ]
 
 _services_registered: bool = False  # ensures one-shot global registration
+
+
+# ---------------------------------------------------------------------------
+# Device registry helpers
+# ---------------------------------------------------------------------------
+
+
+def _register_target_device_in_registry(
+    hass: HomeAssistant,
+    config_entry_id: str,
+    target_device_id: str,
+    target_device_name: str,
+    ec_device_id: str,
+) -> None:
+    """Register a learned target RF remote in the HA device registry.
+
+    This ensures that target remotes (e.g. "Garage Door") appear as devices
+    under the EvilCrowRF integration on the HA devices page.
+
+    Args:
+        hass: The HomeAssistant instance.
+        config_entry_id: The config entry ID of the EC device that learned this.
+        target_device_id: The stable ID of the target remote.
+        target_device_name: The friendly name of the target remote.
+        ec_device_id: The device_id of the EC hardware device (via_device).
+    """
+    device_registry = dr.async_get(hass)
+    device_registry.async_get_or_create(
+        config_entry_id=config_entry_id,
+        identifiers={(DOMAIN, target_device_id)},
+        name=target_device_name,
+        manufacturer="EvilCrowRF",
+        model="RF Remote",
+        via_device=(DOMAIN, ec_device_id),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -161,6 +197,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         targets = target_store.get_all_for_ec_device(entry.entry_id)
         if not targets:
             notifier.show_onboarding(entry.title or device_info.name)
+
+        # Register all existing target devices in the HA device registry
+        for target in targets:
+            _register_target_device_in_registry(
+                hass=hass,
+                config_entry_id=entry.entry_id,
+                target_device_id=target.target_device_id,
+                target_device_name=target.name,
+                ec_device_id=device_id,
+            )
 
     # ---- 8. Store coordinator in hass.data ----
     hass.data.setdefault(DOMAIN, {})

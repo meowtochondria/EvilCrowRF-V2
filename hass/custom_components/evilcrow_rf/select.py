@@ -12,6 +12,7 @@ from typing import Any
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -29,7 +30,6 @@ class CapturedSignalSelectEntity(CoordinatorEntity, SelectEntity):
     :meth:`SubGhzService.refresh_files`.
     """
 
-    _coordinator: EvilCrowCoordinator
     _attr_has_entity_name: bool = True
     _attr_translation_key = "captured_signal"
 
@@ -50,8 +50,17 @@ class CapturedSignalSelectEntity(CoordinatorEntity, SelectEntity):
         self._attr_unique_id = f"evilcrow_{device_id}_captured_signal"
 
     @property
-    def coordinator(self) -> EvilCrowCoordinator:
-        return self._coordinator
+    def device_info(self) -> DeviceInfo:
+        """Return device registry info for this EvilCrowRF device."""
+        info = self.coordinator.device_info
+        return DeviceInfo(
+            identifiers={(DOMAIN, info.device_id)},
+            name=info.name or "EvilCrowRF V2",
+            manufacturer="EvilCrowRF",
+            model="EvilCrowRF V2",
+            sw_version=info.firmware_version or None,
+            configuration_url=f"http://{info.host}:{info.port}" if info.host else None,
+        )
 
     @property  # type: ignore
     def available(self) -> bool:

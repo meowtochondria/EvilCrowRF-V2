@@ -25,7 +25,6 @@ from .const import (
     CMD_START_MONITOR,
     CMD_START_RECORDING,
     CMD_STOP_MONITOR,
-    CMD_STOP_RECORDING,
     FRAME_TYPE_DATA,
     MAX_PAYLOAD_SIZE,
     RESP_DEVICE_NAME,
@@ -39,7 +38,6 @@ from .const import (
     RESP_SIGNAL_ERROR,
     RESP_SIGNAL_MONITOR,
     RESP_SIGNAL_RECORDED,
-    RESP_SIGNAL_SENDING_ERROR,
     RESP_SIGNAL_SENT,
     RESP_SMART_CONFIG_STATUS,
     RESP_VERSION_INFO,
@@ -190,63 +188,93 @@ class EvilCrowBinaryProtocol:
         self,
         frequency: int,
         module: int,
-        preset: int = 0,
+        preset: str = "",
+        modulation: int = 0,
+        deviation: float = 0.0,
+        rx_bandwidth: float = 0.0,
+        data_rate: float = 0.0,
     ) -> list[bytes]:
-        """Build Start Recording command frames (chunked if needed).
+        """Build Start Recording command frames.
 
-        Payload format: [cmd:1B][frequency:uint32 LE][module:uint8][preset:uint8]
+        Matches firmware RecorderCommands::handleRequestRecord (0x08).
+        Payload format (68 bytes):
+          [frequency:float32 LE][preset:50B null-term UTF-8][module:u8]
+          [modulation:u8][deviation:float32 LE][rxBandwidth:float32 LE]
+          [dataRate:float32 LE]
         """
-        payload = struct.pack("<IBB", frequency, module, preset)
+        # Float frequency (4 bytes, little-endian)
+        freq_bytes = struct.pack("<f", float(frequency))
+        # Preset string (50 bytes, null-terminated, UTF-8)
+        preset_encoded = preset.encode("utf-8")[:49]
+        preset_bytes = preset_encoded.ljust(50, b"\x00")[:50]
+        # Module, modulation
+        mod_bytes = struct.pack("BB", module, modulation)
+        # Deviation, rxBandwidth, dataRate (float32 LE each)
+        dev_bytes = struct.pack("<f", deviation)
+        bw_bytes = struct.pack("<f", rx_bandwidth)
+        rate_bytes = struct.pack("<f", data_rate)
+
+        payload = freq_bytes + preset_bytes + mod_bytes + dev_bytes + bw_bytes + rate_bytes
+        assert len(payload) == 68, f"Expected 68 bytes, got {len(payload)}"
         return self._build_chunked_frames(CMD_START_RECORDING, payload)
 
-    def build_stop_record_command(self) -> list[bytes]:
-        """Build Stop Recording command."""
-        return self._build_single_frame(CMD_STOP_RECORDING)
-
     def build_idle_command(self) -> list[bytes]:
-        """Build Idle command (stop any in-progress radio activity)."""
-        return self._build_single_frame(CMD_IDLE)
+        """Build Idle command (stop any in-progress radio activity).
 
-    def build_send_signal_command(self, file_path: str) -> list[bytes]:
-        """Build Send Signal command frames (replay .sub file).
+        Firmware StateCommands::handleRequestIdle (0x03) expects
+        [module:u8] as payload.
+        """
+        return self._build_single_frame(CMD_IDLE, struct.pack("B", 0))
 
-        Payload format: [cmd:1B][path_len:uint8][path:N]
+    def build_send_signal_command(self, file_path: str, path_type: int = 1) -> list[bytes]:
+        """Build Send Signal command (replay .sub file).
+
+        Matches firmware TransmitterCommands::handleTransmitFromFile (0x07).
+        Payload format: [pathLength:u8][pathType:u8][path:N][module?:u8]
+
+        pathType: 0=RECORDS, 1=SIGNALS, 2=PRESETS, 3=TEMP, 4=LittleFS, 5=SD root
         """
         path_bytes = file_path.encode("utf-8")
-        payload = struct.pack("B", len(path_bytes)) + path_bytes
+        payload = struct.pack("BB", len(path_bytes), path_type) + path_bytes
         return self._build_chunked_frames(CMD_SEND_SIGNAL, payload)
 
-    def build_file_list_command(self, path: str = "/") -> list[bytes]:
-        """Build File List command; response is chunked on WiFi too if > 500 B.
+    def build_file_list_command(self, path: str = "/", path_type: int = 1) -> list[bytes]:
+        """Build File List command.
 
-        Payload format: [cmd:1B][path_len:uint8][path:N]
+        Matches firmware FileCommands::handleGetFilesList (0x05).
+        Payload format: [pathLength:u8][pathType:u8][path:N]
+
+        pathType: 0=RECORDS, 1=SIGNALS, 2=PRESETS, 3=TEMP, 4=LittleFS, 5=SD root
         """
         path_bytes = path.encode("utf-8")
-        payload = struct.pack("B", len(path_bytes)) + path_bytes
+        payload = struct.pack("BB", len(path_bytes), path_type) + path_bytes
         return self._build_chunked_frames(CMD_FILE_LIST, payload)
 
-    def build_file_rename_command(self, old_path: str, new_path: str) -> list[bytes]:
+    def build_file_rename_command(self, old_path: str, new_path: str, path_type: int = 1) -> list[bytes]:
         """Build File Rename command.
 
-        Payload format: [cmd:1B][old_len:uint8][old:N][new_len:uint8][new:N]
+        Matches firmware FileCommands::handleRenameFile (0x0C).
+        Payload format: [pathType:u8][fromLen:u8][from:N][toLen:u8][to:N]
         """
         old_bytes = old_path.encode("utf-8")
         new_bytes = new_path.encode("utf-8")
         payload = (
-            struct.pack("B", len(old_bytes))
+            struct.pack("B", path_type)
+            + struct.pack("B", len(old_bytes))
             + old_bytes
             + struct.pack("B", len(new_bytes))
             + new_bytes
         )
         return self._build_chunked_frames(CMD_FILE_RENAME, payload)
 
-    def build_file_load_command(self, file_path: str) -> list[bytes]:
-        """Build File Load command (CMD_FILE_LOAD 0xA5).
+    def build_file_load_command(self, file_path: str, path_type: int = 1) -> list[bytes]:
+        """Build File Load command.
 
-        Payload format: [cmd:1B][path_len:uint8][path:N]
+        Matches firmware FileCommands::handleLoadFileData (0x09).
+        Payload format: [pathLength:u8][pathType:u8][path:N]
         """
         path_bytes = file_path.encode("utf-8")
-        payload = struct.pack("B", len(path_bytes)) + path_bytes
+        payload = struct.pack("BB", len(path_bytes), path_type) + path_bytes
         return self._build_chunked_frames(CMD_FILE_LOAD, payload)
 
     def build_scan_command(self) -> list[bytes]:
@@ -370,31 +398,44 @@ class EvilCrowBinaryProtocol:
             return base
 
         elif response_byte == RESP_SIGNAL_RECORDED:
+            # Firmware BinarySignalRecorded: [module:u8][filenameLen:u8][filename:N]
             base["type"] = "SignalRecorded"
-            if payload:
-                filename = payload.decode("utf-8", errors="replace")
-                base["data"]["filename"] = filename
+            if len(payload) >= 2:
+                module = payload[0]
+                filename_len = payload[1]
+                if len(payload) >= 2 + filename_len:
+                    filename = payload[2 : 2 + filename_len].decode("utf-8", errors="replace")
+                    base["data"]["filename"] = filename
+                base["data"]["module"] = module
             return base
 
         elif response_byte == RESP_SIGNAL_SENT:
+            # Firmware BinarySignalSent: [module:u8][filenameLen:u8][filename:N]
             base["type"] = "SignalSent"
-            if payload:
-                filename = payload.decode("utf-8", errors="replace")
-                base["data"]["filename"] = filename
+            if len(payload) >= 2:
+                module = payload[0]
+                filename_len = payload[1]
+                if len(payload) >= 2 + filename_len:
+                    filename = payload[2 : 2 + filename_len].decode("utf-8", errors="replace")
+                    base["data"]["filename"] = filename
+                base["data"]["module"] = module
             return base
 
         elif response_byte == RESP_SIGNAL_ERROR:
+            # Firmware BinarySignalSendError: [module:u8][errorCode:u8][filenameLen:u8][filename:N]
             base["type"] = "SignalError"
-            if payload:
-                msg = payload.decode("utf-8", errors="replace")
-                base["data"]["message"] = msg
-            return base
-
-        elif response_byte == RESP_SIGNAL_SENDING_ERROR:
-            base["type"] = "SignalSendingError"
-            if payload:
-                msg = payload.decode("utf-8", errors="replace")
-                base["data"]["message"] = msg
+            if len(payload) >= 3:
+                module = payload[0]
+                error_code = payload[1]
+                filename_len = payload[2]
+                base["data"]["module"] = module
+                base["data"]["error_code"] = error_code
+                if len(payload) >= 3 + filename_len:
+                    filename = payload[3 : 3 + filename_len].decode("utf-8", errors="replace")
+                    base["data"]["filename"] = filename
+            elif payload:
+                # Fallback: treat as plain error message
+                base["data"]["message"] = payload.decode("utf-8", errors="replace")
             return base
 
         elif response_byte == RESP_SIGNAL_MONITOR:
@@ -416,10 +457,43 @@ class EvilCrowBinaryProtocol:
             return base
 
         elif response_byte == RESP_FILE_LIST:
+            # Firmware MSG_FILE_LIST (0xA1): binary format
+            # [0xA1][pathLen:u8][path:N][flags:u8][totalFiles:u16LE][fileCount:u8][files...]
             base["type"] = "FileList"
-            text = payload.decode("utf-8", errors="replace") if payload else ""
-            files = [f.strip() for f in text.split("\n") if f.strip()]
-            base["data"]["files"] = files
+            if len(payload) >= 1:
+                path_len = payload[0]
+                if len(payload) >= 1 + path_len:
+                    path_str = payload[1 : 1 + path_len].decode("utf-8", errors="replace")
+                    base["data"]["path"] = path_str
+                    rest = payload[1 + path_len:]
+                    if len(rest) >= 4:
+                        flags = rest[0]
+                        total_files = struct.unpack("<H", rest[1:3])[0]
+                        file_count = rest[3]
+                        base["data"]["flags"] = flags
+                        base["data"]["total_files"] = total_files
+                        base["data"]["file_count"] = file_count
+                        # Parse file entries (simplified)
+                        files: list[str] = []
+                        offset = 4
+                        for _ in range(file_count):
+                            if offset >= len(rest):
+                                break
+                            name_len = rest[offset]
+                            offset += 1
+                            if offset + name_len > len(rest):
+                                break
+                            name = rest[offset : offset + name_len].decode("utf-8", errors="replace")
+                            offset += name_len
+                            if offset >= len(rest):
+                                break
+                            file_flags = rest[offset]
+                            offset += 1
+                            files.append(name)
+                            # Skip size+date for regular files (file_flags & 0x01 == 0)
+                            if file_flags & 0x01 == 0 and offset + 8 <= len(rest):
+                                offset += 8
+                        base["data"]["files"] = files
             return base
 
         elif response_byte == RESP_FILE_CONTENT:

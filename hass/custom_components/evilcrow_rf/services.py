@@ -291,6 +291,18 @@ def async_register_services(hass: HomeAssistant) -> None:
                 store.register(device)
                 await store.async_save()
 
+                # Register in HA device registry so it appears on the
+                # integration page under the EC device
+                from .__init__ import _register_target_device_in_registry
+
+                _register_target_device_in_registry(
+                    hass=hass,
+                    config_entry_id=data[ATTR_DEVICE_ID],
+                    target_device_id=target_device_id,
+                    target_device_name=target_device_name or button_name,
+                    ec_device_id=data[ATTR_DEVICE_ID],
+                )
+
         await subghz.start_capture(
             frequency=frequency,
             target_device_id=target_device_id,
