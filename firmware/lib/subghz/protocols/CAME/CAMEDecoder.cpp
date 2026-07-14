@@ -1,5 +1,6 @@
 #include "CAMEDecoder.h"
 #include "esp_log.h"
+#include <FS.h>
 #include <cstring>
 #include <cstdio>
 
@@ -121,7 +122,7 @@ uint8_t CAMEDecoder::getHashData(void* context) {
     return hash;
 }
 
-void CAMEDecoder::serialize(void* context, class File& file) {
+void CAMEDecoder::serialize(void* context, fs::File& file) {
     auto* self = static_cast<CAMEDecoder*>(context);
     if (!self || self->key_ == 0) return;
     file.print("Protocol: CAME\n");
@@ -139,7 +140,7 @@ void CAMEDecoder::serialize(void* context, class File& file) {
     file.print("\nRepeat: 1\n");
 }
 
-bool CAMEDecoder::deserialize(void* context, class File& file) {
+bool CAMEDecoder::deserialize(void* context, fs::File& file) {
     (void)context; (void)file;
     ESP_LOGW(TAG, "deserialize() not implemented — use CAMEProtocol::parse()");
     return false;

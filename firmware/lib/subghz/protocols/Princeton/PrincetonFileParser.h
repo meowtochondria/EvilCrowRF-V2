@@ -1,9 +1,7 @@
 #ifndef Princeton_FileParser_h
 #define Princeton_FileParser_h
 
-#include "../SubGhzProtocol.h"
-#include "../compatibility.h"
-#include <sstream>
+#include "../../SubGhzProtocol.h"
 
 #define PRINCETON_GUARD_TIME_DEFALUT 30 //GUARD_TIME = PRINCETON_GUARD_TIME_DEFALUT * TE
 // Guard Time value should be between 15 -> 72 otherwise default value will be used

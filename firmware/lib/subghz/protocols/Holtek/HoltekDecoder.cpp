@@ -1,5 +1,6 @@
 #include "HoltekDecoder.h"
 #include "esp_log.h"
+#include <FS.h>
 #include <cstring>
 #include <cstdio>
 
@@ -103,7 +104,7 @@ uint8_t HoltekDecoder::getHashData(void* context) {
     return hash;
 }
 
-void HoltekDecoder::serialize(void* context, class File& file) {
+void HoltekDecoder::serialize(void* context, fs::File& file) {
     auto* self = static_cast<HoltekDecoder*>(context);
     if (!self) return;
     file.print("Protocol: Holtek\n");
@@ -117,7 +118,7 @@ void HoltekDecoder::serialize(void* context, class File& file) {
     file.print("Repeat: 1\n");
 }
 
-bool HoltekDecoder::deserialize(void* context, class File& file) {
+bool HoltekDecoder::deserialize(void* context, fs::File& file) {
     (void)context; (void)file;
     ESP_LOGW(TAG, "deserialize() not implemented — use HoltekProtocol::parse()");
     return false;

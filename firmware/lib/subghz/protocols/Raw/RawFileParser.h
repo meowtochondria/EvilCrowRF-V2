@@ -1,8 +1,8 @@
 #ifndef Raw_FileParser_h
 #define Raw_FileParser_h
 
-#include "../SubGhzProtocol.h"
-#include "../compatibility.h"
+#include "../../SubGhzProtocol.h"
+#include "../../../utility/compatibility.h"
 #include <sstream>
 
 class RawFileParser : public SubGhzProtocol {

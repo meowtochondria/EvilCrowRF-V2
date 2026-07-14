@@ -1,6 +1,8 @@
 #include "BinRAWDecoder.h"
 #include "esp_log.h"
+#include <FS.h>
 #include <cstring>
+#include <cstdio>
 #include <cmath>
 #include <cfloat>
 
@@ -580,7 +582,7 @@ uint8_t SubGhzProtocolDecoderBinRAW::getHashData(void* context) {
 // serialize — save decoded BinRAW to .sub format
 // ============================================================
 
-void SubGhzProtocolDecoderBinRAW::serialize(void* context, class File& file) {
+void SubGhzProtocolDecoderBinRAW::serialize(void* context, fs::File& file) {
     auto* instance = static_cast<SubGhzProtocolDecoderBinRAW*>(context);
     if (!instance || instance->data_markup_[0].bit_count == 0) return;
 
@@ -620,7 +622,7 @@ void SubGhzProtocolDecoderBinRAW::serialize(void* context, class File& file) {
 // deserialize — load from file
 // ============================================================
 
-bool SubGhzProtocolDecoderBinRAW::deserialize(void* context, class File& file) {
+bool SubGhzProtocolDecoderBinRAW::deserialize(void* context, fs::File& file) {
     // Currently not implemented for real-time use — the existing
     // BinRAWProtocol::parse() handles file-based loading.
     // This is a stub for interface completeness.

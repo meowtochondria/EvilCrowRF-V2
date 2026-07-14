@@ -5,6 +5,8 @@
 #include <cstddef>
 #include "SubGhzTypes.h"
 
+namespace fs { class File; }
+
 /**
  * LevelDuration — packed (level, duration_us) pair for ISR→worker handoff.
  *
@@ -81,8 +83,8 @@ typedef void  (*SubGhzDecoderFree)(void* context);
 typedef void  (*SubGhzDecoderFeed)(void* context, bool level, uint32_t duration_us);
 typedef void  (*SubGhzDecoderReset)(void* context);
 typedef uint8_t (*SubGhzDecoderGetHash)(void* context);
-typedef void  (*SubGhzDecoderSerialize)(void* context, class File& file);
-typedef bool  (*SubGhzDecoderDeserialize)(void* context, class File& file);
+typedef void  (*SubGhzDecoderSerialize)(void* context, fs::File& file);
+typedef bool  (*SubGhzDecoderDeserialize)(void* context, fs::File& file);
 
 struct SubGhzProtocolDecoderVTable {
     SubGhzDecoderAlloc      alloc;

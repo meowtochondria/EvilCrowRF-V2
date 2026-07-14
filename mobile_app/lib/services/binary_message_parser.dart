@@ -62,7 +62,7 @@ enum BinaryMessageType {
   lowMemory(0xF1),
   commandSuccess(0xF2),
   commandError(0xF3),
-  subGhzConfigValue(0xF4);  // Response to GET_CONFIG: [key:1][value:variable]
+  subGhzConfigValue(0xF4); // Response to GET_CONFIG: [key:1][value:variable]
 
   final int value;
   const BinaryMessageType(this.value);
@@ -953,6 +953,19 @@ class BinaryMessageParser {
             'data': {
               'success': false,
               'errorCode': data.length > 1 ? data[1] : 0
+            },
+          };
+
+        case BinaryMessageType.subGhzConfigValue:
+          // [0xF4][key:1][value:variable] — Response to GET_CONFIG
+          if (data.length < 2) return null;
+          final key = data[1];
+          final value = data.length > 2 ? data.sublist(2).toList() : <int>[];
+          return {
+            'type': 'SubGhzConfigValue',
+            'data': {
+              'key': key,
+              'value': value,
             },
           };
 

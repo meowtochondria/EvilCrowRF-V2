@@ -1,4 +1,6 @@
 #include "PrincetonFileParser.h"
+#include "../../../utility/compatibility.h"
+#include <sstream>
 
 static std::pair<uint32_t, bool> level_duration_make(bool level, uint32_t duration) {
     return std::make_pair(duration, level);

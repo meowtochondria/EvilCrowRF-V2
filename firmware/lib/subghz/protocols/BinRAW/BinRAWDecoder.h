@@ -3,8 +3,8 @@
 
 #include <stdint.h>
 #include <cstddef>
-#include "../SubGhzProtocolBase.h"
-#include "../SubGhzTypes.h"
+#include "../../SubGhzProtocolBase.h"
+#include "../../SubGhzTypes.h"
 
 // ============================================================
 // Constants — ported from Flipper Zero lib/subghz/protocols/bin_raw.c (lines 17-25)
@@ -89,10 +89,10 @@ public:
     static uint8_t getHashData(void* context);
 
     /** Serialize decoded signal to file. */
-    static void serialize(void* context, class File& file);
+    static void serialize(void* context, fs::File& file);
 
     /** Deserialize from file (for loading saved BinRAW captures). */
-    static bool deserialize(void* context, class File& file);
+    static bool deserialize(void* context, fs::File& file);
 
     /**
      * Feed live RSSI value to drive the adaptive threshold state machine.

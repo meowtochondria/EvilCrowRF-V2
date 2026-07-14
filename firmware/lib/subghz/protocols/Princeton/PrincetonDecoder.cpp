@@ -1,5 +1,6 @@
 #include "PrincetonDecoder.h"
 #include "esp_log.h"
+#include <FS.h>
 #include <cstring>
 #include <cstdio>
 
@@ -170,7 +171,7 @@ uint8_t PrincetonDecoder::getHashData(void* context) {
     return hash;
 }
 
-void PrincetonDecoder::serialize(void* context, class File& file) {
+void PrincetonDecoder::serialize(void* context, fs::File& file) {
     auto* self = static_cast<PrincetonDecoder*>(context);
     if (!self || self->key_ == 0) return;
 
@@ -190,7 +191,7 @@ void PrincetonDecoder::serialize(void* context, class File& file) {
     file.print("Repeat: 1\n");
 }
 
-bool PrincetonDecoder::deserialize(void* context, class File& file) {
+bool PrincetonDecoder::deserialize(void* context, fs::File& file) {
     // Use existing PrincetonProtocol::parse() for file-based loading.
     // This is a stub for interface completeness.
     (void)context;

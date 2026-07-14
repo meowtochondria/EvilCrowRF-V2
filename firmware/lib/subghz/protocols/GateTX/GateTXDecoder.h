@@ -2,8 +2,8 @@
 #define GATETX_DECODER_H
 
 #include <stdint.h>
-#include "../SubGhzProtocolBase.h"
-#include "../SubGhzTypes.h"
+#include "../../SubGhzProtocolBase.h"
+#include "../../SubGhzTypes.h"
 
 /**
  * GateTXDecoder — real-time feed() decoder for Gate TX protocol (universal gate/garage).
@@ -19,8 +19,8 @@ public:
     static void feed(void* context, bool level, uint32_t duration_us);
     static void resetInstance(void* context);
     static uint8_t getHashData(void* context);
-    static void serialize(void* context, class File& file);
-    static bool deserialize(void* context, class File& file);
+    static void serialize(void* context, fs::File& file);
+    static bool deserialize(void* context, fs::File& file);
     static const SubGhzProtocolDecoderVTable* vTable();
 
     static constexpr SubGhzProtocolFlag PROTOCOL_FLAG =

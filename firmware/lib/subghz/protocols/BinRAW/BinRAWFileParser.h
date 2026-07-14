@@ -1,8 +1,8 @@
 #ifndef BinRAW_FileParser_h
 #define BinRAW_FileParser_h
 
-#include "../SubGhzProtocol.h"
-#include "../compatibility.h"
+#include "../../SubGhzProtocol.h"
+#include "../../../utility/compatibility.h"
 #include <sstream>
 #include <vector>
 #include <utility>

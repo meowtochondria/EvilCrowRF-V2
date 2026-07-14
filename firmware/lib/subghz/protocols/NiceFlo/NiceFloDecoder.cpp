@@ -1,5 +1,6 @@
 #include "NiceFloDecoder.h"
 #include "esp_log.h"
+#include <FS.h>
 #include <cstring>
 #include <cstdio>
 
@@ -87,7 +88,7 @@ uint8_t NiceFloDecoder::getHashData(void* context) {
     return hash;
 }
 
-void NiceFloDecoder::serialize(void* context, class File& file) {
+void NiceFloDecoder::serialize(void* context, fs::File& file) {
     auto* self = static_cast<NiceFloDecoder*>(context);
     if (!self || self->key_ == 0) return;
     file.print("Protocol: Nice FLO\n");
@@ -102,7 +103,7 @@ void NiceFloDecoder::serialize(void* context, class File& file) {
     file.print("Repeat: 1\n");
 }
 
-bool NiceFloDecoder::deserialize(void* context, class File& file) {
+bool NiceFloDecoder::deserialize(void* context, fs::File& file) {
     (void)context; (void)file;
     ESP_LOGW(TAG, "deserialize() not implemented — use NiceFloProtocol::parse()");
     return false;

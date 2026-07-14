@@ -1,8 +1,8 @@
 #ifndef HOLTEK_FILE_PARSER_H
 #define HOLTEK_FILE_PARSER_H
 
-#include "../SubGhzProtocol.h"
-#include "../compatibility.h"
+#include "../../SubGhzProtocol.h"
+#include "../../../utility/compatibility.h"
 #include <sstream>
 
 /**

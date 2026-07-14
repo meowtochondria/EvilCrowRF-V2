@@ -2,8 +2,8 @@
 #define PRINCETON_DECODER_H
 
 #include <stdint.h>
-#include "../SubGhzProtocolBase.h"
-#include "../SubGhzTypes.h"
+#include "../../SubGhzProtocolBase.h"
+#include "../../SubGhzTypes.h"
 
 /**
  * PrincetonDecoder — real-time feed() decoder for Princeton protocol.
@@ -39,10 +39,10 @@ public:
     static uint8_t getHashData(void* context);
 
     /** Serialize decoded key to file (.sub format). */
-    static void serialize(void* context, class File& file);
+    static void serialize(void* context, fs::File& file);
 
     /** Deserialize from file (uses existing PrincetonProtocol). */
-    static bool deserialize(void* context, class File& file);
+    static bool deserialize(void* context, fs::File& file);
 
     /** Get the v-table for use with SubGhzReceiver. */
     static const SubGhzProtocolDecoderVTable* vTable();

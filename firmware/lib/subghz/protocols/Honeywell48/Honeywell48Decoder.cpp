@@ -1,5 +1,6 @@
 #include "Honeywell48Decoder.h"
 #include "esp_log.h"
+#include <FS.h>
 #include <cstring>
 #include <cstdio>
 
@@ -121,7 +122,7 @@ uint8_t Honeywell48Decoder::getHashData(void* context) {
     return hash;
 }
 
-void Honeywell48Decoder::serialize(void* context, class File& file) {
+void Honeywell48Decoder::serialize(void* context, fs::File& file) {
     auto* self = static_cast<Honeywell48Decoder*>(context);
     if (!self || self->key_ == 0) return;
     file.print("Protocol: Honeywell 48bit\n");
@@ -134,7 +135,7 @@ void Honeywell48Decoder::serialize(void* context, class File& file) {
     file.print("\nRepeat: 1\n");
 }
 
-bool Honeywell48Decoder::deserialize(void* context, class File& file) {
+bool Honeywell48Decoder::deserialize(void* context, fs::File& file) {
     (void)context;
     (void)file;
     ESP_LOGW(TAG, "deserialize() not implemented — use Honeywell48FileParser::parse()");

@@ -2,8 +2,8 @@
 #define NICEFLO_DECODER_H
 
 #include <stdint.h>
-#include "../SubGhzProtocolBase.h"
-#include "../SubGhzTypes.h"
+#include "../../SubGhzProtocolBase.h"
+#include "../../SubGhzTypes.h"
 
 /**
  * NiceFloDecoder — real-time feed() decoder for Nice FLO protocol.
@@ -22,8 +22,8 @@ public:
     static void feed(void* context, bool level, uint32_t duration_us);
     static void resetInstance(void* context);
     static uint8_t getHashData(void* context);
-    static void serialize(void* context, class File& file);
-    static bool deserialize(void* context, class File& file);
+    static void serialize(void* context, fs::File& file);
+    static bool deserialize(void* context, fs::File& file);
     static const SubGhzProtocolDecoderVTable* vTable();
 
     static constexpr SubGhzProtocolFlag PROTOCOL_FLAG =

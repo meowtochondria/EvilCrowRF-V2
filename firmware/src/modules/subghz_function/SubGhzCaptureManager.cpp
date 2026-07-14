@@ -232,7 +232,7 @@ void SubGhzCaptureManager::onSignalDecoded(
         SD.mkdir("/DATA/SIGNALS");
     }
 
-    File file = SD.open(filename, FILE_WRITE);
+    fs::File file = SD.open(filename, FILE_WRITE);
     if (!file) {
         ESP_LOGE(TAG, "Failed to create file: %s", filename);
         return;
