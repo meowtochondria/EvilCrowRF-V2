@@ -1,7 +1,7 @@
-#include "Raw.h"
+#include "RawFileParser.h"
 #include <iostream>  // for debugging
 
-bool RawProtocol::parse(File &file) {
+bool RawFileParser::parse(File &file) {
     std::string line;
     while (file.available()) {
         line = file.readStringUntil('\n').c_str();
@@ -19,15 +19,15 @@ bool RawProtocol::parse(File &file) {
     return true;
 }
 
-std::vector<std::pair<uint32_t, bool>> RawProtocol::getPulseData() const {
+std::vector<std::pair<uint32_t, bool>> RawFileParser::getPulseData() const {
     return pulseData;
 }
 
-uint32_t RawProtocol::getRepeatCount() const {
+uint32_t RawFileParser::getRepeatCount() const {
     return 1;
 }
 
-std::string RawProtocol::serialize() const {
+std::string RawFileParser::serialize() const {
     std::ostringstream oss;
     oss << "RAW_Data:";
     for (const auto& pulse : pulseData) {
@@ -37,6 +37,6 @@ std::string RawProtocol::serialize() const {
     return oss.str();
 }
 
-std::unique_ptr<SubGhzProtocol> createRawProtocol() {
-    return std::make_unique<RawProtocol>();
+std::unique_ptr<SubGhzProtocol> createRawFileParser() {
+    return std::make_unique<RawFileParser>();
 }

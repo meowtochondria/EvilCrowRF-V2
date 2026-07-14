@@ -6,3 +6,4 @@
 6. **Don't fix unrelated bugs** — if you find a pre-existing issue, mention it but don't fix it unless asked.
 7. **Don't commit** — the user commits manually. Just make the code changes.
 8. **Maintain work log** - If executing on a plan via markdown file, update the progress in the file.
+9. **No phase number in comments** - If implementing a phased plan, do not reference anything related to phase in code or comments.

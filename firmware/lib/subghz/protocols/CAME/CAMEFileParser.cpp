@@ -1,6 +1,6 @@
-#include "GateTX.h"
+#include "CAMEFileParser.h"
 
-bool GateTXProtocol::parse(File &file) {
+bool CAMEFileParser::parse(File &file) {
     char buffer[256];
     while (file.available()) {
         int len = file.readBytesUntil('\n', buffer, sizeof(buffer));
@@ -13,10 +13,15 @@ bool GateTXProtocol::parse(File &file) {
             key = key.substr(0, key.find_first_of(" \t"));
             value = value.substr(value.find_first_not_of(" \t"));
 
-            if (key == "Data" || key == "Key") {
+            if (key == "Button") {
                 uint64_t parsed;
                 if (readHexKey(value, parsed)) {
-                    this->data = parsed;
+                    this->button = parsed;
+                }
+            } else if (key == "Serial") {
+                uint64_t parsed;
+                if (readHexKey(value, parsed)) {
+                    this->serial = parsed;
                 }
             } else if (key == "TE") {
                 uint32_t te;
@@ -37,74 +42,90 @@ bool GateTXProtocol::parse(File &file) {
         }
     }
 
+    // Default TE if not specified (common CAME timing)
     if (te == 0) {
-        te = 500;  // 500us typical for Gate TX
+        te = 370;  // 370us typical for CAME
     }
 
+    // Default repeat if not specified
     if (repeat == 0) {
-        repeat = 4;
+        repeat = 5;  // CAME typically repeats 5 times
     }
 
-    return data != 0 && te != 0;
+    return (button != 0 || serial != 0) && te != 0;
 }
 
-void GateTXProtocol::encodeBit(bool bit, std::vector<std::pair<uint32_t, bool>>& pulses) const {
-    // Gate TX simple encoding
+void CAMEFileParser::encodeBit(bool bit, std::vector<std::pair<uint32_t, bool>>& pulses) const {
+    // CAME uses Manchester-like encoding
+    // 0 = short high + long low
+    // 1 = long high + short low
     if (bit) {
-        pulses.push_back(std::make_pair(te * 2, true));
+        // Bit 1: long high (3*TE), short low (TE)
+        pulses.push_back(std::make_pair(te * 3, true));
         pulses.push_back(std::make_pair(te, false));
     } else {
+        // Bit 0: short high (TE), long low (3*TE)
         pulses.push_back(std::make_pair(te, true));
-        pulses.push_back(std::make_pair(te * 2, false));
+        pulses.push_back(std::make_pair(te * 3, false));
     }
 }
 
-std::vector<std::pair<uint32_t, bool>> GateTXProtocol::getPulseData() const {
+std::vector<std::pair<uint32_t, bool>> CAMEFileParser::getPulseData() const {
     if (pulseData.empty()) {
         generatePulseData();
     }
     return pulseData;
 }
 
-void GateTXProtocol::generatePulseData() const {
+void CAMEFileParser::generatePulseData() const {
     pulseData.clear();
     
     if (te == 0) {
         return;
     }
 
+    // Calculate bit count if not specified
     uint16_t totalBits = bit_count;
     if (totalBits == 0) {
-        totalBits = 24;  // Default 24 bits
+        // Estimate: button (4 bits) + serial (24 bits) = 28 bits typical
+        totalBits = 28;
     }
 
-    // Preamble
-    for (int i = 0; i < 2; i++) {
+    // Generate preamble: 4 long pulses
+    for (int i = 0; i < 4; i++) {
         pulseData.push_back(std::make_pair(te * 4, true));
         pulseData.push_back(std::make_pair(te * 4, false));
     }
 
-    // Encode data
+    // Encode button (usually 4 bits, least significant first)
+    uint64_t data = (serial << 4) | (button & 0x0F);
+    
+    // Encode all bits
     for (int i = totalBits - 1; i >= 0; i--) {
         bool bit = (data >> i) & 0x01;
         encodeBit(bit, pulseData);
     }
 
-    // Footer
-    pulseData.push_back(std::make_pair(te * 2, true));
-    pulseData.push_back(std::make_pair(te * 8, false));
+    // Sync bit
+    pulseData.push_back(std::make_pair(te, true));
+    pulseData.push_back(std::make_pair(te * 4, false));
 }
 
-uint32_t GateTXProtocol::getRepeatCount() const {
-    return repeat > 0 ? repeat : 4;
+uint32_t CAMEFileParser::getRepeatCount() const {
+    return repeat > 0 ? repeat : 5;
 }
 
-std::string GateTXProtocol::serialize() const {
+std::string CAMEFileParser::serialize() const {
     std::ostringstream oss;
     if (bit_count > 0) {
         oss << "Bit: " << bit_count << "\r\n";
     }
-    oss << "Data: " << std::hex << data << "\r\n";
+    if (button != 0) {
+        oss << "Button: " << std::hex << button << "\r\n";
+    }
+    if (serial != 0) {
+        oss << "Serial: " << std::hex << serial << "\r\n";
+    }
     if (te > 0) {
         oss << "TE: " << te << "\r\n";
     }
@@ -112,8 +133,6 @@ std::string GateTXProtocol::serialize() const {
     return oss.str();
 }
 
-std::unique_ptr<SubGhzProtocol> createGateTXProtocol() {
-    return std::make_unique<GateTXProtocol>();
+std::unique_ptr<SubGhzProtocol> createCAMEFileParser() {
+    return std::make_unique<CAMEFileParser>();
 }
-
-

@@ -6,7 +6,7 @@
 #include <optional>
 #include <vector>
 #include "SubGhzProtocol.h"
-#include "protocols/Princeton.h"
+#include "protocols/Princeton/PrincetonFileParser.h"
 #include "PulsePayload.h"
 
 const uint8_t subghz_device_cc1101_preset_ook_270khz_async_regs[] = {0x02, 0x0D, 0x03, 0x07, 0x08, 0x32, 0x0B, 0x06, 0x14, 0x00, 0x13, 0x00, 0x12, 0x30, 0x11,

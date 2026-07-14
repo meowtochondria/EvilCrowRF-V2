@@ -1,16 +1,16 @@
-#ifndef HONEYWELL48_PROTOCOL_H
-#define HONEYWELL48_PROTOCOL_H
+#ifndef HONEYWELL48_FILE_PARSER_H
+#define HONEYWELL48_FILE_PARSER_H
 
-#include "SubGhzProtocol.h"
-#include "compatibility.h"
+#include "../SubGhzProtocol.h"
+#include "../compatibility.h"
 #include <sstream>
 
 /**
- * Honeywell 48-bit protocol decoder/encoder
+ * Honeywell 48-bit protocol decoder/encoder (file-based parser)
  * Used in Honeywell wireless security sensors
  * 48-bit data format with Manchester encoding
  */
-class Honeywell48Protocol : public SubGhzProtocol {
+class Honeywell48FileParser : public SubGhzProtocol {
 public:
     bool parse(File &file) override;
     std::vector<std::pair<uint32_t, bool>> getPulseData() const override;
@@ -28,7 +28,7 @@ private:
     void encodeBit(bool bit, std::vector<std::pair<uint32_t, bool>>& pulses) const;
 };
 
-std::unique_ptr<SubGhzProtocol> createHoneywell48Protocol();
+std::unique_ptr<SubGhzProtocol> createHoneywell48FileParser();
 
-#endif // HONEYWELL48_PROTOCOL_H
+#endif // HONEYWELL48_FILE_PARSER_H
 

@@ -1,6 +1,6 @@
-#include "Holtek.h"
+#include "HoltekFileParser.h"
 
-bool HoltekProtocol::parse(File &file) {
+bool HoltekFileParser::parse(File &file) {
     char buffer[256];
     while (file.available()) {
         int len = file.readBytesUntil('\n', buffer, sizeof(buffer));
@@ -48,7 +48,7 @@ bool HoltekProtocol::parse(File &file) {
     return address != 0 && te != 0;
 }
 
-void HoltekProtocol::encodeBit(bool bit, std::vector<std::pair<uint32_t, bool>>& pulses) const {
+void HoltekFileParser::encodeBit(bool bit, std::vector<std::pair<uint32_t, bool>>& pulses) const {
     // Holtek encoding: 0 = short high + long low, 1 = long high + short low
     if (bit) {
         pulses.push_back(std::make_pair(te * 3, true));
@@ -59,14 +59,14 @@ void HoltekProtocol::encodeBit(bool bit, std::vector<std::pair<uint32_t, bool>>&
     }
 }
 
-std::vector<std::pair<uint32_t, bool>> HoltekProtocol::getPulseData() const {
+std::vector<std::pair<uint32_t, bool>> HoltekFileParser::getPulseData() const {
     if (pulseData.empty()) {
         generatePulseData();
     }
     return pulseData;
 }
 
-void HoltekProtocol::generatePulseData() const {
+void HoltekFileParser::generatePulseData() const {
     pulseData.clear();
     
     if (te == 0) {
@@ -94,11 +94,11 @@ void HoltekProtocol::generatePulseData() const {
     pulseData.push_back(std::make_pair(te * 10, false));
 }
 
-uint32_t HoltekProtocol::getRepeatCount() const {
+uint32_t HoltekFileParser::getRepeatCount() const {
     return repeat > 0 ? repeat : 5;
 }
 
-std::string HoltekProtocol::serialize() const {
+std::string HoltekFileParser::serialize() const {
     std::ostringstream oss;
     oss << "Bit: 16\r\n";  // 12 address + 4 data
     oss << "Address: " << std::hex << address << "\r\n";
@@ -110,8 +110,6 @@ std::string HoltekProtocol::serialize() const {
     return oss.str();
 }
 
-std::unique_ptr<SubGhzProtocol> createHoltekProtocol() {
-    return std::make_unique<HoltekProtocol>();
+std::unique_ptr<SubGhzProtocol> createHoltekFileParser() {
+    return std::make_unique<HoltekFileParser>();
 }
-
-

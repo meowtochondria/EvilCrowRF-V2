@@ -1,6 +1,6 @@
-#include "NiceFlo.h"
+#include "GateTXFileParser.h"
 
-bool NiceFloProtocol::parse(File &file) {
+bool GateTXFileParser::parse(File &file) {
     char buffer[256];
     while (file.available()) {
         int len = file.readBytesUntil('\n', buffer, sizeof(buffer));
@@ -13,15 +13,10 @@ bool NiceFloProtocol::parse(File &file) {
             key = key.substr(0, key.find_first_of(" \t"));
             value = value.substr(value.find_first_not_of(" \t"));
 
-            if (key == "Button") {
+            if (key == "Data" || key == "Key") {
                 uint64_t parsed;
                 if (readHexKey(value, parsed)) {
-                    this->button = parsed;
-                }
-            } else if (key == "Serial") {
-                uint64_t parsed;
-                if (readHexKey(value, parsed)) {
-                    this->serial = parsed;
+                    this->data = parsed;
                 }
             } else if (key == "TE") {
                 uint32_t te;
@@ -43,20 +38,20 @@ bool NiceFloProtocol::parse(File &file) {
     }
 
     if (te == 0) {
-        te = 320;  // 320us typical for Nice FLO
+        te = 500;  // 500us typical for Gate TX
     }
 
     if (repeat == 0) {
-        repeat = 3;
+        repeat = 4;
     }
 
-    return (button != 0 || serial != 0) && te != 0;
+    return data != 0 && te != 0;
 }
 
-void NiceFloProtocol::encodeBit(bool bit, std::vector<std::pair<uint32_t, bool>>& pulses) const {
-    // Nice FLO uses different encoding than CAME
+void GateTXFileParser::encodeBit(bool bit, std::vector<std::pair<uint32_t, bool>>& pulses) const {
+    // Gate TX simple encoding
     if (bit) {
-        pulses.push_back(std::make_pair(te * 3, true));
+        pulses.push_back(std::make_pair(te * 2, true));
         pulses.push_back(std::make_pair(te, false));
     } else {
         pulses.push_back(std::make_pair(te, true));
@@ -64,14 +59,14 @@ void NiceFloProtocol::encodeBit(bool bit, std::vector<std::pair<uint32_t, bool>>
     }
 }
 
-std::vector<std::pair<uint32_t, bool>> NiceFloProtocol::getPulseData() const {
+std::vector<std::pair<uint32_t, bool>> GateTXFileParser::getPulseData() const {
     if (pulseData.empty()) {
         generatePulseData();
     }
     return pulseData;
 }
 
-void NiceFloProtocol::generatePulseData() const {
+void GateTXFileParser::generatePulseData() const {
     pulseData.clear();
     
     if (te == 0) {
@@ -80,41 +75,36 @@ void NiceFloProtocol::generatePulseData() const {
 
     uint16_t totalBits = bit_count;
     if (totalBits == 0) {
-        totalBits = 24;  // Typical Nice FLO is 24 bits
+        totalBits = 24;  // Default 24 bits
     }
 
     // Preamble
-    pulseData.push_back(std::make_pair(te * 8, true));
-    pulseData.push_back(std::make_pair(te * 4, false));
+    for (int i = 0; i < 2; i++) {
+        pulseData.push_back(std::make_pair(te * 4, true));
+        pulseData.push_back(std::make_pair(te * 4, false));
+    }
 
     // Encode data
-    uint64_t data = (serial << 4) | (button & 0x0F);
-    
     for (int i = totalBits - 1; i >= 0; i--) {
         bool bit = (data >> i) & 0x01;
         encodeBit(bit, pulseData);
     }
 
     // Footer
-    pulseData.push_back(std::make_pair(te, true));
-    pulseData.push_back(std::make_pair(te * 6, false));
+    pulseData.push_back(std::make_pair(te * 2, true));
+    pulseData.push_back(std::make_pair(te * 8, false));
 }
 
-uint32_t NiceFloProtocol::getRepeatCount() const {
-    return repeat > 0 ? repeat : 3;
+uint32_t GateTXFileParser::getRepeatCount() const {
+    return repeat > 0 ? repeat : 4;
 }
 
-std::string NiceFloProtocol::serialize() const {
+std::string GateTXFileParser::serialize() const {
     std::ostringstream oss;
     if (bit_count > 0) {
         oss << "Bit: " << bit_count << "\r\n";
     }
-    if (button != 0) {
-        oss << "Button: " << std::hex << button << "\r\n";
-    }
-    if (serial != 0) {
-        oss << "Serial: " << std::hex << serial << "\r\n";
-    }
+    oss << "Data: " << std::hex << data << "\r\n";
     if (te > 0) {
         oss << "TE: " << te << "\r\n";
     }
@@ -122,8 +112,6 @@ std::string NiceFloProtocol::serialize() const {
     return oss.str();
 }
 
-std::unique_ptr<SubGhzProtocol> createNiceFloProtocol() {
-    return std::make_unique<NiceFloProtocol>();
+std::unique_ptr<SubGhzProtocol> createGateTXFileParser() {
+    return std::make_unique<GateTXFileParser>();
 }
-
-

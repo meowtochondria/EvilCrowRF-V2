@@ -1,14 +1,14 @@
-#ifndef BinRAW_Protocol_h
-#define BinRAW_Protocol_h
+#ifndef BinRAW_FileParser_h
+#define BinRAW_FileParser_h
 
-#include "SubGhzProtocol.h"
-#include "compatibility.h"
+#include "../SubGhzProtocol.h"
+#include "../compatibility.h"
 #include <sstream>
 #include <vector>
 #include <utility>
 #include <memory>
 
-class BinRAWProtocol : public SubGhzProtocol {
+class BinRAWFileParser : public SubGhzProtocol {
 public:
     bool parse(File &file) override;
     std::vector<std::pair<uint32_t, bool>> getPulseData() const override;  // Marked as const
@@ -24,6 +24,6 @@ private:
 };
 
 // Factory function
-std::unique_ptr<SubGhzProtocol> createBinRAWProtocol();
+std::unique_ptr<SubGhzProtocol> createBinRAWFileParser();
 
-#endif // BinRAW_Protocol_h
+#endif // BinRAW_FileParser_h

@@ -1,16 +1,16 @@
-#ifndef CAME_PROTOCOL_H
-#define CAME_PROTOCOL_H
+#ifndef CAME_FILE_PARSER_H
+#define CAME_FILE_PARSER_H
 
-#include "SubGhzProtocol.h"
-#include "compatibility.h"
+#include "../SubGhzProtocol.h"
+#include "../compatibility.h"
 #include <sstream>
 
 /**
- * CAME protocol decoder
+ * CAME protocol decoder (file-based parser)
  * Used for garage doors, gates (popular in Europe)
  * Format: Button code + Serial number
  */
-class CAMEProtocol : public SubGhzProtocol {
+class CAMEFileParser : public SubGhzProtocol {
 public:
     bool parse(File &file) override;
     std::vector<std::pair<uint32_t, bool>> getPulseData() const override;
@@ -32,8 +32,8 @@ private:
 };
 
 // Factory function
-std::unique_ptr<SubGhzProtocol> createCAMEProtocol();
+std::unique_ptr<SubGhzProtocol> createCAMEFileParser();
 
-#endif // CAME_PROTOCOL_H
+#endif // CAME_FILE_PARSER_H
 
 

@@ -1,14 +1,14 @@
-#ifndef Princeton_Protocol_h
-#define Princeton_Protocol_h
+#ifndef Princeton_FileParser_h
+#define Princeton_FileParser_h
 
-#include "SubGhzProtocol.h"
-#include "compatibility.h"
+#include "../SubGhzProtocol.h"
+#include "../compatibility.h"
 #include <sstream>
 
 #define PRINCETON_GUARD_TIME_DEFALUT 30 //GUARD_TIME = PRINCETON_GUARD_TIME_DEFALUT * TE
 // Guard Time value should be between 15 -> 72 otherwise default value will be used
 
-class PrincetonProtocol : public SubGhzProtocol {
+class PrincetonFileParser : public SubGhzProtocol {
 public:
     bool parse(File &file) override;
     std::vector<std::pair<uint32_t, bool>> getPulseData() const override;
@@ -26,6 +26,6 @@ private:
 };
 
 // Factory function
-std::unique_ptr<SubGhzProtocol> createPrincetonProtocol();
+std::unique_ptr<SubGhzProtocol> createPrincetonFileParser();
 
-#endif // Princeton_Protocol_h
+#endif // Princeton_FileParser_h

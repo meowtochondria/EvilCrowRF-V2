@@ -1,10 +1,10 @@
-#include "Honeywell48.h"
+#include "Honeywell48FileParser.h"
 
 static std::pair<uint32_t, bool> level_duration_make(bool level, uint32_t duration) {
     return std::make_pair(duration, level);
 }
 
-bool Honeywell48Protocol::parse(File &file) {
+bool Honeywell48FileParser::parse(File &file) {
     char buffer[256];
     while (file.available()) {
         int len = file.readBytesUntil('\n', buffer, sizeof(buffer));
@@ -59,13 +59,10 @@ bool Honeywell48Protocol::parse(File &file) {
     return (this->key != 0 && this->te != 0);
 }
 
-void Honeywell48Protocol::encodeBit(bool bit, std::vector<std::pair<uint32_t, bool>>& pulses) const {
+void Honeywell48FileParser::encodeBit(bool bit, std::vector<std::pair<uint32_t, bool>>& pulses) const {
     // Honeywell uses Manchester encoding:
     // 0 = low-high (short low, long high)
     // 1 = high-low (long high, short low)
-    // Or OOK encoding (depending on variant):
-    // 0 = short pulse
-    // 1 = long pulse
     
     // Using Manchester-like encoding similar to Princeton
     if (bit) {
@@ -79,14 +76,14 @@ void Honeywell48Protocol::encodeBit(bool bit, std::vector<std::pair<uint32_t, bo
     }
 }
 
-std::vector<std::pair<uint32_t, bool>> Honeywell48Protocol::getPulseData() const {
+std::vector<std::pair<uint32_t, bool>> Honeywell48FileParser::getPulseData() const {
     if (pulseData.empty()) {
         generatePulseData();
     }
     return pulseData;
 }
 
-void Honeywell48Protocol::generatePulseData() const {
+void Honeywell48FileParser::generatePulseData() const {
     pulseData.clear();
 
     if (te == 0 || key == 0) {
@@ -111,11 +108,11 @@ void Honeywell48Protocol::generatePulseData() const {
     pulseData.push_back(level_duration_make(false, te * guard_time));
 }
 
-uint32_t Honeywell48Protocol::getRepeatCount() const {
+uint32_t Honeywell48FileParser::getRepeatCount() const {
     return repeat > 0 ? repeat : 5;
 }
 
-std::string Honeywell48Protocol::serialize() const {
+std::string Honeywell48FileParser::serialize() const {
     std::ostringstream oss;
     oss << "Bit: 48\r\n";
     oss << "Key: " << std::hex << key << "\r\n";
@@ -127,7 +124,6 @@ std::string Honeywell48Protocol::serialize() const {
     return oss.str();
 }
 
-std::unique_ptr<SubGhzProtocol> createHoneywell48Protocol() {
-    return std::make_unique<Honeywell48Protocol>();
+std::unique_ptr<SubGhzProtocol> createHoneywell48FileParser() {
+    return std::make_unique<Honeywell48FileParser>();
 }
-

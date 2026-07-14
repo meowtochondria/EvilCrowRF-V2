@@ -1,6 +1,6 @@
-#include "CAME.h"
+#include "NiceFloFileParser.h"
 
-bool CAMEProtocol::parse(File &file) {
+bool NiceFloFileParser::parse(File &file) {
     char buffer[256];
     while (file.available()) {
         int len = file.readBytesUntil('\n', buffer, sizeof(buffer));
@@ -42,80 +42,69 @@ bool CAMEProtocol::parse(File &file) {
         }
     }
 
-    // Default TE if not specified (common CAME timing)
     if (te == 0) {
-        te = 370;  // 370us typical for CAME
+        te = 320;  // 320us typical for Nice FLO
     }
 
-    // Default repeat if not specified
     if (repeat == 0) {
-        repeat = 5;  // CAME typically repeats 5 times
+        repeat = 3;
     }
 
     return (button != 0 || serial != 0) && te != 0;
 }
 
-void CAMEProtocol::encodeBit(bool bit, std::vector<std::pair<uint32_t, bool>>& pulses) const {
-    // CAME uses Manchester-like encoding
-    // 0 = short high + long low
-    // 1 = long high + short low
+void NiceFloFileParser::encodeBit(bool bit, std::vector<std::pair<uint32_t, bool>>& pulses) const {
+    // Nice FLO uses different encoding than CAME
     if (bit) {
-        // Bit 1: long high (3*TE), short low (TE)
         pulses.push_back(std::make_pair(te * 3, true));
         pulses.push_back(std::make_pair(te, false));
     } else {
-        // Bit 0: short high (TE), long low (3*TE)
         pulses.push_back(std::make_pair(te, true));
-        pulses.push_back(std::make_pair(te * 3, false));
+        pulses.push_back(std::make_pair(te * 2, false));
     }
 }
 
-std::vector<std::pair<uint32_t, bool>> CAMEProtocol::getPulseData() const {
+std::vector<std::pair<uint32_t, bool>> NiceFloFileParser::getPulseData() const {
     if (pulseData.empty()) {
         generatePulseData();
     }
     return pulseData;
 }
 
-void CAMEProtocol::generatePulseData() const {
+void NiceFloFileParser::generatePulseData() const {
     pulseData.clear();
     
     if (te == 0) {
         return;
     }
 
-    // Calculate bit count if not specified
     uint16_t totalBits = bit_count;
     if (totalBits == 0) {
-        // Estimate: button (4 bits) + serial (24 bits) = 28 bits typical
-        totalBits = 28;
+        totalBits = 24;  // Typical Nice FLO is 24 bits
     }
 
-    // Generate preamble: 4 long pulses
-    for (int i = 0; i < 4; i++) {
-        pulseData.push_back(std::make_pair(te * 4, true));
-        pulseData.push_back(std::make_pair(te * 4, false));
-    }
+    // Preamble
+    pulseData.push_back(std::make_pair(te * 8, true));
+    pulseData.push_back(std::make_pair(te * 4, false));
 
-    // Encode button (usually 4 bits, least significant first)
+    // Encode data
     uint64_t data = (serial << 4) | (button & 0x0F);
     
-    // Encode all bits
     for (int i = totalBits - 1; i >= 0; i--) {
         bool bit = (data >> i) & 0x01;
         encodeBit(bit, pulseData);
     }
 
-    // Sync bit
+    // Footer
     pulseData.push_back(std::make_pair(te, true));
-    pulseData.push_back(std::make_pair(te * 4, false));
+    pulseData.push_back(std::make_pair(te * 6, false));
 }
 
-uint32_t CAMEProtocol::getRepeatCount() const {
-    return repeat > 0 ? repeat : 5;
+uint32_t NiceFloFileParser::getRepeatCount() const {
+    return repeat > 0 ? repeat : 3;
 }
 
-std::string CAMEProtocol::serialize() const {
+std::string NiceFloFileParser::serialize() const {
     std::ostringstream oss;
     if (bit_count > 0) {
         oss << "Bit: " << bit_count << "\r\n";
@@ -133,8 +122,6 @@ std::string CAMEProtocol::serialize() const {
     return oss.str();
 }
 
-std::unique_ptr<SubGhzProtocol> createCAMEProtocol() {
-    return std::make_unique<CAMEProtocol>();
+std::unique_ptr<SubGhzProtocol> createNiceFloFileParser() {
+    return std::make_unique<NiceFloFileParser>();
 }
-
-

@@ -930,3 +930,27 @@ When porting, use these exact values. Do not adjust them:
 
 5. **Hopper test** — Configure a custom hop list; verify that the hopper lingers
    on an active frequency and advances past quiet ones.
+
+---
+
+## Implementation Progress
+
+| Phase | Task | Status | Files Created/Modified |
+|-------|------|--------|------------------------|
+| 1.1 | Define SubGhzProtocolFlag, SubGhzProtocolDecoderBase, v-table types | ✅ Done | `lib/subghz/SubGhzTypes.h`, `lib/subghz/SubGhzProtocolBase.h` |
+| 1.2 | Build SubGhzReceiver fan-out dispatcher | ✅ Done | `lib/subghz/SubGhzReceiver.h/cpp` |
+| 1.3 | Extend protocol registry for decoder v-tables | ✅ Done | `lib/subghz/SubGhzProtocolDecoderRegistry.h/cpp` |
+| 1.4 | Create LevelDuration helper | ✅ Done (included in 1.1) | `lib/subghz/SubGhzProtocolBase.h` |
+| 2.1 | BinRAW decoder header + constants | ✅ Done | `lib/subghz/protocols/BinRAWDecoder.h` |
+| 2.2 | BinRAW feed() implementation | ✅ Done | `lib/subghz/protocols/BinRAWDecoder.cpp` |
+| 2.3 | BinRAW inputRssi() — adaptive gate | ✅ Done | `lib/subghz/protocols/BinRAWDecoder.cpp` |
+| 2.4 | BinRAW structural validation | ✅ Done | `lib/subghz/protocols/BinRAWDecoder.cpp` |
+| 2.5 | Register BinRAW decoder v-table | ✅ Done | `lib/subghz/protocols/BinRAWDecoder.cpp` |
+| 3.1 | Princeton real-time feed() decoder | ✅ Done | `lib/subghz/protocols/PrincetonDecoder.h/cpp` |
+| 3.2 | CAME real-time feed() decoder | ✅ Done | `lib/subghz/protocols/CAMEDecoder.h/cpp` |
+| 3.3 | GateTX, Holtek, NiceFLO decoders | ✅ Done | `lib/subghz/protocols/GateTXDecoder.h/cpp, HoltekDecoder.h/cpp, NiceFloDecoder.h/cpp` |
+| 3.4 | Register all decoders in AllProtocols.h | ✅ Done | `lib/subghz/AllProtocols.h` |
+| 4.1–4.4 | Wire worker + ISR into decoder pipeline | ⬜ Pending | — |
+| 5.1–5.2 | RSSI threshold gate | ⬜ Pending | — |
+| 6.1–6.2 | Frequency hopper | ⬜ Pending | — |
+| 7.1–7.2 | File output — save decoded keys | ⬜ Pending | — |

@@ -1,10 +1,10 @@
-#include "Princeton.h"
+#include "PrincetonFileParser.h"
 
-std::pair<uint32_t, bool> level_duration_make(bool level, uint32_t duration) {
+static std::pair<uint32_t, bool> level_duration_make(bool level, uint32_t duration) {
     return std::make_pair(duration, level);
 }
 
-bool PrincetonProtocol::parse(File &file) {
+bool PrincetonFileParser::parse(File &file) {
     char buffer[256];
     while (file.available()) {
         int len = file.readBytesUntil('\n', buffer, sizeof(buffer));
@@ -56,14 +56,14 @@ bool PrincetonProtocol::parse(File &file) {
     return (this->key != 0 && this->te != 0 && this->repeat != 0 && this->bit_count != 0);
 }
 
-std::vector<std::pair<uint32_t, bool>> PrincetonProtocol::getPulseData() const {
+std::vector<std::pair<uint32_t, bool>> PrincetonFileParser::getPulseData() const {
     if (pulseData.empty()) {
         generatePulseData();
     }
     return pulseData;
 }
 
-void PrincetonProtocol::generatePulseData() const {
+void PrincetonFileParser::generatePulseData() const {
     pulseData.clear();
 
     size_t index = 0;
@@ -87,7 +87,7 @@ void PrincetonProtocol::generatePulseData() const {
     pulseData.push_back(level_duration_make(false, te * guard_time));
 }
 
-std::string PrincetonProtocol::serialize() const {
+std::string PrincetonFileParser::serialize() const {
     std::ostringstream oss;
     oss << "Bit: " << bit_count << "\r\n";
     oss << "Key: " << std::hex << key << "\r\n";
@@ -97,10 +97,10 @@ std::string PrincetonProtocol::serialize() const {
     return oss.str();
 }
 
-uint32_t PrincetonProtocol::getRepeatCount() const {
+uint32_t PrincetonFileParser::getRepeatCount() const {
     return repeat;
 }
 
-std::unique_ptr<SubGhzProtocol> createPrincetonProtocol() {
-    return std::make_unique<PrincetonProtocol>();
+std::unique_ptr<SubGhzProtocol> createPrincetonFileParser() {
+    return std::make_unique<PrincetonFileParser>();
 }

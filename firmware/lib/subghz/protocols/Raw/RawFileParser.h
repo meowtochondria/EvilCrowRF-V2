@@ -1,11 +1,11 @@
-#ifndef Raw_Protocol_h
-#define Raw_Protocol_h
+#ifndef Raw_FileParser_h
+#define Raw_FileParser_h
 
-#include "SubGhzProtocol.h"
-#include "compatibility.h"
+#include "../SubGhzProtocol.h"
+#include "../compatibility.h"
 #include <sstream>
 
-class RawProtocol : public SubGhzProtocol {
+class RawFileParser : public SubGhzProtocol {
 public:
     bool parse(File &file) override;
     std::vector<std::pair<uint32_t, bool>> getPulseData() const override;
@@ -17,6 +17,6 @@ private:
 };
 
 // Factory function
-std::unique_ptr<SubGhzProtocol> createRawProtocol();
+std::unique_ptr<SubGhzProtocol> createRawFileParser();
 
-#endif // Raw_Protocol_h
+#endif // Raw_FileParser_h

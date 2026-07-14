@@ -1,7 +1,7 @@
-#include "BinRAW.h"
+#include "BinRAWFileParser.h"
 #include <iostream>
 
-bool BinRAWProtocol::parse(File &file) {
+bool BinRAWFileParser::parse(File &file) {
     pulseData.clear();
     std::string line;
     uint32_t bitRaw = 0;
@@ -32,15 +32,15 @@ bool BinRAWProtocol::parse(File &file) {
     return true;
 }
 
-std::vector<std::pair<uint32_t, bool>> BinRAWProtocol::getPulseData() const {
+std::vector<std::pair<uint32_t, bool>> BinRAWFileParser::getPulseData() const {
     return pulseData;
 }
 
-uint32_t BinRAWProtocol::getRepeatCount() const {
+uint32_t BinRAWFileParser::getRepeatCount() const {
     return 1;
 }
 
-std::string BinRAWProtocol::serialize() const {
+std::string BinRAWFileParser::serialize() const {
     std::ostringstream oss;
     oss << "Protocol: BinRAW\n";
     oss << "Bit: " << bitCount << "\n";
@@ -54,7 +54,7 @@ std::string BinRAWProtocol::serialize() const {
     return oss.str();
 }
 
-void BinRAWProtocol::generatePulseData(const std::vector<uint8_t>& rawData, uint32_t bitRaw, uint32_t te) const {
+void BinRAWFileParser::generatePulseData(const std::vector<uint8_t>& rawData, uint32_t bitRaw, uint32_t te) const {
     bool currentState = false;
     uint32_t currentDuration = 0;
 
@@ -76,6 +76,6 @@ void BinRAWProtocol::generatePulseData(const std::vector<uint8_t>& rawData, uint
     }
 }
 
-std::unique_ptr<SubGhzProtocol> createBinRAWProtocol() {
-    return std::make_unique<BinRAWProtocol>();
+std::unique_ptr<SubGhzProtocol> createBinRAWFileParser() {
+    return std::make_unique<BinRAWFileParser>();
 }
