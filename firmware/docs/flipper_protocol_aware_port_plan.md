@@ -956,4 +956,281 @@ When porting, use these exact values. Do not adjust them:
 | 6.1 | Build FrequencyHopper | ✅ Done | `FrequencyHopper.h/cpp` |
 | 6.2 | Hopper start/stop + freq list via BLE | ✅ Done (via 0x70 KEY_HOPPER_*) | `SubGhzConfigCommands.h` |
 | 8   | SubGhz config commands (0x70/0x71 key-value) | ✅ Done | `include/SubGhzConfigCommands.h`, modified `main.cpp` |
-| 7.1–7.2 | File output — save decoded keys | ⬜ Pending | — |
+| 7.1–7.2 | File output — save decoded keys | ✅ Done | `SubGhzCaptureManager.cpp` — `onSignalDecoded` saves `.sub` file to SD |
+| 9       | Honeywell48 real-time decoder | ✅ Done | `protocols/Honeywell48/Honeywell48Decoder.h/cpp` |
+
+---
+
+## Appendix A: Client Integration Plan — SubGhz Config over BLE & WiFi
+
+This appendix documents the breaking changes introduced in Phase 8 (command IDs
+`0x70`/`0x71`) and provides a detailed migration plan for the mobile app
+(`mobile_app/`) and Home Assistant integration (`hass/`).
+
+### A.1 What Changed
+
+Two new BLE/WiFi command IDs were added to the firmware:
+
+| Command | ID | Direction | Purpose |
+|---------|----|-----------|---------|
+| `SUBGHZ_SET_CONFIG` | `0x70` | App → Device | Set a config key to a value |
+| `SUBGHZ_GET_CONFIG` | `0x71` | App ↔ Device | Read back a config key |
+
+These use a key-value model where the **first byte** of the payload is the config
+key and the **remaining bytes** are the value.
+
+| Key | Name | Value Type | Default |
+|-----|------|-----------|---------|
+| `0x01` | `THRESHOLD_RSSI` | `int8` (-90 to -40 dBm) | `-90` (disabled) |
+| `0x02` | `HOPPER_FREQS` | `[count:1][freq_khz:4LE × N]` | Empty (no hopping) |
+| `0x03` | `HOPPER_LINGER_RSSI` | `int8` | `-90` dBm |
+| `0x04` | `HOPPER_LINGER_TICKS` | `uint8` | `10` |
+| `0x05` | `HOPPER_ENABLED` | `uint8` (0 or 1) | `0` (off) |
+| `0x06` | `DECODER_FILTER` | `uint32` (bitmask) | `BinRAW ⎸ Decodable` |
+| `0x07` | `DECODER_FILTER_RAW` | `uint8` (0 or 1) | `0` |
+
+Response format for both commands:
+- Success: `[0xF2]` (MSG_COMMAND_SUCCESS)
+- Error:   `[0xF3]` (MSG_COMMAND_ERROR)
+- GET also returns the key byte + value after the success byte:
+  `[0xF2][key:1][value:variable]`
+
+### A.2 Transport Mapping
+
+Both BLE and WiFi use the **same** `CommandHandler` inside the firmware. The
+command IDs (`0x70`/`0x71`) are identical regardless of transport:
+
+```mermaid
+flowchart LR
+    subgraph Clients
+        BLE[BleAdapter]
+        WiFi[WiFi WebSocket Adapter]
+    end
+    subgraph FW[Firmware]
+        CH[CommandHandler
+        registerCommand(0x70, handleSetConfig)
+        registerCommand(0x71, handleGetConfig)]
+    end
+    BLE -->|handleSingleCommand| CH
+    WiFi -->|executeCommand| CH
+    CH -->|applies to| Singletons[
+      g_subghzCaptureManager
+      g_subghzThreshold
+      g_frequencyHopper
+    ]
+```
+
+For WiFi transport, the HA integration's `WiFiTransport` sends raw binary over
+WebSocket. Each WebSocket message IS the binary payload (in contrast to BLE
+which uses notification characteristics). The firmware's `WifiAdapter` receives
+bytes and calls `commandHandler.executeCommand()`. The `BinaryProtocolHandler`
+(used by BLE) is NOT involved in the WiFi path.
+
+**Important:** The HA integration's `wifi_transport.py` already sends raw
+command bytes over WebSocket. The `EvilCrowBinaryProtocol` class in HA wraps
+them in `BinaryFrame` structs with a binary framing layer. The firmware's
+WifiAdapter expects raw command bytes within a JSON or binary WebSocket
+message. Check `src/core/wifi/WifiAdapter.cpp` for the exact framing.
+
+### A.3 Changes Required — Mobile App (`mobile_app/`)
+
+#### A.3.1 Add config key constants
+
+File: `lib/providers/firmware_protocol.dart`
+
+Add a config key enum and builder methods:
+
+```dart
+// Config keys (mirrors firmware SubGhzConfigCommands.h)
+static const int KEY_THRESHOLD_RSSI = 0x01;
+static const int KEY_HOPPER_FREQS = 0x02;
+static const int KEY_HOPPER_LINGER_RSSI = 0x03;
+static const int KEY_HOPPER_LINGER_TICKS = 0x04;
+static const int KEY_HOPPER_ENABLED = 0x05;
+static const int KEY_DECODER_FILTER = 0x06;
+static const int KEY_DECODER_FILTER_RAW = 0x07;
+
+// Command IDs
+static const int CMD_SUBGHZ_SET_CONFIG = 0x70;
+static const int CMD_SUBGHZ_GET_CONFIG = 0x71;
+
+static Uint8List createSetConfigCommand(int key, Uint8List value) {
+  final payload = Uint8List(1 + value.length);
+  payload[0] = key;
+  for (int i = 0; i < value.length; i++) payload[1 + i] = value[i];
+  return _createEnhancedCommand(CMD_SUBGHZ_SET_CONFIG, payload);
+}
+
+static Uint8List createGetConfigCommand(int key) {
+  return _createEnhancedCommand(CMD_SUBGHZ_GET_CONFIG, Uint8List.fromList([key]));
+}
+
+// Convenience builders:
+static Uint8List createSetThresholdRssiCommand(int rssiDbm) =>
+    createSetConfigCommand(KEY_THRESHOLD_RSSI, Uint8List.fromList([rssiDbm & 0xFF]));
+
+static Uint8List createSetHopperFreqsCommand(List<int> freqKhzList) {
+  final payload = BytesBuilder();
+  payload.addByte(freqKhzList.length);
+  for (final f in freqKhzList) {
+    payload.addAll(ByteData(4)..setUint32(0, f, Endian.little).buffer.asUint8List());
+  }
+  return createSetConfigCommand(KEY_HOPPER_FREQS, payload.toBytes());
+}
+```
+
+#### A.3.2 Add response parsing
+
+File: `lib/services/binary_message_parser.dart`
+
+Add a new `BinaryMessageType` entry for key-value config responses. The
+response for `SUBGHZ_GET_CONFIG` starts with byte `0xF2` (MSG_COMMAND_SUCCESS)
+followed by the key and value bytes — the existing message parser will need
+a new entry:
+
+```dart
+subGhzConfigValue(0xF4),  // or reuse an existing type
+```
+
+Alternatively, the responses are already handled by the generic success/error
+mechanism. The GET response payload `[0xF2][key:1][value:variable]` can be
+parsed by the `SubGhzProvider` directly from the raw notification data.
+
+#### A.3.3 Add provider methods
+
+File: `lib/providers/subghz_provider.dart`
+
+Add methods that the UI can call:
+
+```dart
+Future<void> setThresholdRssi(int rssiDbm) async {
+  final cmd = FirmwareBinaryProtocol.createSetThresholdRssiCommand(rssiDbm);
+  await _sendCommand(cmd);
+}
+
+Future<void> setHopperEnabled(bool enabled) async {
+  final cmd = FirmwareBinaryProtocol.createSetConfigCommand(
+    KEY_HOPPER_ENABLED,
+    Uint8List.fromList([enabled ? 1 : 0]),
+  );
+  await _sendCommand(cmd);
+}
+
+Future<void> setDecoderFilterRaw(bool rawOnly) async {
+  final cmd = FirmwareBinaryProtocol.createSetConfigCommand(
+    KEY_DECODER_FILTER_RAW,
+    Uint8List.fromList([rawOnly ? 1 : 0]),
+  );
+  await _sendCommand(cmd);
+}
+
+Future<int> getThresholdRssi() async {
+  final cmd = FirmwareBinaryProtocol.createGetConfigCommand(KEY_THRESHOLD_RSSI);
+  final response = await _sendCommandWithResponse(cmd);
+  // response = [0xF2][0x01][rssi_value]
+  return response[2].toSignedInt();
+}
+```
+
+#### A.3.4 BLE transport changes
+
+The `BleConnectionProvider.sendBinaryCommand()` method already handles sending
+arbitrary `Uint8List` payloads over the BLE TX characteristic. No changes are
+needed at the transport layer.
+
+### A.4 Changes Required — Home Assistant Integration (`hass/`)
+
+#### A.4.1 Add command constants
+
+File: `custom_components/evilcrow_rf/const.py`
+
+```python
+# SubGhz config commands
+CMD_SUBGHZ_SET_CONFIG = 0x70
+CMD_SUBGHZ_GET_CONFIG = 0x71
+
+# Config keys (mirrors firmware SubGhzConfigCommands.h)
+KEY_THRESHOLD_RSSI = 0x01
+KEY_HOPPER_FREQS = 0x02
+KEY_HOPPER_LINGER_RSSI = 0x03
+KEY_HOPPER_LINGER_TICKS = 0x04
+KEY_HOPPER_ENABLED = 0x05
+KEY_DECODER_FILTER = 0x06
+KEY_DECODER_FILTER_RAW = 0x07
+```
+
+#### A.4.2 Add command builder methods
+
+File: `custom_components/evilcrow_rf/binary_protocol.py`
+
+```python
+def build_subghz_set_config_command(self, key: int, value: bytes) -> list[bytes]:
+    payload = struct.pack("B", key) + value
+    return self._build_chunked_frames(CMD_SUBGHZ_SET_CONFIG, payload)
+
+def build_subghz_get_config_command(self, key: int) -> list[bytes]:
+    return self._build_single_frame(CMD_SUBGHZ_GET_CONFIG, struct.pack("B", key))
+```
+
+No changes are needed to `parse_response()` — the response byte `0xF2`
+`(MSG_COMMAND_SUCCESS)` may need a `RESP_COMMAND_SUCCESS` parsing path if
+you want to extract the returned value from GET responses.
+
+#### A.4.3 WiFi transport verification
+
+The WiFi transport (`wifi_transport.py`) sends frames via `send_frame()` →
+`ws.send_bytes()`. The firmware's WifiAdapter receives these. To verify that
+the WiFi path is equally reliable:
+
+1. **Read** `src/core/wifi/WifiAdapter.cpp` — confirm it calls
+   `commandHandler.executeCommand()` with the first byte as command ID
+2. **Verify** that `BinaryProtocolHandler` is NOT interposed on the WiFi path
+   (it applies additional framing that may add or strip bytes)
+3. **Test** that a `SUBGHZ_SET_CONFIG` frame sent over WiFi reaches
+   `handleSetConfig` and modifies `g_subghzThresholdRssi` correctly
+
+#### A.4.4 HA config flow integration (optional)
+
+The Home Assistant integration could expose these as config entry options:
+
+```python
+# In config_flow.py, add an options flow step:
+STEP_SUBGHZ_CONFIG = "subghz_config"
+
+async def async_step_subghz_config(self, user_input=None):
+    schema = vol.Schema({
+        vol.Optional("rssi_threshold", default=-85): vol.All(
+            vol.Coerce(int), vol.Range(min=-90, max=-40)
+        ),
+        vol.Optional("decoder_raw_only", default=False): bool,
+    })
+    if user_input is not None:
+        # Send config to device
+        frames = self._protocol.build_subghz_set_config_command(
+            KEY_THRESHOLD_RSSI, struct.pack("b", user_input["rssi_threshold"])
+        )
+        transport = self.hass.data[DOMAIN][self.config_entry.entry_id]["transport"]
+        await transport.send_frame(frames)
+        return self.async_create_entry(title="", data=user_input)
+    return self.async_show_form(step_id="subghz_config", data_schema=schema)
+```
+
+### A.5 WiFi-Specific Considerations
+
+| Concern | Mitigation |
+|---------|-----------|
+| **Frame integrity** | HA's `BinaryFrame` has an XOR checksum over magic+type+id+chunk+len+data.
+  The firmware's WifiAdapter must validate this checksum (currently depends on
+  `WifiAdapter.cpp` implementation). |
+| **Chunk reassembly** | BLE chunks responses; WiFi sends each frame individually.
+  The HA client sends the command as a single frame (or chunked if payload >
+  MAX_PAYLOAD_SIZE). The firmware's WifiAdapter must reassemble chunks (check
+  `WifiAdapter.cpp` for chunk_id/chunk_num/total_chunks handling). |
+| **Response routing** | BLE responses arrive via notification characteristic.
+  WiFi responses arrive via WebSocket binary frames. The HA client's
+  `_reader_loop` already parses and dispatches both. |
+| **Connection tracking** | For SET commands that modify device state (no
+  response expected), use fire-and-forget. For GET commands, the response
+  arrives asynchronously — use a pending-request tracker
+  (`pending_request_tracker.py` pattern) to correlate responses.
+|

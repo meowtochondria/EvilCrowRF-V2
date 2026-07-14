@@ -125,3 +125,18 @@ void SubGhzReceiver::onSlotDecoded(
         self->rx_callback_(decoder, self->rx_callback_ctx_);
     }
 }
+
+bool SubGhzReceiver::getSlotByBase(
+    const SubGhzProtocolDecoderBase* base,
+    void*& instance,
+    const SubGhzProtocolDecoderVTable*& vtable) const
+{
+    for (const auto& slot : slots_) {
+        if (slot.base == base) {
+            instance = slot.instance;
+            vtable = slot.vtable;
+            return true;
+        }
+    }
+    return false;
+}

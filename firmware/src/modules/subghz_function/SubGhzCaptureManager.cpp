@@ -1,6 +1,9 @@
 #include "SubGhzCaptureManager.h"
 #include "esp_log.h"
 #include "protocols/BinRAW/BinRAWDecoder.h"
+#include <SD.h>
+#include <cstdio>
+#include <cstring>
 
 static const char* TAG = "SubGhzCaptureManager";
 
@@ -190,16 +193,74 @@ void SubGhzCaptureManager::onSignalDecoded(
 
     ESP_LOGI(TAG, "✅ Signal decoded: protocol='%s'", decoder->protocol_name);
 
-    // Fire the application-level callback
-    if (self->signalCapturedCb_) {
-        // We don't know which module — search for the decoder
-        for (int m = 0; m < CC1101_NUM_MODULES; m++) {
-            if (self->receivers_[m] &&
-                self->receivers_[m]->getDecoderByName(decoder->protocol_name) == decoder)
-            {
-                self->signalCapturedCb_(m, decoder->protocol_name);
-                break;
-            }
+    // Find which module + slot fired the callback
+    int foundModule = -1;
+    void* instance = nullptr;
+    const SubGhzProtocolDecoderVTable* vtable = nullptr;
+
+    for (int m = 0; m < CC1101_NUM_MODULES; m++) {
+        if (self->receivers_[m] &&
+            self->receivers_[m]->getSlotByBase(decoder, instance, vtable))
+        {
+            foundModule = m;
+            break;
         }
+    }
+
+    if (foundModule < 0 || !instance || !vtable) {
+        ESP_LOGW(TAG, "Could not find slot for decoded signal");
+        return;
+    }
+
+    // ---- Phase 7: Save decoded signal to SD card ----
+    // Build filename: /DATA/SIGNALS/<protocol>_<random>.sub
+    char filename[128];
+    {
+        // Generate 8-char random string
+        const char* hexChars = "0123456789ABCDEF";
+        char randStr[9];
+        for (int i = 0; i < 8; i++) {
+            randStr[i] = hexChars[esp_random() % 16];
+        }
+        randStr[8] = '\0';
+        snprintf(filename, sizeof(filename), "/DATA/SIGNALS/%s_%s.sub",
+                 decoder->protocol_name, randStr);
+    }
+
+    // Ensure directory exists
+    if (!SD.exists("/DATA/SIGNALS")) {
+        SD.mkdir("/DATA/SIGNALS");
+    }
+
+    File file = SD.open(filename, FILE_WRITE);
+    if (!file) {
+        ESP_LOGE(TAG, "Failed to create file: %s", filename);
+        return;
+    }
+
+    // Write standard .sub header
+    file.println("Filetype: Flipper SubGhz RAW File");
+    file.println("Version: 1");
+    file.print("Frequency: ");
+    file.print(433920000);  // TODO: pass actual frequency from recording config
+    file.println();
+    file.println("Preset: FuriHalSubGhzPresetOok650Async");
+
+    // Write protocol-specific data via decoder's serialize()
+    if (vtable->serialize) {
+        vtable->serialize(instance, file);
+    } else {
+        file.print("Protocol: ");
+        file.println(decoder->protocol_name);
+    }
+
+    file.println();
+    file.close();
+
+    ESP_LOGI(TAG, "💾 Decoded signal saved: %s", filename);
+
+    // Fire the application-level callback with the filename
+    if (self->signalCapturedCb_) {
+        self->signalCapturedCb_(foundModule, decoder->protocol_name);
     }
 }
