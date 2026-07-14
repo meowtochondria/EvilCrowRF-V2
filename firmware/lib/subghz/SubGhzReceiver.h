@@ -59,6 +59,9 @@ public:
     /** Get the current filter mask. */
     SubGhzProtocolFlag getFilter() const { return filter_; }
 
+    /** Get the current filter mask. */
+    SubGhzProtocolFlag getFilter() const { return filter_; }
+
     /**
      * Set the callback for successful decodes across all slots.
      * Each slot's base struct gets wired to an internal trampoline that
@@ -74,6 +77,13 @@ public:
      * @return Pointer to the decoder base struct, or nullptr if not found
      */
     SubGhzProtocolDecoderBase* getDecoderByName(const char* name);
+
+    /**
+     * Find a decoder instance pointer by protocol name.
+     * Returns the opaque instance handle, not the base struct.
+     * Used to call protocol-specific functions like inputRssi().
+     */
+    void* getDecoderInstance(const char* name);
 
 private:
     /** One decoder slot wraps a v-table + allocated instance. */

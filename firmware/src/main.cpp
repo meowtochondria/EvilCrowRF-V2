@@ -12,6 +12,7 @@
 #include "OtaCommands.h"
 #include "ButtonCommands.h"
 #include "SdrCommands.h"
+#include "SubGhzConfigCommands.h"
 #if PROTOPIRATE_MODULE_ENABLED
 #include "ProtoPirateCommands.h"
 #include "modules/protopirate/ProtoPirateModule.h"
@@ -754,9 +755,12 @@ void setup()
     ButtonCommands::registerCommands(commandHandler);
 #if SDR_MODULE_ENABLED
     SdrCommands::registerCommands(commandHandler);
-#endif
+	#endif
 
-    ESP_LOGI(TAG, "CommandHandler initialized with %zu commands", commandHandler.getCommandCount());
+	// SubGhz config commands (threshold, hopper, decoder filter)
+	SubGhzConfigCommands::registerCommands(commandHandler);
+
+	ESP_LOGI(TAG, "CommandHandler initialized with %zu commands", commandHandler.getCommandCount());
 
     // Initialize bruter module
     ESP_LOGI(TAG, "Initializing Bruter module...");

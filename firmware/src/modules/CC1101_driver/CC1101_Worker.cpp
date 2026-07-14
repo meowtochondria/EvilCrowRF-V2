@@ -12,6 +12,7 @@
 #include "core/CommandHandler.h"
 #include "DeviceTasks.h"
 #include "ConfigManager.h"
+#include "modules/subghz_function/SubGhzCaptureManager.h"
 
 static const char* TAG = "CC1101Worker";
 
@@ -79,6 +80,9 @@ void CC1101Worker::init(SignalDetectedCallback detectedCb, SignalRecordedCallbac
     if (sdMutex == nullptr) {
         ESP_LOGE(TAG, "Failed to create SD mutex");
     }
+
+    // Initialize decoder pipeline
+    g_subghzCaptureManager.init();
 }
 
 // ISR and interrupt management functions (moved from Recorder.cpp)
@@ -658,7 +662,11 @@ bool CC1101Worker::detectSignal(int module, int minRssi, bool isBackground) {
 }
 
 void CC1101Worker::processRecording(int module) {
-    // Check if recording is complete
+    // Run the decoder pipeline (glitch filter → receiver → protocol decoders)
+    float rssi = static_cast<float>(moduleCC1101State[module].getRssi());
+    g_subghzCaptureManager.process(module, rssi);
+
+    // Continue existing RAW capture for backward compatibility
     checkAndSaveRecording(module);
 }
 

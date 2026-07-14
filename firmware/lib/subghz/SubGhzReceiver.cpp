@@ -106,6 +106,17 @@ SubGhzProtocolDecoderBase* SubGhzReceiver::getDecoderByName(const char* name) {
     return nullptr;
 }
 
+void* SubGhzReceiver::getDecoderInstance(const char* name) {
+    for (auto& slot : slots_) {
+        if (slot.base && slot.base->protocol_name &&
+            strcmp(slot.base->protocol_name, name) == 0)
+        {
+            return slot.instance;
+        }
+    }
+    return nullptr;
+}
+
 void SubGhzReceiver::onSlotDecoded(
     SubGhzProtocolDecoderBase* decoder, void* context)
 {

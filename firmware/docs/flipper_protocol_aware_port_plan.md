@@ -950,7 +950,10 @@ When porting, use these exact values. Do not adjust them:
 | 3.2 | CAME real-time feed() decoder | ✅ Done | `lib/subghz/protocols/CAMEDecoder.h/cpp` |
 | 3.3 | GateTX, Holtek, NiceFLO decoders | ✅ Done | `lib/subghz/protocols/GateTXDecoder.h/cpp, HoltekDecoder.h/cpp, NiceFloDecoder.h/cpp` |
 | 3.4 | Register all decoders in AllProtocols.h | ✅ Done | `lib/subghz/AllProtocols.h` |
-| 4.1–4.4 | Wire worker + ISR into decoder pipeline | ⬜ Pending | — |
-| 5.1–5.2 | RSSI threshold gate | ⬜ Pending | — |
-| 6.1–6.2 | Frequency hopper | ⬜ Pending | — |
+| 4.1–4.4 | Wire worker + ISR into decoder pipeline | ✅ Done | `SubGhzCaptureManager.h/cpp`, modified `CC1101_Worker.cpp` |
+| 5.1 | Build SubGhzThresholdRssi | ✅ Done | `SubGhzThresholdRssi.h/cpp` |
+| 5.2 | Integrate threshold into Read RAW | ✅ Done (via 0x70 KEY_THRESHOLD_RSSI) | `SubGhzConfigCommands.h` |
+| 6.1 | Build FrequencyHopper | ✅ Done | `FrequencyHopper.h/cpp` |
+| 6.2 | Hopper start/stop + freq list via BLE | ✅ Done (via 0x70 KEY_HOPPER_*) | `SubGhzConfigCommands.h` |
+| 8   | SubGhz config commands (0x70/0x71 key-value) | ✅ Done | `include/SubGhzConfigCommands.h`, modified `main.cpp` |
 | 7.1–7.2 | File output — save decoded keys | ⬜ Pending | — |
