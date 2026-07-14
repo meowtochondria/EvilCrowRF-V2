@@ -958,6 +958,10 @@ When porting, use these exact values. Do not adjust them:
 | 8   | SubGhz config commands (0x70/0x71 key-value) | ✅ Done | `include/SubGhzConfigCommands.h`, modified `main.cpp` |
 | 7.1–7.2 | File output — save decoded keys | ✅ Done | `SubGhzCaptureManager.cpp` — `onSignalDecoded` saves `.sub` file to SD |
 | 9       | Honeywell48 real-time decoder | ✅ Done | `protocols/Honeywell48/Honeywell48Decoder.h/cpp` |
+| 10.1    | Mobile app: config constants + command builders | ✅ Done | `mobile_app/lib/providers/firmware_protocol.dart` |
+| 10.2    | Mobile app: config response message type | ✅ Done | `mobile_app/lib/services/binary_message_parser.dart` |
+| 10.3    | HA integration: config command constants | ✅ Done | `hass/custom_components/evilcrow_rf/const.py` |
+| 10.4    | HA integration: command builder methods | ✅ Done | `hass/custom_components/evilcrow_rf/binary_protocol.py` |
 
 ---
 

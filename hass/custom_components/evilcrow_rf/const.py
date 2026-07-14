@@ -38,6 +38,19 @@ CMD_HA_CONFIG_SYNC = 0xD8  # Phase 5: ask device for its HA-assigned UUID (respo
 CMD_HA_SETTINGS_WRITE_SD = 0xDA  # Phase 5: write a key=value pair to /config/ on the SD card
 CMD_SMART_CONFIG = 0xDC  # Phase 5: put device into SmartConfig WiFi provisioning mode
 
+# SubGhz config commands (0x70-0x71) — Phase 8: key-value config
+CMD_SUBGHZ_SET_CONFIG = 0x70
+CMD_SUBGHZ_GET_CONFIG = 0x71
+
+# SubGhz config keys (mirrors firmware SubGhzConfigCommands.h)
+KEY_THRESHOLD_RSSI      = 0x01
+KEY_HOPPER_FREQS        = 0x02
+KEY_HOPPER_LINGER_RSSI  = 0x03
+KEY_HOPPER_LINGER_TICKS = 0x04
+KEY_HOPPER_ENABLED      = 0x05
+KEY_DECODER_FILTER      = 0x06
+KEY_DECODER_FILTER_RAW  = 0x07
+
 # Message types (response → app, 0x80+).
 RESP_SIGNAL_DETECTED = 0x90
 RESP_SIGNAL_RECORDED = 0x91

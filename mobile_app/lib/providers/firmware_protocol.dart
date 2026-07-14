@@ -125,6 +125,19 @@ class FirmwareBinaryProtocol {
   // HW Button configuration (0x40)
   static const int MSG_HW_BUTTON_CONFIG = 0x40;
 
+  // ── SubGhz Config Commands (0x70-0x71) ───────────────────────
+  static const int MSG_SUBGHZ_SET_CONFIG = 0x70;
+  static const int MSG_SUBGHZ_GET_CONFIG = 0x71;
+
+  // SubGhz config keys (mirrors firmware SubGhzConfigCommands.h)
+  static const int KEY_THRESHOLD_RSSI      = 0x01;
+  static const int KEY_HOPPER_FREQS        = 0x02;
+  static const int KEY_HOPPER_LINGER_RSSI  = 0x03;
+  static const int KEY_HOPPER_LINGER_TICKS = 0x04;
+  static const int KEY_HOPPER_ENABLED      = 0x05;
+  static const int KEY_DECODER_FILTER      = 0x06;
+  static const int KEY_DECODER_FILTER_RAW  = 0x07;
+
   // ── OTA Commands (0x30-0x35) ────────────────────────────────
   static const int MSG_OTA_BEGIN = 0x30;
   static const int MSG_OTA_DATA = 0x31;
@@ -1438,5 +1451,83 @@ class FirmwareBinaryProtocol {
   static Uint8List createPPListSavedCommand() {
     final payload = Uint8List.fromList([0x0B]);
     return _createEnhancedCommand(MSG_PROTOPIRATE, payload);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  SubGhz Config Commands (0x70-0x71)
+  // ═══════════════════════════════════════════════════════════
+
+  /// Create set config command (0x70)
+  /// Payload: [key:1][value:variable]
+  static Uint8List createSetConfigCommand(int key, Uint8List value) {
+    final payload = Uint8List(1 + value.length);
+    payload[0] = key;
+    for (int i = 0; i < value.length; i++) {
+      payload[1 + i] = value[i];
+    }
+    return _createEnhancedCommand(MSG_SUBGHZ_SET_CONFIG, payload);
+  }
+
+  /// Create get config command (0x71)
+  /// Payload: [key:1]
+  static Uint8List createGetConfigCommand(int key) {
+    return _createEnhancedCommand(MSG_SUBGHZ_GET_CONFIG,
+        Uint8List.fromList([key]));
+  }
+
+  /// Convenience: set RSSI threshold in dBm (-90 to -40)
+  static Uint8List createSetThresholdRssiCommand(int rssiDbm) {
+    return createSetConfigCommand(
+        KEY_THRESHOLD_RSSI, Uint8List.fromList([rssiDbm & 0xFF]));
+  }
+
+  /// Convenience: set hopper frequency list
+  /// [freqsKhz] List of frequencies in kHz
+  static Uint8List createSetHopperFreqsCommand(List<int> freqsKhz) {
+    final payload = Uint8List(1 + freqsKhz.length * 4);
+    payload[0] = freqsKhz.length;
+    for (int i = 0; i < freqsKhz.length; i++) {
+      final f = freqsKhz[i];
+      final off = 1 + i * 4;
+      payload[off]     = f & 0xFF;
+      payload[off + 1] = (f >> 8) & 0xFF;
+      payload[off + 2] = (f >> 16) & 0xFF;
+      payload[off + 3] = (f >> 24) & 0xFF;
+    }
+    return createSetConfigCommand(KEY_HOPPER_FREQS, payload);
+  }
+
+  /// Convenience: enable/disable hopper
+  static Uint8List createSetHopperEnabledCommand(bool enabled) {
+    return createSetConfigCommand(
+        KEY_HOPPER_ENABLED, Uint8List.fromList([enabled ? 1 : 0]));
+  }
+
+  /// Convenience: set decoder filter to RAW-only or decodable+binraw
+  static Uint8List createSetDecoderFilterRawCommand(bool rawOnly) {
+    return createSetConfigCommand(
+        KEY_DECODER_FILTER_RAW, Uint8List.fromList([rawOnly ? 1 : 0]));
+  }
+
+  /// Convenience: set decoder filter mask (full bitmask)
+  static Uint8List createSetDecoderFilterCommand(int mask) {
+    final payload = Uint8List(4);
+    payload[0] = mask & 0xFF;
+    payload[1] = (mask >> 8) & 0xFF;
+    payload[2] = (mask >> 16) & 0xFF;
+    payload[3] = (mask >> 24) & 0xFF;
+    return createSetConfigCommand(KEY_DECODER_FILTER, payload);
+  }
+
+  /// Convenience: set hopper linger RSSI threshold
+  static Uint8List createSetHopperLingerRssiCommand(int rssiDbm) {
+    return createSetConfigCommand(
+        KEY_HOPPER_LINGER_RSSI, Uint8List.fromList([rssiDbm & 0xFF]));
+  }
+
+  /// Convenience: set hopper linger ticks
+  static Uint8List createSetHopperLingerTicksCommand(int ticks) {
+    return createSetConfigCommand(
+        KEY_HOPPER_LINGER_TICKS, Uint8List.fromList([ticks & 0xFF]));
   }
 }

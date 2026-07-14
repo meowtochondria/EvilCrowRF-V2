@@ -310,6 +310,31 @@ class EvilCrowBinaryProtocol:
         """Ask the device for its HA-assigned UUID (CMD_HA_CONFIG_SYNC 0xD8)."""
         return self._build_single_frame(CMD_HA_CONFIG_SYNC)
 
+    # ---- SubGhz config commands (Phase 8: 0x70-0x71) ----
+
+    def build_subghz_set_config_command(self, key: int, value: bytes) -> list[bytes]:
+        """Set a subghz config key to the given value.
+
+        Payload format: [cmd:1B][key:uint8][value:variable]
+
+        Args:
+            key: Config key from const.KEY_* (e.g. KEY_THRESHOLD_RSSI)
+            value: Raw bytes of the config value (endian-coded as needed)
+        """
+        payload = struct.pack("B", key) + value
+        return self._build_chunked_frames(CMD_SUBGHZ_SET_CONFIG, payload)
+
+    def build_subghz_get_config_command(self, key: int) -> list[bytes]:
+        """Read a subghz config key from the device.
+
+        Payload format: [cmd:1B][key:uint8]
+
+        Response arrives asynchronously with type commandSuccess (0xF2)
+        and payload [key:1][value:variable]. The caller should correlate
+        the response via the pending request tracker.
+        """
+        return self._build_single_frame(CMD_SUBGHZ_GET_CONFIG, struct.pack("B", key))
+
     # ---- response parsing ----
 
     @staticmethod

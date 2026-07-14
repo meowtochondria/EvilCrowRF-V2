@@ -61,7 +61,8 @@ enum BinaryMessageType {
   error(0xF0),
   lowMemory(0xF1),
   commandSuccess(0xF2),
-  commandError(0xF3);
+  commandError(0xF3),
+  subGhzConfigValue(0xF4);  // Response to GET_CONFIG: [key:1][value:variable]
 
   final int value;
   const BinaryMessageType(this.value);
