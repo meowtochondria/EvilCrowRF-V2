@@ -3,8 +3,14 @@
 #include <FS.h>
 #include <cstring>
 #include <cstdio>
+#include <cmath>
 
 static const char* TAG = "PrincetonDecoder";
+
+/** Port of DURATION_DIFF from Flipper blocks/const.h. */
+static inline float duration_diff(float a, float b) {
+    return fabsf(a - b);
+}
 
 const SubGhzProtocolDecoderVTable princeton_decoder_vtable = {
     .alloc         = PrincetonDecoder::alloc,
@@ -23,12 +29,12 @@ const SubGhzProtocolDecoderVTable* PrincetonDecoder::vTable() {
 // ============================================================
 
 PrincetonDecoder::PrincetonDecoder()
-    : state_(WAIT_PREAMBLE)
-    , expected_bits_(DEFAULT_BITS)
+    : state_(StepReset)
+    , decode_data_(0)
+    , decode_count_bit_(0)
+    , last_data_(0)
     , te_(0)
-    , key_(0)
-    , bit_count_(0)
-    , last_high_dur_(0)
+    , te_last_(0)
 {
     memset(&base_, 0, sizeof(base_));
     base_.protocol_name = "Princeton";
@@ -48,25 +54,32 @@ void PrincetonDecoder::freeInstance(void* context) {
 void PrincetonDecoder::resetInstance(void* context) {
     auto* self = static_cast<PrincetonDecoder*>(context);
     if (!self) return;
-    self->state_ = WAIT_PREAMBLE;
-    self->te_ = 0;
-    self->key_ = 0;
-    self->bit_count_ = 0;
-    self->last_high_dur_ = 0;
+    self->state_           = StepReset;
+    self->decode_data_     = 0;
+    self->decode_count_bit_ = 0;
+    self->te_              = 0;
+    self->te_last_         = 0;
+    // Note: last_data_ is intentionally preserved across resetInstance()
+    // so that the "two consecutive frames with same key" check still works
+    // when the receiver fan-out resets us between frames (matches Flipper).
 }
 
 // ============================================================
-// feed() — real-time bit decoding
+// feed() — Princeton decoder state machine
 //
-// Princeton OOK encoding:
-//   Bit 0: HIGH for 1×TE, LOW for 3×TE
-//   Bit 1: HIGH for 3×TE, LOW for 1×TE
+// Ported from Flipper Zero lib/subghz/protocols/princeton.c
+// (subghz_protocol_decoder_princeton_feed).
 //
-// The decoder:
-//   1. WAIT_PREAMBLE — waits for a long HIGH (> 800 µs) to start
-//   2. WAIT_TE — measures the short LOW duration as TE
-//   3. DECODE_BITS — on each HIGH edge, compares HIGH duration to
-//      determine if it's a short (1×TE → bit 0) or long (3×TE → bit 1)
+// Princeton OOK encoding (Flipper constants):
+//   Bit 0: HIGH for 1×TE_SHORT, LOW for 1×TE_LONG  (HIGH short, LOW long)
+//   Bit 1: HIGH for 1×TE_LONG,  LOW for 1×TE_SHORT (HIGH long,  LOW short)
+//   Preamble: HIGH 36×TE followed by a guard LOW (~30×TE, decoder accepts
+//             any LOW within TE_SHORT*36 ± TE_DELTA*36, i.e. ~3.2–24.8 ms).
+//   End of frame: LOW ≥ 2×TE_LONG  (long guard, indicates frame is done).
+//
+// The callback only fires when a frame with MIN_COUNT_BIT bits matches the
+// previously decoded frame (last_data_ == decode_data_ && last_data_), which
+// is Flipper's repeat-confirmation guard.
 // ============================================================
 
 void PrincetonDecoder::feed(void* context, bool level, uint32_t duration_us) {
@@ -75,82 +88,110 @@ void PrincetonDecoder::feed(void* context, bool level, uint32_t duration_us) {
 
     switch (self->state_) {
 
-    case WAIT_PREAMBLE:
-        // Wait for a long HIGH pulse (preamble)
-        if (level && duration_us > PREAMBLE_MIN) {
-            self->state_ = WAIT_TE;
-            self->te_ = 0;
-            self->key_ = 0;
-            self->bit_count_ = 0;
-            self->last_high_dur_ = duration_us;
-            ESP_LOGD(TAG, "Preamble detected: %lu us", (unsigned long)duration_us);
+    case StepReset:
+        // Wait for the preamble guard LOW (~36×TE_SHORT, with very wide tolerance).
+        if ((!level) &&
+            (duration_diff(static_cast<float>(duration_us),
+                           static_cast<float>(TE_SHORT * PREAMBLE_GUARD_TE)) <
+             static_cast<float>(TE_DELTA * PREAMBLE_GUARD_TE))) {
+            ESP_LOGI(TAG, "Preamble guard detected: %lu us", (unsigned long)duration_us);
+            self->state_           = StepSaveDuration;
+            self->decode_data_     = 0;
+            self->decode_count_bit_ = 0;
+            self->te_              = 0;
         }
         break;
 
-    case WAIT_TE:
+    case StepSaveDuration:
+        // Wait for the HIGH half of a bit. Save its duration and accumulate
+        // it into the running TE total.
+        if (level) {
+            self->te_last_ = duration_us;
+            self->te_     += duration_us;
+            self->state_   = StepCheckDuration;
+        }
+        // HIGHs are unexpected here; stay in this state until we see one.
+        break;
+
+    case StepCheckDuration:
+        // Wait for the LOW half of a bit (or the end-of-frame guard LOW).
         if (!level) {
-            // LOW pulse — measure as potential TE
-            if (duration_us >= TE_MIN && duration_us <= TE_MAX) {
-                self->te_ = duration_us;
-                self->state_ = DECODE_BITS;
-                ESP_LOGD(TAG, "TE measured: %lu us", (unsigned long)self->te_);
+            // End-of-frame guard: LOW ≥ 2×TE_LONG. Finalise and fire callback
+            // if we have MIN_COUNT_BIT bits AND the previous frame matched.
+            if (duration_us >= (TE_LONG * 2)) {
+                if (self->decode_count_bit_ == MIN_COUNT_BIT) {
+                    if ((self->last_data_ == self->decode_data_) && self->last_data_) {
+                        // Repeat confirmed — fire callback.
+                        uint32_t avg_te = self->te_ /
+                            (self->decode_count_bit_ * 2 + 1);
+
+                        ESP_LOGI(TAG,
+                                 "Princeton decoded: key=0x%016llX, bits=%u, TE=%lu us",
+                                 (unsigned long long)self->decode_data_,
+                                 self->decode_count_bit_,
+                                 (unsigned long)avg_te);
+
+                        self->te_ = avg_te;
+
+                        if (self->base_.callback) {
+                            self->base_.callback(&self->base_,
+                                                 self->base_.callback_context);
+                        }
+                    } else {
+                        // First frame — prime last_data_ for repeat check.
+                        ESP_LOGI(TAG,
+                                 "Princeton frame decoded (waiting for repeat): "
+                                 "key=0x%016llX, bits=%u",
+                                 (unsigned long long)self->decode_data_,
+                                 self->decode_count_bit_);
+                    }
+                } else {
+                    ESP_LOGW(TAG,
+                             "Princeton end-of-frame with %u bits (expected %u) — resetting",
+                             self->decode_count_bit_, MIN_COUNT_BIT);
+                }
+
+                // Remember this frame for the next repeat check, then reset
+                // for the next frame's preamble guard.
+                self->last_data_        = self->decode_data_;
+                self->decode_data_      = 0;
+                self->decode_count_bit_ = 0;
+                self->te_               = 0;
+                self->state_            = StepSaveDuration;
+                break;
+            }
+
+            // Accumulate LOW into TE total.
+            self->te_ += duration_us;
+
+            // Classify the bit using BOTH the previous HIGH duration (te_last_)
+            // and the current LOW duration (duration_us).
+            if ((duration_diff(static_cast<float>(self->te_last_),
+                               static_cast<float>(TE_SHORT)) < TE_DELTA) &&
+                (duration_diff(static_cast<float>(duration_us),
+                               static_cast<float>(TE_LONG))  < (TE_DELTA * 3))) {
+                // bit 0: HIGH=short, LOW=long
+                self->decode_data_ = (self->decode_data_ << 1) | 0;
+                self->decode_count_bit_++;
+                self->state_ = StepSaveDuration;
+            } else if ((duration_diff(static_cast<float>(self->te_last_),
+                                      static_cast<float>(TE_LONG))  < (TE_DELTA * 3)) &&
+                       (duration_diff(static_cast<float>(duration_us),
+                                      static_cast<float>(TE_SHORT)) < TE_DELTA)) {
+                // bit 1: HIGH=long, LOW=short
+                self->decode_data_ = (self->decode_data_ << 1) | 1;
+                self->decode_count_bit_++;
+                self->state_ = StepSaveDuration;
             } else {
-                // Invalid TE — reset
-                self->state_ = WAIT_PREAMBLE;
+                // Pattern doesn't match either bit shape → reset.
+                ESP_LOGD(TAG,
+                         "Bit mismatch: te_last=%lu, duration=%lu → resetting",
+                         (unsigned long)self->te_last_, (unsigned long)duration_us);
+                self->state_ = StepReset;
             }
         } else {
-            // Unexpected HIGH in WAIT_TE — reset
-            self->state_ = WAIT_PREAMBLE;
-        }
-        break;
-
-    case DECODE_BITS:
-        if (level) {
-            // HIGH pulse — determine bit value based on duration
-            uint32_t te = self->te_;
-            float ratio = static_cast<float>(duration_us) / static_cast<float>(te);
-
-            // Short HIGH (≈1×TE) → bit 0
-            // Long HIGH (≈3×TE) → bit 1
-            if (ratio > 1.8f && ratio < 4.2f) {
-                // Long pulse → bit 1
-                self->key_ = (self->key_ << 1) | 1;
-                self->bit_count_++;
-            } else if (ratio > 0.2f && ratio < 1.8f) {
-                // Short pulse → bit 0
-                self->key_ = (self->key_ << 1);
-                self->bit_count_++;
-            }
-            // If ratio doesn't match either, skip this pulse (noise)
-
-            self->last_high_dur_ = duration_us;
-        }
-
-        // Check if we have decoded all expected bits
-        if (self->bit_count_ >= self->expected_bits_) {
-            self->state_ = DONE;
-
-            ESP_LOGI(TAG, "Princeton decoded: key=0x%08llX, bits=%u, TE=%lu us",
-                     (unsigned long long)self->key_,
-                     self->bit_count_,
-                     (unsigned long)self->te_);
-
-            // Fire callback
-            if (self->base_.callback) {
-                self->base_.callback(&self->base_, self->base_.callback_context);
-            }
-        }
-        break;
-
-    case DONE:
-        // Already decoded one frame; if callback is still set, a new frame
-        // might restart the process. For simplicity, just reset on long HIGH.
-        if (level && duration_us > PREAMBLE_MIN) {
-            self->state_ = WAIT_TE;
-            self->te_ = 0;
-            self->key_ = 0;
-            self->bit_count_ = 0;
-            self->last_high_dur_ = duration_us;
+            // Got a HIGH where we expected a LOW → reset.
+            self->state_ = StepReset;
         }
         break;
     }
@@ -160,12 +201,12 @@ void PrincetonDecoder::feed(void* context, bool level, uint32_t duration_us) {
 
 uint8_t PrincetonDecoder::getHashData(void* context) {
     auto* self = static_cast<PrincetonDecoder*>(context);
-    if (!self || self->key_ == 0) return 0;
+    if (!self || self->decode_data_ == 0) return 0;
 
     uint8_t hash = 0;
     uint8_t bytes[8];
     for (size_t i = 0; i < sizeof(bytes); i++) {
-        bytes[i] = (self->key_ >> (i * 8)) & 0xFF;
+        bytes[i] = (self->decode_data_ >> (i * 8)) & 0xFF;
         hash += bytes[i];
     }
     return hash;
@@ -173,16 +214,15 @@ uint8_t PrincetonDecoder::getHashData(void* context) {
 
 void PrincetonDecoder::serialize(void* context, fs::File& file) {
     auto* self = static_cast<PrincetonDecoder*>(context);
-    if (!self || self->key_ == 0) return;
+    if (!self || self->decode_data_ == 0) return;
 
     file.print("Protocol: Princeton\n");
     file.print("Bit: ");
-    file.print(self->bit_count_);
+    file.print(self->decode_count_bit_);
     file.print("\n");
     file.print("Key: ");
-    // Print as hex
     char hex[17];
-    snprintf(hex, sizeof(hex), "%016llX", (unsigned long long)self->key_);
+    snprintf(hex, sizeof(hex), "%016llX", (unsigned long long)self->decode_data_);
     file.print(hex);
     file.print("\n");
     file.print("TE: ");

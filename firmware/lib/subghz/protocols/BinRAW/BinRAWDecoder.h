@@ -127,12 +127,16 @@ public:
 private:
     friend class SubGhzProtocolDecoderBinRAWTest;  // for unit testing
 
+    // SubGhzProtocolDecoderBase MUST be the first member so that a
+    // SubGhzProtocolDecoderBase* cast of the decoder instance is valid
+    // (matches the Flipper Zero pattern in lib/subghz/protocols/base.h).
+    SubGhzProtocolDecoderBase base_;
+
     // ---- Private state ----
     int32_t* data_raw_;            ///< [BIN_RAW_BUF_RAW_SIZE] raw samples (±duration in µs)
     uint8_t* data_;                ///< [BIN_RAW_BUF_RAW_SIZE] decoded bits
     BinRAWMarkup data_markup_[BIN_RAW_MAX_MARKUP_COUNT];
     size_t data_raw_ind_;          ///< Current write index into data_raw_
-    SubGhzProtocolDecoderBase base_;
 
     // ---- Private constructor/destructor ----
     SubGhzProtocolDecoderBinRAW();

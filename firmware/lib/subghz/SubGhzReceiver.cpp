@@ -16,9 +16,8 @@ SubGhzReceiver::~SubGhzReceiver() {
         if (slot.vtable && slot.vtable->free && slot.instance) {
             slot.vtable->free(slot.instance);
         }
-        if (slot.base) {
-            delete slot.base;
-        }
+        // Note: slot.base is not separately allocated — it lives at offset 0
+        // of the decoder instance and is freed by vtable->free() above.
     }
     slots_.clear();
 }
@@ -40,8 +39,14 @@ void SubGhzReceiver::registerDecoder(
         return;
     }
 
-    // Allocate the base struct
-    SubGhzProtocolDecoderBase* base = new SubGhzProtocolDecoderBase();
+    // The decoder's SubGhzProtocolDecoderBase MUST be the first member
+    // (declared at offset 0 in the decoder class). This is the Flipper
+    // Zero pattern from lib/subghz/protocols/base.h. With this layout,
+    // a cast of the instance pointer to SubGhzProtocolDecoderBase* is
+    // valid and points at the decoder's embedded base struct, which
+    // is where the decoder's feed() reads `base_.callback` from.
+    SubGhzProtocolDecoderBase* base =
+        static_cast<SubGhzProtocolDecoderBase*>(instance);
     base->protocol_name    = name;
     base->flag             = flag;
     base->callback         = nullptr;

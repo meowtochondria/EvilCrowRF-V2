@@ -8,12 +8,12 @@
 /**
  * Honeywell48Decoder — real-time feed() decoder for Honeywell 48-bit protocol.
  *
- * Honeywell 48-bit OOK encoding:
- *   Bit 0: HIGH for 1×TE, LOW for 3×TE
- *   Bit 1: HIGH for 3×TE, LOW for 1×TE
- *
- * Frame: 48-bit key with Manchester-like encoding.
- * Preamble: 12×TE HIGH + 4×TE LOW.
+ * Matches the Flipper Zero honeywell_wdb implementation:
+ *   Bit 0: HIGH=te_short, LOW=te_long
+ *   Bit 1: HIGH=te_long,  LOW=te_short
+ *   Frame start: LOW pulse ~3*te_short
+ *   Frame end:   HIGH pulse ~3*te_short
+ *   Parity: LSB of decode_data == parity(decode_data >> 1, 47)
  */
 class Honeywell48Decoder {
 public:
@@ -37,25 +37,26 @@ private:
     ~Honeywell48Decoder();
 
     enum State : uint8_t {
-        WAIT_PREAMBLE,
-        WAIT_TE,
-        DECODE_BITS,
-        DONE
+        StepReset,
+        StepSaveDuration,
+        StepCheckDuration,
     };
 
-    State state_;
+    // SubGhzProtocolDecoderBase MUST be the first member so that a
+    // SubGhzProtocolDecoderBase* cast of the decoder instance is valid
+    // (matches the Flipper Zero pattern in lib/subghz/protocols/base.h).
     SubGhzProtocolDecoderBase base_;
 
-    uint32_t te_;
-    uint64_t key_;
-    uint8_t bit_count_;
-    uint32_t last_high_dur_;
+    State state_;
+    uint64_t decode_data_;
+    uint8_t decode_count_bit_;
+    uint32_t te_last_;
 
-    static constexpr float TE_TOLERANCE = 0.40f;
-    static constexpr uint32_t TE_MIN = 100;
-    static constexpr uint32_t TE_MAX = 2000;
-    static constexpr uint8_t EXPECTED_BITS = 48;
-    static constexpr uint32_t PREAMBLE_MIN = 3000;  // 12×TE at 500us = 6000us
+    static constexpr uint32_t TE_SHORT = 160;
+    static constexpr uint32_t TE_LONG = 320;
+    static constexpr uint32_t TE_DELTA = 60;
+    static constexpr uint8_t MIN_COUNT_BIT = 48;
+    static constexpr uint32_t PREAMBLE_GUARD_TE = 3;
 };
 
 extern const SubGhzProtocolDecoderVTable honeywell48_decoder_vtable;

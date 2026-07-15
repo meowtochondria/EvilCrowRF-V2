@@ -1,10 +1,15 @@
 #include "NiceFloDecoder.h"
 #include "esp_log.h"
 #include <FS.h>
+#include <cmath>
 #include <cstring>
 #include <cstdio>
 
 static const char* TAG = "NiceFloDecoder";
+
+static inline float duration_diff(float a, float b) {
+    return fabsf(a - b);
+}
 
 const SubGhzProtocolDecoderVTable niceflo_decoder_vtable = {
     .alloc = NiceFloDecoder::alloc, .free = NiceFloDecoder::freeInstance,
@@ -16,8 +21,7 @@ const SubGhzProtocolDecoderVTable niceflo_decoder_vtable = {
 const SubGhzProtocolDecoderVTable* NiceFloDecoder::vTable() { return &niceflo_decoder_vtable; }
 
 NiceFloDecoder::NiceFloDecoder()
-    : state_(WAIT_PREAMBLE), te_(0), key_(0), bit_count_(0),
-      expected_bits_(DEFAULT_BITS), last_high_dur_(0)
+    : state_(StepReset), decode_data_(0), decode_count_bit_(0), te_last_(0)
 {
     memset(&base_, 0, sizeof(base_));
     base_.protocol_name = "Nice FLO";
@@ -31,50 +35,84 @@ void NiceFloDecoder::freeInstance(void* context) { delete static_cast<NiceFloDec
 void NiceFloDecoder::resetInstance(void* context) {
     auto* self = static_cast<NiceFloDecoder*>(context);
     if (!self) return;
-    self->state_ = WAIT_PREAMBLE; self->te_ = 0; self->key_ = 0;
-    self->bit_count_ = 0; self->last_high_dur_ = 0;
+    self->state_ = StepReset;
+    self->decode_data_ = 0;
+    self->decode_count_bit_ = 0;
+    self->te_last_ = 0;
 }
 
 void NiceFloDecoder::feed(void* context, bool level, uint32_t duration_us) {
     auto* self = static_cast<NiceFloDecoder*>(context);
     if (!self) return;
 
+    float duration = (float)duration_us;
+
     switch (self->state_) {
-    case WAIT_PREAMBLE:
-        if (level && duration_us > PREAMBLE_MIN) {
-            self->state_ = WAIT_TE; self->te_ = 0; self->key_ = 0;
-            self->bit_count_ = 0; self->last_high_dur_ = duration_us;
+    case StepReset:
+        if (!level &&
+            duration_diff(duration, (float)(TE_SHORT * PREAMBLE_GUARD_TE)) <
+                (float)(TE_DELTA * PREAMBLE_GUARD_TE)) {
+            // Found header Nice Flo
+            ESP_LOGI(TAG, "Preamble detected");
+            self->state_ = StepFoundStartBit;
         }
         break;
-    case WAIT_TE:
-        if (!level && duration_us >= TE_MIN && duration_us <= TE_MAX) {
-            self->te_ = duration_us;
-            self->state_ = DECODE_BITS;
-        } else if (level) { self->state_ = WAIT_PREAMBLE; }
+    case StepFoundStartBit:
+        if (!level) {
+            break;
+        } else if (duration_diff(duration, (float)TE_SHORT) < (float)TE_DELTA) {
+            // Found start bit Nice Flo
+            self->state_ = StepSaveDuration;
+            self->decode_data_ = 0;
+            self->decode_count_bit_ = 0;
+        } else {
+            self->state_ = StepReset;
+        }
         break;
-    case DECODE_BITS:
-        if (level) {
-            // Nice FLO asymmetric: bit 0 = 1×TE high, bit 1 = 3×TE high
-            float ratio = (float)duration_us / (float)self->te_;
-            if (ratio > 1.8f && ratio < 4.2f) {
-                self->key_ = (self->key_ << 1) | 1; self->bit_count_++;
-            } else if (ratio > 0.2f && ratio < 1.8f) {
-                self->key_ = (self->key_ << 1); self->bit_count_++;
+    case StepSaveDuration:
+        if (!level) { // save interval
+            if (duration >= (float)(TE_SHORT * 4)) {
+                // end of frame
+                self->state_ = StepFoundStartBit;
+                if (self->decode_count_bit_ >= MIN_COUNT_BIT) {
+                    ESP_LOGI(TAG,
+                             "Nice FLO decoded: key=0x%08llX, bits=%u",
+                             (unsigned long long)self->decode_data_,
+                             self->decode_count_bit_);
+                    if (self->base_.callback)
+                        self->base_.callback(&self->base_, self->base_.callback_context);
+                } else {
+                    ESP_LOGW(TAG,
+                             "Wrong bit count: %u (need >= %u)",
+                             self->decode_count_bit_, MIN_COUNT_BIT);
+                }
+                break;
             }
-            self->last_high_dur_ = duration_us;
-        }
-        if (self->bit_count_ >= self->expected_bits_) {
-            self->state_ = DONE;
-            ESP_LOGI(TAG, "NiceFLO decoded: key=0x%08llX, bits=%u",
-                     (unsigned long long)self->key_, self->bit_count_);
-            if (self->base_.callback)
-                self->base_.callback(&self->base_, self->base_.callback_context);
+            self->te_last_ = duration_us;
+            self->state_ = StepCheckDuration;
+        } else {
+            self->state_ = StepReset;
         }
         break;
-    case DONE:
-        if (level && duration_us > PREAMBLE_MIN) {
-            resetInstance(self);
-            self->last_high_dur_ = duration_us; self->state_ = WAIT_TE;
+    case StepCheckDuration:
+        if (level) {
+            if (duration_diff((float)self->te_last_, (float)TE_SHORT) < (float)TE_DELTA &&
+                duration_diff(duration, (float)TE_LONG) < (float)TE_DELTA) {
+                // bit 0: LOW=te_short, HIGH=te_long
+                self->decode_data_ = (self->decode_data_ << 1) | 0;
+                self->decode_count_bit_++;
+                self->state_ = StepSaveDuration;
+            } else if (duration_diff((float)self->te_last_, (float)TE_LONG) < (float)TE_DELTA &&
+                       duration_diff(duration, (float)TE_SHORT) < (float)TE_DELTA) {
+                // bit 1: LOW=te_long, HIGH=te_short
+                self->decode_data_ = (self->decode_data_ << 1) | 1;
+                self->decode_count_bit_++;
+                self->state_ = StepSaveDuration;
+            } else {
+                self->state_ = StepReset;
+            }
+        } else {
+            self->state_ = StepReset;
         }
         break;
     }
@@ -82,24 +120,25 @@ void NiceFloDecoder::feed(void* context, bool level, uint32_t duration_us) {
 
 uint8_t NiceFloDecoder::getHashData(void* context) {
     auto* self = static_cast<NiceFloDecoder*>(context);
-    if (!self || self->key_ == 0) return 0;
+    if (!self || self->decode_data_ == 0) return 0;
     uint8_t hash = 0;
-    for (size_t i = 0; i < 8; i++) hash += (self->key_ >> (i * 8)) & 0xFF;
+    uint8_t bytes = (self->decode_count_bit_ / 8) + 1;
+    for (size_t i = 0; i < bytes; i++) {
+        hash += (self->decode_data_ >> (i * 8)) & 0xFF;
+    }
     return hash;
 }
 
 void NiceFloDecoder::serialize(void* context, fs::File& file) {
     auto* self = static_cast<NiceFloDecoder*>(context);
-    if (!self || self->key_ == 0) return;
+    if (!self || self->decode_data_ == 0) return;
     file.print("Protocol: Nice FLO\n");
-    file.print("Bit: "); file.print(self->bit_count_); file.print("\n");
-    file.print("Button: ");
-    char hex[17]; snprintf(hex, sizeof(hex), "%04X", (unsigned)(self->key_ & 0xF));
+    file.print("Bit: "); file.print(self->decode_count_bit_); file.print("\n");
+    file.print("Key: ");
+    char hex[17];
+    snprintf(hex, sizeof(hex), "%016llX", (unsigned long long)self->decode_data_);
     file.print(hex); file.print("\n");
-    file.print("Serial: ");
-    snprintf(hex, sizeof(hex), "%016llX", (unsigned long long)(self->key_ >> 4));
-    file.print(hex); file.print("\n");
-    file.print("TE: "); file.print(self->te_); file.print("\n");
+    file.print("TE: "); file.print(TE_SHORT); file.print("\n");
     file.print("Repeat: 1\n");
 }
 

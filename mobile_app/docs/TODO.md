@@ -1,1 +1,2 @@
 * Considering we are now also adding Home Assistant integration, its possible that one of the modules is already being used when the phone connects. Ensure that app respects this state and shows the right status instead of changing status of device on connection.
+* After hitting 'stop recording' in 'SubGHz' section in app, it takes 10 secs for the selected module to not be busy. Might be something in firmware as well.

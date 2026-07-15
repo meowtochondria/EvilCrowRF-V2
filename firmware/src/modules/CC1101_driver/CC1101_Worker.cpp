@@ -92,9 +92,22 @@ void CC1101Worker::receiver(void* arg)
     receiveSample(module);
 }
 
+// ISR-edge counters for diagnostics (logged from worker thread).
+// Declared at file scope so the worker task can read them.
+static volatile uint32_t isrEdgeCount[CC1101_NUM_MODULES] = {0, 0};
+static volatile uint32_t isrPushFailCount[CC1101_NUM_MODULES] = {0, 0};
+
 void CC1101Worker::receiveSample(int module)
 {
     const unsigned long time = micros();
+
+    // Read the ACTUAL pin level (the ISR fires on CHANGE — both rising and
+    // falling edges). Reading the pin directly avoids the level-inversion bug
+    // that occurs when noise edges precede the real signal and throw off a
+    // software-toggled level tracker.
+    int pin = moduleCC1101State[module].getInputPin();
+    bool currentLevel = digitalRead(pin) == HIGH;
+
     portENTER_CRITICAL_ISR(&CC1101Worker::samplesMuxes[module]);
     ReceivedSamples &data = getReceivedData(module);
 
@@ -115,6 +128,8 @@ void CC1101Worker::receiveSample(int module)
             // Note: ESP_LOG cannot be used in ISR, so we'll track this differently
         }
         data.samples.clear();
+        // Signal the capture manager that the previous frame is over.
+        g_subghzCaptureManager.isrSignalOverrun(module);
         portEXIT_CRITICAL_ISR(&CC1101Worker::samplesMuxes[module]);
         return;
     }
@@ -130,6 +145,16 @@ void CC1101Worker::receiveSample(int module)
         // Track rejected samples for debugging
         static volatile int rejectedCount[2] = {0, 0};
         rejectedCount[module] = rejectedCount[module] + 1;  // Avoid deprecated volatile++
+    }
+
+    // Push the level/duration pair to the real-time decoder pipeline.
+    // isrPush() is IRAM_ATTR-safe (uses xStreamBufferSendFromISR).
+    bool pushed = g_subghzCaptureManager.isrPush(module, currentLevel,
+                                                 static_cast<uint32_t>(duration));
+    if (pushed) {
+        isrEdgeCount[module] = isrEdgeCount[module] + 1;
+    } else {
+        isrPushFailCount[module] = isrPushFailCount[module] + 1;
     }
 
     portEXIT_CRITICAL_ISR(&CC1101Worker::samplesMuxes[module]);
@@ -215,6 +240,11 @@ void CC1101Worker::workerTask(void* parameter) {
             if (stackHighWaterMark < 1024) {
                 ESP_LOGW(TAG, "Low stack: %d bytes remaining", stackHighWaterMark * sizeof(StackType_t));
             }
+
+            // Log ISR edge counts for the decoder pipeline diagnostics.
+            ESP_LOGI(TAG, "ISR edges: m0=%lu m1=%lu | push fails: m0=%lu m1=%lu",
+                     (unsigned long)isrEdgeCount[0], (unsigned long)isrEdgeCount[1],
+                     (unsigned long)isrPushFailCount[0], (unsigned long)isrPushFailCount[1]);
         }
 
         // Periodic heap health check (every ~60 s)
@@ -662,12 +692,12 @@ bool CC1101Worker::detectSignal(int module, int minRssi, bool isBackground) {
 }
 
 void CC1101Worker::processRecording(int module) {
-    // Run the decoder pipeline (glitch filter → receiver → protocol decoders)
+    // Drain the real-time decoder pipeline (glitch filter → receiver →
+    // protocol decoders). Each decoder's callback fires onSignalDecoded
+    // which writes the decoded .sub file to SD. The legacy RAW post-capture
+    // decode path has been removed — the new pipeline handles all saving.
     float rssi = static_cast<float>(moduleCC1101State[module].getRssi());
     g_subghzCaptureManager.process(module, rssi);
-
-    // Continue existing RAW capture for backward compatibility
-    checkAndSaveRecording(module);
 }
 
 void CC1101Worker::checkAndSaveRecording(int module) {

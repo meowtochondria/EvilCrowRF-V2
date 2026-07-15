@@ -1,10 +1,18 @@
 #include "CAMEDecoder.h"
 #include "esp_log.h"
 #include <FS.h>
+#include <cmath>
 #include <cstring>
 #include <cstdio>
 
 static const char* TAG = "CAMEDecoder";
+
+// Local helper mirroring Flipper's DURATION_DIFF macro, but using
+// floating-point math so the comparisons in feed() match the reference
+// implementation exactly.
+static inline float duration_diff(float a, float b) {
+    return fabsf(a - b);
+}
 
 const SubGhzProtocolDecoderVTable came_decoder_vtable = {
     .alloc         = CAMEDecoder::alloc,
@@ -21,13 +29,10 @@ const SubGhzProtocolDecoderVTable* CAMEDecoder::vTable() {
 }
 
 CAMEDecoder::CAMEDecoder()
-    : state_(WAIT_PREAMBLE)
-    , te_(0)
-    , key_(0)
-    , bit_count_(0)
-    , expected_bits_(DEFAULT_BITS)
-    , last_high_dur_(0)
-    , expected_preamble_min_(1200)
+    : state_(StepReset)
+    , decode_data_(0)
+    , decode_count_bit_(0)
+    , te_last_(0)
 {
     memset(&base_, 0, sizeof(base_));
     base_.protocol_name = "CAME";
@@ -42,72 +47,101 @@ void CAMEDecoder::freeInstance(void* context) { delete static_cast<CAMEDecoder*>
 void CAMEDecoder::resetInstance(void* context) {
     auto* self = static_cast<CAMEDecoder*>(context);
     if (!self) return;
-    self->state_ = WAIT_PREAMBLE;
-    self->te_ = 0;
-    self->key_ = 0;
-    self->bit_count_ = 0;
-    self->last_high_dur_ = 0;
+    self->state_ = StepReset;
+    self->decode_data_ = 0;
+    self->decode_count_bit_ = 0;
+    self->te_last_ = 0;
 }
 
 void CAMEDecoder::feed(void* context, bool level, uint32_t duration_us) {
     auto* self = static_cast<CAMEDecoder*>(context);
     if (!self) return;
 
+    const float duration = static_cast<float>(duration_us);
+
     switch (self->state_) {
 
-    case WAIT_PREAMBLE:
-        // Look for a long HIGH that starts the preamble (≥ 4×TE typical)
-        if (level && duration_us > self->expected_preamble_min_) {
-            self->state_ = WAIT_TE;
-            self->te_ = 0;
-            self->key_ = 0;
-            self->bit_count_ = 0;
-            self->last_high_dur_ = duration_us;
+    case StepReset:
+        // Wait for a long LOW (~te_short * 56 us) that marks the CAME preamble.
+        if (!level &&
+            duration_diff(duration, static_cast<float>(TE_SHORT * PREAMBLE_GUARD_TE)) <
+                static_cast<float>(TE_DELTA * 63)) {
+            ESP_LOGI(TAG, "CAME preamble detected (low=%lu us)", (unsigned long)duration_us);
+            self->state_ = StepFoundStartBit;
         }
         break;
 
-    case WAIT_TE:
-        if (!level && duration_us >= TE_MIN && duration_us <= TE_MAX) {
-            // First LOW after preamble — measure as TE
-            self->te_ = duration_us;
-            self->state_ = DECODE_BITS;
-        } else if (level) {
-            self->state_ = WAIT_PREAMBLE;
+    case StepFoundStartBit:
+        if (!level) {
+            // Stay here until we see the start bit.
+            break;
+        } else if (duration_diff(duration, static_cast<float>(TE_SHORT)) <
+                   static_cast<float>(TE_DELTA)) {
+            // Found start bit: a HIGH of ~te_short us.
+            self->decode_data_ = 0;
+            self->decode_count_bit_ = 0;
+            self->state_ = StepSaveDuration;
+        } else {
+            self->state_ = StepReset;
         }
         break;
 
-    case DECODE_BITS:
-        if (level) {
-            // CAME: bit 0 = short high (1×TE), bit 1 = long high (3×TE)
-            float ratio = static_cast<float>(duration_us) / static_cast<float>(self->te_);
-
-            if (ratio > 1.8f && ratio < 4.2f) {
-                // Long HIGH → bit 1
-                self->key_ = (self->key_ << 1) | 1;
-                self->bit_count_++;
-            } else if (ratio > 0.2f && ratio < 1.8f) {
-                // Short HIGH → bit 0
-                self->key_ = (self->key_ << 1);
-                self->bit_count_++;
+    case StepSaveDuration:
+        if (!level) {
+            // Save the LOW interval; if it is long enough, the frame is over.
+            if (duration >= static_cast<float>(TE_SHORT * 4)) {
+                if (self->decode_count_bit_ == MIN_COUNT_BIT ||
+                    self->decode_count_bit_ == AIRFORCE_COUNT_BIT ||
+                    self->decode_count_bit_ == CAME_24_COUNT_BIT ||
+                    self->decode_count_bit_ == PRASTEL_25_COUNT_BIT ||
+                    self->decode_count_bit_ == PRASTEL_42_COUNT_BIT) {
+                    ESP_LOGI(TAG,
+                             "CAME frame complete: key=0x%llX, bits=%u",
+                             (unsigned long long)self->decode_data_,
+                             self->decode_count_bit_);
+                    if (self->base_.callback)
+                        self->base_.callback(&self->base_, self->base_.callback_context);
+                } else if (self->decode_count_bit_ != 0) {
+                    ESP_LOGW(TAG,
+                             "CAME frame rejected: wrong bit count=%u",
+                             self->decode_count_bit_);
+                }
+                self->decode_data_ = 0;
+                self->decode_count_bit_ = 0;
+                self->state_ = StepFoundStartBit;
+                break;
             }
-            self->last_high_dur_ = duration_us;
-        }
-
-        if (self->bit_count_ >= self->expected_bits_) {
-            self->state_ = DONE;
-            ESP_LOGI(TAG, "CAME decoded: key=0x%08llX, bits=%u, TE=%lu us",
-                     (unsigned long long)self->key_, self->bit_count_,
-                     (unsigned long)self->te_);
-            if (self->base_.callback)
-                self->base_.callback(&self->base_, self->base_.callback_context);
+            self->te_last_ = duration_us;
+            self->state_ = StepCheckDuration;
+        } else {
+            self->state_ = StepReset;
         }
         break;
 
-    case DONE:
-        if (level && duration_us > self->expected_preamble_min_) {
-            resetInstance(self);
-            self->last_high_dur_ = duration_us;
-            self->state_ = WAIT_TE;
+    case StepCheckDuration:
+        if (level) {
+            // Bit 0: te_last≈te_short && duration≈te_long
+            // Bit 1: te_last≈te_long  && duration≈te_short
+            if (duration_diff(static_cast<float>(self->te_last_), static_cast<float>(TE_SHORT)) <
+                    static_cast<float>(TE_DELTA) &&
+                duration_diff(duration, static_cast<float>(TE_LONG)) <
+                    static_cast<float>(TE_DELTA)) {
+                self->decode_data_ = (self->decode_data_ << 1) | 0;
+                self->decode_count_bit_++;
+                self->state_ = StepSaveDuration;
+            } else if (
+                duration_diff(static_cast<float>(self->te_last_), static_cast<float>(TE_LONG)) <
+                    static_cast<float>(TE_DELTA) &&
+                duration_diff(duration, static_cast<float>(TE_SHORT)) <
+                    static_cast<float>(TE_DELTA)) {
+                self->decode_data_ = (self->decode_data_ << 1) | 1;
+                self->decode_count_bit_++;
+                self->state_ = StepSaveDuration;
+            } else {
+                self->state_ = StepReset;
+            }
+        } else {
+            self->state_ = StepReset;
         }
         break;
     }
@@ -115,28 +149,25 @@ void CAMEDecoder::feed(void* context, bool level, uint32_t duration_us) {
 
 uint8_t CAMEDecoder::getHashData(void* context) {
     auto* self = static_cast<CAMEDecoder*>(context);
-    if (!self || self->key_ == 0) return 0;
+    if (!self || self->decode_data_ == 0) return 0;
     uint8_t hash = 0;
     for (size_t i = 0; i < 8; i++)
-        hash += (self->key_ >> (i * 8)) & 0xFF;
+        hash += (self->decode_data_ >> (i * 8)) & 0xFF;
     return hash;
 }
 
 void CAMEDecoder::serialize(void* context, fs::File& file) {
     auto* self = static_cast<CAMEDecoder*>(context);
-    if (!self || self->key_ == 0) return;
+    if (!self || self->decode_data_ == 0) return;
+    char line[64];
     file.print("Protocol: CAME\n");
     file.print("Bit: ");
-    file.print(self->bit_count_);
-    file.print("\nButton: ");
-    char hex[17];
-    snprintf(hex, sizeof(hex), "%04X", (unsigned)(self->key_ & 0xF));
-    file.print(hex);
-    file.print("\nSerial: ");
-    snprintf(hex, sizeof(hex), "%016llX", (unsigned long long)(self->key_ >> 4));
-    file.print(hex);
+    file.print(self->decode_count_bit_);
+    file.print("\nKey: ");
+    snprintf(line, sizeof(line), "%llX", (unsigned long long)self->decode_data_);
+    file.print(line);
     file.print("\nTE: ");
-    file.print(self->te_);
+    file.print(TE_SHORT);
     file.print("\nRepeat: 1\n");
 }
 

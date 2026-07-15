@@ -8,13 +8,23 @@
 /**
  * PrincetonDecoder — real-time feed() decoder for Princeton protocol.
  *
- * Decodes Princeton-style OOK/ASK remote signals:
- *   - Short HIGH pulse = short LOW pulse  → bit 0  (1×TE high, 1×TE low, but
- *     actually Princeton uses: short = TE high + 3×TE low = bit 0,
- *     long = 3×TE high + TE low = bit 1)
+ * Ported from Flipper Zero lib/subghz/protocols/princeton.c.
  *
- * The decoder detects the preamble (long HIGH > 1000 µs), measures TE,
- * then decodes bits until all expected bits are captured.
+ * Princeton is OOK with the following encoding:
+ *   Bit 0: HIGH for 1×TE, LOW for 3×TE
+ *   Bit 1: HIGH for 3×TE, LOW for 1×TE
+ *   Preamble: HIGH for 36×TE followed by a guard LOW (~30×TE).
+ *   Frame ends with a long LOW guard (>= 2×TE_long).
+ *
+ * State machine (matches Flipper):
+ *   StepReset        — wait for a long LOW (~36×TE) marking the preamble guard.
+ *   StepSaveDuration — wait for HIGH; save its duration as te_last and accumulate.
+ *   StepCheckDuration — wait for LOW; if long enough → end of frame, else
+ *                       classify the bit by comparing te_last (HIGH) and current
+ *                       (LOW) against te_short/te_long.
+ *
+ * The callback only fires when two consecutive frames decode to the same key,
+ * mirroring Flipper's `last_data == decode_data && last_data` guard.
  */
 class PrincetonDecoder {
 public:
@@ -62,34 +72,36 @@ private:
     PrincetonDecoder();
     ~PrincetonDecoder();
 
+    // SubGhzProtocolDecoderBase MUST be the first member so that a
+    // SubGhzProtocolDecoderBase* cast of the decoder instance is valid
+    // (matches the Flipper Zero pattern in lib/subghz/protocols/base.h).
+    SubGhzProtocolDecoderBase base_;
+
     enum State : uint8_t {
-        WAIT_PREAMBLE,  ///< Waiting for long HIGH preamble
-        WAIT_TE,        ///< Measuring TE from first low-high edge
-        DECODE_BITS,    ///< Decoding bits
-        DONE            ///< Frame complete
+        StepReset,           ///< Waiting for preamble guard LOW.
+        StepSaveDuration,    ///< Saving HIGH duration of next bit.
+        StepCheckDuration,   ///< Classifying bit from HIGH+LOW pair, or end-of-frame.
     };
 
     State state_;
-    SubGhzProtocolDecoderBase base_;
 
-    // Configuration
-    uint8_t expected_bits_;  ///< Number of bits to decode (default 24)
-    uint32_t te_;            ///< Measured timing element in µs
+    // ---- Decoded data (mirrors Flipper's SubGhzBlockDecoder + SubGhzBlockGeneric) ----
+    uint64_t decode_data_;     ///< Accumulated key bits (shifted in MSB-first).
+    uint8_t  decode_count_bit_; ///< Bits decoded in the current frame.
 
-    // Decoding state
-    uint64_t key_;           ///< Accumulated decoded key
-    uint8_t bit_count_;      ///< Bits decoded so far
-    uint32_t last_high_dur_; ///< Duration of the last HIGH pulse (for bit decoding)
+    uint64_t last_data_;       ///< Previous frame's key — required to confirm a repeat.
+    uint32_t te_;              ///< Running sum of pulse durations (used to compute avg TE).
+    uint32_t te_last_;         ///< Duration of the most recent HIGH pulse (for bit classification).
 
-    // Timing tolerance
-    static constexpr float TE_TOLERANCE = 0.40f;   ///< ±40% tolerance for pulse matching
-    static constexpr uint32_t PREAMBLE_MIN = 800;   ///< Minimum preamble HIGH (µs)
-    static constexpr uint32_t TE_MIN = 100;          ///< Minimum valid TE (µs)
-    static constexpr uint32_t TE_MAX = 1500;         ///< Maximum valid TE (µs)
-    static constexpr uint8_t DEFAULT_BITS = 24;      ///< Default Princeton bit count
-};
+    // ---- Flipper protocol constants (lib/subghz/protocols/princeton.c) ----
+    static constexpr uint32_t TE_SHORT           = 390;  ///< Short pulse (1×TE) — µs
+    static constexpr uint32_t TE_LONG            = 1170; ///< Long pulse  (3×TE) — µs
+    static constexpr uint32_t TE_DELTA           = 300;  ///< Tolerance for matching — µs
+    static constexpr uint8_t  MIN_COUNT_BIT      = 24;   ///< Bits required before callback fires.
+    static constexpr uint32_t PREAMBLE_GUARD_TE  = 36;   ///< Preamble LOW duration = TE_SHORT * PREAMBLE_GUARD_TE.
+    };
 
-/** V-table declaration. */
-extern const SubGhzProtocolDecoderVTable princeton_decoder_vtable;
+    /** V-table declaration. */
+    extern const SubGhzProtocolDecoderVTable princeton_decoder_vtable;
 
-#endif // PRINCETON_DECODER_H
+    #endif // PRINCETON_DECODER_H

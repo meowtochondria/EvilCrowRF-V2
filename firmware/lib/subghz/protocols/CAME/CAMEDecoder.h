@@ -6,14 +6,20 @@
 #include "../../SubGhzTypes.h"
 
 /**
- * CAMEDecoder — real-time feed() decoder for CAME protocol (used in European garage doors).
+ * CAMEDecoder — real-time feed() decoder for the CAME protocol (and its
+ * variants: AIRFORCE, CAME_24, PRASTEL_25, PRASTEL_42).
+ *
+ * Matches the Flipper Zero implementation in lib/subghz/protocols/came.c.
  *
  * CAME OOK encoding:
- *   Bit 0: HIGH for 1×TE, LOW for 3×TE
- *   Bit 1: HIGH for 3×TE, LOW for 1×TE
+ *   Bit 0: LOW = te_short, HIGH = te_long
+ *   Bit 1: LOW = te_long,  HIGH = te_short
  *
- * Typical CAME frame: 4-bit preamble (4×TE HIGH/LOW pairs) + 24-28 data bits
- * + sync bit.
+ * Frame layout:
+ *   - Preamble: a long LOW of ~te_short * 56 us
+ *   - Start bit: a HIGH of ~te_short us
+ *   - Data bits (12 / 18 / 24 / 25 / 42)
+ *   - End of frame: a LOW of >= te_short * 4 us
  */
 class CAMEDecoder {
 public:
@@ -37,26 +43,35 @@ private:
     ~CAMEDecoder();
 
     enum State : uint8_t {
-        WAIT_PREAMBLE,
-        WAIT_TE,
-        DECODE_BITS,
-        DONE
+        StepReset,
+        StepFoundStartBit,
+        StepSaveDuration,
+        StepCheckDuration,
     };
 
-    State state_;
+    // Protocol timing constants (microseconds), matching Flipper's
+    // subghz_protocol_came_const.
+    static constexpr uint32_t TE_SHORT       = 320;
+    static constexpr uint32_t TE_LONG        = 640;
+    static constexpr uint32_t TE_DELTA       = 150;
+    static constexpr uint8_t  MIN_COUNT_BIT  = 12;
+    static constexpr uint32_t PREAMBLE_GUARD_TE = 56;
+
+    // Accepted frame bit counts (besides MIN_COUNT_BIT).
+    static constexpr uint8_t AIRFORCE_COUNT_BIT    = 18;
+    static constexpr uint8_t CAME_24_COUNT_BIT     = 24;
+    static constexpr uint8_t PRASTEL_25_COUNT_BIT = 25;
+    static constexpr uint8_t PRASTEL_42_COUNT_BIT = 42;
+
+    // SubGhzProtocolDecoderBase MUST be the first member so that a
+    // SubGhzProtocolDecoderBase* cast of the decoder instance is valid
+    // (matches the Flipper Zero pattern in lib/subghz/protocols/base.h).
     SubGhzProtocolDecoderBase base_;
 
-    uint32_t te_;
-    uint64_t key_;
-    uint8_t bit_count_;
-    uint8_t expected_bits_;
-    uint32_t last_high_dur_;
-    uint32_t expected_preamble_min_;
-
-    static constexpr float TE_TOLERANCE = 0.40f;
-    static constexpr uint32_t TE_MIN = 100;
-    static constexpr uint32_t TE_MAX = 2000;
-    static constexpr uint8_t DEFAULT_BITS = 28;
+    State    state_;
+    uint64_t decode_data_;
+    uint8_t  decode_count_bit_;
+    uint32_t te_last_;
 };
 
 extern const SubGhzProtocolDecoderVTable came_decoder_vtable;

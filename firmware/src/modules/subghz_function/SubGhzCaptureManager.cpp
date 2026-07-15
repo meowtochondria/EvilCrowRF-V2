@@ -126,16 +126,23 @@ void SubGhzCaptureManager::process(int module, float currentRssi) {
 
     int drained = 0;
 
+    // Edge log counter — limits how many edges we log per signal to avoid flooding.
+    static uint32_t edgeLogCount[CC1101_NUM_MODULES] = {0, 0};
+
     // Drain the stream buffer
     LevelDuration ld;
     while (xStreamBufferReceive(sb, &ld, sizeof(ld), 0) == sizeof(ld)) {
         drained++;
 
         if (ld.isReset()) {
-            // Overrun — reset all decoders
-            ESP_LOGW(TAG, "Buffer overrun on module %d — resetting decoders", module);
+            // Signal-end sentinel (sent by isrSignalOverrun when the gap
+            // between edges exceeds MAX_SIGNAL_DURATION). Reset decoders.
+            ESP_LOGW(TAG, "Signal end on module %d (drained %d edges) — resetting decoders",
+                     module, drained);
             receiver->reset();
             gf.accumulator = LevelDuration::make(false, 0);
+            // Reset edge log counter so the next signal's edges are logged.
+            edgeLogCount[module] = 0;
             continue;
         }
 
@@ -151,7 +158,14 @@ void SubGhzCaptureManager::process(int module, float currentRssi) {
             uint32_t accumulated = gf.accumulator.getDuration() + duration;
             gf.accumulator = LevelDuration::make(gf.accumulator.getLevel(), accumulated);
         } else if (gf.accumulator.getLevel() != level) {
-            // Level changed — emit the accumulated edge
+            // Level changed — emit the accumulated edge.
+            // Log the first few edges per signal for diagnostics.
+            if (edgeLogCount[module] < 10) {
+                ESP_LOGI(TAG, "Edge: module=%d level=%d duration=%lu us",
+                         module, (int)gf.accumulator.getLevel(),
+                         (unsigned long)gf.accumulator.getDuration());
+                edgeLogCount[module]++;
+            }
             receiver->decode(
                 gf.accumulator.getLevel(),
                 gf.accumulator.getDuration());

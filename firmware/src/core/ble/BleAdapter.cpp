@@ -2,7 +2,9 @@
 #include "BleAdapter.h"
 #include "core/ClientsManager.h"
 #include "ConfigManager.h"
-#include <NimBLESecurity.h>
+// Security APIs (setSecurityAuth / setSecurityIOCap / BLE_HS_IO_*) are
+// already provided through NimBLEDevice.h (included by BleAdapter.h).
+// The legacy NimBLESecurity.h header does not exist in NimBLE-Arduino 2.x.
 
 static const char* TAG = "BleAdapter";
 

@@ -8,12 +8,16 @@
 /**
  * HoltekDecoder — real-time feed() decoder for Holtek HT12X protocol.
  *
- * Holtek HT12X OOK encoding:
- *   Bit 0: HIGH for 1×TE, LOW for 3×TE
- *   Bit 1: HIGH for 3×TE, LOW for 1×TE
+ * Matches the Flipper Zero implementation in
+ * lib/subghz/protocols/holtek_ht12x.c.
  *
- * Frame: 12-bit address + 4-bit data = 16 bits total.
- * Preamble: 12×TE HIGH + 4×TE LOW.
+ * Holtek HT12X OOK encoding:
+ *   Bit 0: LOW=te_short, HIGH=te_long
+ *   Bit 1: LOW=te_long,  HIGH=te_short
+ *
+ * Frame: 12 bits total. Preamble: long LOW (~28×te_short) followed by a
+ * start bit (HIGH ~= te_short). A repeat frame must confirm the previous
+ * decoded data before the callback fires.
  */
 class HoltekDecoder {
 public:
@@ -36,19 +40,30 @@ private:
     HoltekDecoder();
     ~HoltekDecoder();
 
-    enum State : uint8_t { WAIT_PREAMBLE, WAIT_TE, DECODE_BITS, DONE };
-    State state_;
-    SubGhzProtocolDecoderBase base_;
-    uint32_t te_;
-    uint16_t address_;
-    uint8_t data_val_;
-    uint8_t bit_count_;
-    uint32_t last_high_dur_;
+    enum State : uint8_t {
+        StepReset = 0,
+        StepFoundStartBit,
+        StepSaveDuration,
+        StepCheckDuration,
+    };
 
-    static constexpr float TE_TOLERANCE = 0.40f;
-    static constexpr uint32_t TE_MIN = 100;
-    static constexpr uint32_t TE_MAX = 2000;
-    static constexpr uint32_t PREAMBLE_MIN = 3000;  // 12×TE at 500us = 6000us
+    // SubGhzProtocolDecoderBase MUST be the first member so that a
+    // SubGhzProtocolDecoderBase* cast of the decoder instance is valid
+    // (matches the Flipper Zero pattern in lib/subghz/protocols/base.h).
+    SubGhzProtocolDecoderBase base_;
+    State state_;
+    uint64_t decode_data_;
+    uint8_t decode_count_bit_;
+    uint64_t last_data_;
+    uint32_t te_;
+    uint32_t te_last_;
+
+    static constexpr uint32_t TE_SHORT = 320;
+    static constexpr uint32_t TE_LONG = 640;
+    static constexpr uint32_t TE_DELTA = 200;
+    static constexpr uint32_t MIN_COUNT_BIT = 12;
+    static constexpr uint32_t PREAMBLE_GUARD_TE = 28;
+    static constexpr uint32_t PREAMBLE_GUARD_DELTA_TE = 20;
 };
 
 extern const SubGhzProtocolDecoderVTable holtek_decoder_vtable;
