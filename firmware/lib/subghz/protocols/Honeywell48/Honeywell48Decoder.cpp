@@ -46,8 +46,14 @@ Honeywell48Decoder::Honeywell48Decoder()
 
 Honeywell48Decoder::~Honeywell48Decoder() {}
 
-void* Honeywell48Decoder::alloc() { return new Honeywell48Decoder(); }
-void Honeywell48Decoder::freeInstance(void* context) { delete static_cast<Honeywell48Decoder*>(context); }
+void* Honeywell48Decoder::alloc() {
+    // Single static instance — avoids boot-time heap fragmentation (see PrincetonDecoder).
+    static Honeywell48Decoder instance;
+    return &instance;
+}
+void Honeywell48Decoder::freeInstance(void* context) {
+    (void)context;  // static instance, nothing to free
+}
 
 void Honeywell48Decoder::resetInstance(void* context) {
     auto* self = static_cast<Honeywell48Decoder*>(context);

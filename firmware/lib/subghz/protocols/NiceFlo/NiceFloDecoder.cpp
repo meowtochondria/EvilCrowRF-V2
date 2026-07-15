@@ -29,8 +29,12 @@ NiceFloDecoder::NiceFloDecoder()
 }
 
 NiceFloDecoder::~NiceFloDecoder() {}
-void* NiceFloDecoder::alloc() { return new NiceFloDecoder(); }
-void NiceFloDecoder::freeInstance(void* context) { delete static_cast<NiceFloDecoder*>(context); }
+void* NiceFloDecoder::alloc() {
+    // Single static instance — avoids boot-time heap fragmentation (see PrincetonDecoder).
+    static NiceFloDecoder instance;
+    return &instance;
+}
+void NiceFloDecoder::freeInstance(void* context) { (void)context; }
 
 void NiceFloDecoder::resetInstance(void* context) {
     auto* self = static_cast<NiceFloDecoder*>(context);

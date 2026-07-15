@@ -192,10 +192,15 @@ void WifiConfigManager::startSoftAP() {
     ESP_LOGI(TAG, "Starting SoftAP: %s", ssid.c_str());
 
     WiFi.mode(WIFI_AP_STA);
-    WiFi.softAP(ssid.c_str(), nullptr, 1, 0, 1);
 
+    // Set the AP IP config BEFORE starting the AP. Calling softAPConfig() after
+    // softAP() stops the built-in DHCP server (it calls esp_netif_set_ip_info on an
+    // already-up interface), so clients can associate but never get a DHCP lease and
+    // hang on "obtaining IP address".
     IPAddress apIP(192, 168, 4, 1);
     WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
+
+    WiFi.softAP(ssid.c_str(), nullptr, 1, 0, 1);
 
     ESP_LOGI(TAG, "SoftAP ready: SSID='%s', IP=%s", ssid.c_str(), apIP.toString().c_str());
     ESP_LOGI(TAG, "Connect phone to WiFi '%s' and open the app — it will find the device at %s",

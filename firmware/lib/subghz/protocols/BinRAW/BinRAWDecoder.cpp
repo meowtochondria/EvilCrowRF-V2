@@ -73,13 +73,15 @@ SubGhzProtocolDecoderBinRAW::~SubGhzProtocolDecoderBinRAW() {
 }
 
 void* SubGhzProtocolDecoderBinRAW::alloc() {
-    auto* instance = new SubGhzProtocolDecoderBinRAW();
-    return instance;
+    // Single static instance — avoids boot-time heap fragmentation (see PrincetonDecoder).
+    static SubGhzProtocolDecoderBinRAW instance;
+    return &instance;
 }
 
 void SubGhzProtocolDecoderBinRAW::freeInstance(void* context) {
-    auto* instance = static_cast<SubGhzProtocolDecoderBinRAW*>(context);
-    delete instance;
+    // Instance is static (lives for program lifetime) — nothing to free.
+    // Its destructor's delete[] runs once at program exit, which is correct.
+    (void)context;
 }
 
 // ============================================================

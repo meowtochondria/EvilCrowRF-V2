@@ -127,4 +127,4 @@ show-device-wifi-mac:
 	@uv run esptool --chip esp32 read_mac
 
 flash-erase:
-	@uv run esptool --chip esp32 --port /dev/ttyUSB0 erase_flash
+	@uv run esptool --chip esp32 --port /dev/ttyUSB0 erase-flash

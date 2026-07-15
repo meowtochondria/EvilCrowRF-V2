@@ -29,8 +29,14 @@ public:
     ~SubGhzCaptureManager();
 
     /**
-     * Initialize all decoder slots from the registry.
+     * Initialize the ISR→worker stream buffers.
      * Call once at startup from CC1101Worker::init().
+     *
+     * NOTE: decoder receivers are NOT allocated here. They are created
+     * lazily by ensureReceiver() the first time a capture starts (see
+     * handleStartRecord), so their heap cost is deferred until after boot
+     * when the heap is stable — this avoids fragmenting the boot-time heap
+     * and breaking the SoftAP DHCP server.
      */
     void init();
 
@@ -65,6 +71,20 @@ public:
     void reset();
 
     /**
+     * Lazily create the decoder receiver for a module if it does not yet
+     * exist. Called when a capture starts (handleStartRecord) so the heap
+     * cost is deferred past boot. Safe to call repeatedly.
+     */
+    void ensureReceiver(int module);
+
+    /**
+     * Free the decoder receiver for a module (releases its heap) when the
+     * capture stops. The stream buffer is kept (the ISR may be re-attached
+     * on the next capture). A later ensureReceiver() recreates it.
+     */
+    void freeReceiver(int module);
+
+    /**
      * Get the receiver for a module (for accessing specific decoders like BinRAW).
      */
     SubGhzReceiver* getReceiver(int module) { return receivers_[module]; }
@@ -89,10 +109,16 @@ private:
     struct GlitchFilter {
         LevelDuration accumulator;
         uint16_t filter_duration;  ///< Pulses shorter than this are merged (µs)
+        bool firstEdgeValid;       ///< Marks whether the accumulator contains a real edge
     };
     GlitchFilter glitchFilters_[CC1101_NUM_MODULES];
 
     SignalCapturedCallback signalCapturedCb_;
+
+    /** Stored filter mask, applied to receivers when lazily created. */
+    SubGhzProtocolFlag filter_ =
+        static_cast<SubGhzProtocolFlag>(
+            SubGhzProtocolFlag_BinRAW | SubGhzProtocolFlag_Decodable);
 
     /** Internal trampoline for decoder callbacks. */
     static void onSignalDecoded(SubGhzProtocolDecoderBase* decoder, void* context);

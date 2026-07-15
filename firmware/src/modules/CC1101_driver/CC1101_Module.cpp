@@ -213,6 +213,43 @@ void ModuleCc1101::setTxWithPreset(float frequency, const uint8_t *presetBytes, 
     xSemaphoreGive(rwSemaphore);
 }
 
+void ModuleCc1101::setRxWithPreset(float frequency, const uint8_t *presetBytes, int presetLength)
+{
+    xSemaphoreTake(rwSemaphore, portMAX_DELAY);
+    cc1101.setModul(id);
+    cc1101.setSidle();
+    delay(10);
+    cc1101.Init();  // Reset all registers to defaults
+    delay(10);
+
+    // Set frequency first (before applying preset)
+    cc1101.setMHZ(frequency);  // This will also call Calibrate()
+    delay(10);
+
+    // Apply preset configuration
+    if (presetBytes != nullptr && presetLength > 0) {
+        int index = 0;
+        while (index < presetLength) {
+            uint8_t addr = presetBytes[index++];
+            uint8_t value = presetBytes[index++];
+            if (addr == 0x00 && value == 0x00) {
+                break;
+            }
+            cc1101.SpiWriteReg(addr, value);
+        }
+        // Apply PA table (last 8 bytes)
+        std::array<uint8_t, 8> paValue;
+        std::copy(presetBytes + index, presetBytes + index + paValue.size(), paValue.begin());
+        cc1101.SpiWriteBurstReg(CC1101_PATABLE, paValue.data(), paValue.size());
+    }
+
+    delay(10);
+    cc1101.SetRx();  // Enter RX mode
+    xSemaphoreGive(rwSemaphore);
+
+    ESP_LOGI(TAG, "CC1101 module %d configured for RX with preset: freq=%.2f", id, frequency);
+}
+
 void ModuleCc1101::applySubConfiguration(const uint8_t *byteArray, int length)
 {
     int index = 0;

@@ -78,6 +78,7 @@ public:
   ModuleCc1101 changeFrequency(float frequency);
   ModuleCc1101 setTransmitConfig(float frequency, int modulation, float deviation);
   ModuleCc1101 initConfig();
+  void setRxWithPreset(float frequency, const uint8_t *presetBytes, int presetLength);
   void applySubConfiguration(const uint8_t *byteArray, int length);
   void setTx(float frequency);
   void setTxWithPreset(float frequency, const uint8_t *presetBytes, int presetLength);

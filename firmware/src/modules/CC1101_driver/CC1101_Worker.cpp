@@ -149,12 +149,22 @@ void CC1101Worker::receiveSample(int module)
 
     // Push the level/duration pair to the real-time decoder pipeline.
     // isrPush() is IRAM_ATTR-safe (uses xStreamBufferSendFromISR).
-    bool pushed = g_subghzCaptureManager.isrPush(module, currentLevel,
-                                                 static_cast<uint32_t>(duration));
-    if (pushed) {
-        isrEdgeCount[module] = isrEdgeCount[module] + 1;
+    // Only push edges that meet MIN_PULSE_DURATION — sub-threshold edges
+    // (e.g. 31/34 µs noise glitches) prevent the Princeton decoder from
+    // ever finding a valid preamble guard LOW (which must be 3.2–24.8 ms).
+    if (duration >= MIN_PULSE_DURATION) {
+        bool pushed = g_subghzCaptureManager.isrPush(module, currentLevel,
+                                                     static_cast<uint32_t>(duration));
+        if (pushed) {
+            isrEdgeCount[module] = isrEdgeCount[module] + 1;
+        } else {
+            isrPushFailCount[module] = isrPushFailCount[module] + 1;
+        }
     } else {
-        isrPushFailCount[module] = isrPushFailCount[module] + 1;
+        // Track sub-threshold edges pushed to pipeline (shouldn't happen
+        // with this guard, but left for future diagnostics).
+        static volatile int pipelineRejectedCount[2] = {0, 0};
+        pipelineRejectedCount[module] = pipelineRejectedCount[module] + 1;
     }
 
     portEXIT_CRITICAL_ISR(&CC1101Worker::samplesMuxes[module]);
@@ -422,6 +432,10 @@ void CC1101Worker::handleStartRecord(int module, const CC1101Task& config) {
     // Stop any ongoing operation first (ONLY on this module!)
     handleGoIdle(module);
 
+    // Lazily create the decoder receiver for this module now (capture start),
+    // deferring its heap allocation until after boot when the heap is stable.
+    g_subghzCaptureManager.ensureReceiver(module);
+
     // Save recording config
     recordingConfigs[module].frequency = config.frequency;
     recordingConfigs[module].modulation = config.modulation;
@@ -439,15 +453,30 @@ void CC1101Worker::handleStartRecord(int module, const CC1101Task& config) {
     ESP_LOGI(TAG, "After start - Module %d: Recording, Module %d: %d (should be unchanged!)",
              module, otherModule, static_cast<int>(moduleStates[otherModule]));
 
-    // Configure CC1101
-    moduleCC1101State[module].setReceiveConfig(
-        config.frequency,
-        config.modulation == MODULATION_2_FSK ? true : false,
-        config.modulation,
-        config.rxBandwidth,
-        config.deviation,
-        config.dataRate
-    ).initConfig();
+    // Configure CC1101 — use Flipper preset if available, otherwise fall
+    // back to the legacy initConfig() path.
+    const uint8_t* presetBytes = getPresetByteArray(
+        (config.preset == "Ook270") ? "FuriHalSubGhzPresetOok270Async" :
+        (config.preset == "Ook650") ? "FuriHalSubGhzPresetOok650Async" :
+        (config.preset == "2FSKDev238") ? "FuriHalSubGhzPreset2FSKDev238Async" :
+        (config.preset == "2FSKDev476") ? "FuriHalSubGhzPreset2FSKDev476Async" :
+        (config.preset == "MSK") ? "FuriHalSubGhzPresetMSK99_97KbAsync" :
+        (config.preset == "GFSK") ? "FuriHalSubGhzPresetGFSK9_99KbAsync" : "");
+
+    if (presetBytes != nullptr) {
+        ESP_LOGI(TAG, "Applying preset '%s' for RX on module %d", config.preset.c_str(), module);
+        moduleCC1101State[module].setRxWithPreset(config.frequency, presetBytes, 44);
+    } else {
+        ESP_LOGI(TAG, "Using legacy config (no preset) for RX on module %d", module);
+        moduleCC1101State[module].setReceiveConfig(
+            config.frequency,
+            config.modulation == MODULATION_2_FSK ? true : false,
+            config.modulation,
+            config.rxBandwidth,
+            config.deviation,
+            config.dataRate
+        ).initConfig();
+    }
 
     // Clear any previous samples and start ISR
     clearReceivedSamples(module);
@@ -476,6 +505,10 @@ void CC1101Worker::handleStopRecord(int module) {
     moduleCC1101State[module].setSidle();
     moduleCC1101State[module].unlock();
     clearReceivedSamples(module);
+
+    // Free the decoder receiver to reclaim its heap now that capture has
+    // stopped. It will be recreated lazily on the next capture start.
+    g_subghzCaptureManager.freeReceiver(module);
 
     // Send notification BEFORE updating state so previousMode is correct
     sendModeNotification(module, CC1101State::Idle);

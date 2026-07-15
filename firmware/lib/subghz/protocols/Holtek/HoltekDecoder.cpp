@@ -30,8 +30,12 @@ HoltekDecoder::HoltekDecoder()
 }
 
 HoltekDecoder::~HoltekDecoder() {}
-void* HoltekDecoder::alloc() { return new HoltekDecoder(); }
-void HoltekDecoder::freeInstance(void* context) { delete static_cast<HoltekDecoder*>(context); }
+void* HoltekDecoder::alloc() {
+    // Single static instance — avoids boot-time heap fragmentation (see PrincetonDecoder).
+    static HoltekDecoder instance;
+    return &instance;
+}
+void HoltekDecoder::freeInstance(void* context) { (void)context; }
 
 void HoltekDecoder::resetInstance(void* context) {
     auto* self = static_cast<HoltekDecoder*>(context);

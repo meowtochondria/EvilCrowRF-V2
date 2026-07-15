@@ -44,11 +44,17 @@ PrincetonDecoder::PrincetonDecoder()
 PrincetonDecoder::~PrincetonDecoder() {}
 
 void* PrincetonDecoder::alloc() {
-    return new PrincetonDecoder();
+    // Use a single static instance instead of heap allocation. This avoids
+    // 14 boot-time `new` calls (2 modules x 7 decoders) that fragment the
+    // already-tight ESP32 heap and break the SoftAP DHCP server. reset() is
+    // called between captures, so shared state is safe.
+    static PrincetonDecoder instance;
+    return &instance;
 }
 
 void PrincetonDecoder::freeInstance(void* context) {
-    delete static_cast<PrincetonDecoder*>(context);
+    // Instance is static (lives for program lifetime) — nothing to free.
+    (void)context;
 }
 
 void PrincetonDecoder::resetInstance(void* context) {
@@ -90,6 +96,7 @@ void PrincetonDecoder::feed(void* context, bool level, uint32_t duration_us) {
 
     case StepReset:
         // Wait for the preamble guard LOW (~36×TE_SHORT, with very wide tolerance).
+        // Range: TE_SHORT*36 ± TE_DELTA*36 = 14040 ± 10800 = [3240, 24840] us.
         if ((!level) &&
             (duration_diff(static_cast<float>(duration_us),
                            static_cast<float>(TE_SHORT * PREAMBLE_GUARD_TE)) <
@@ -99,6 +106,18 @@ void PrincetonDecoder::feed(void* context, bool level, uint32_t duration_us) {
             self->decode_data_     = 0;
             self->decode_count_bit_ = 0;
             self->te_              = 0;
+        }
+        // else: log every ~200th edge at INFO level so we can see the decoder
+        // is alive but receiving edges outside the preamble guard timing window.
+        {
+            static uint32_t resetSkipCount = 0;
+            if ((resetSkipCount % 200) == 0) {
+                ESP_LOGI(TAG, "StepReset: waiting for preamble guard LOW (3.2-24.8 ms); "
+                         "got level=%d duration=%lu us (skipped %u similar)",
+                         (int)level, (unsigned long)duration_us,
+                         (unsigned)(resetSkipCount % 200 == 0 ? 200 : 0));
+            }
+            resetSkipCount++;
         }
         break;
 
@@ -122,8 +141,11 @@ void PrincetonDecoder::feed(void* context, bool level, uint32_t duration_us) {
                 if (self->decode_count_bit_ == MIN_COUNT_BIT) {
                     if ((self->last_data_ == self->decode_data_) && self->last_data_) {
                         // Repeat confirmed — fire callback.
+                        // TE total accounts for 4×TE per bit (HIGH+LOW pair)
+                        // plus 1×TE from the preamble sync HIGH.
+                        // decode_count_bit * 4 + 1 matches Flipper princeton.c:273.
                         uint32_t avg_te = self->te_ /
-                            (self->decode_count_bit_ * 2 + 1);
+                            (self->decode_count_bit_ * 4 + 1);
 
                         ESP_LOGI(TAG,
                                  "Princeton decoded: key=0x%016llX, bits=%u, TE=%lu us",
@@ -184,13 +206,20 @@ void PrincetonDecoder::feed(void* context, bool level, uint32_t duration_us) {
                 self->state_ = StepSaveDuration;
             } else {
                 // Pattern doesn't match either bit shape → reset.
-                ESP_LOGD(TAG,
-                         "Bit mismatch: te_last=%lu, duration=%lu → resetting",
-                         (unsigned long)self->te_last_, (unsigned long)duration_us);
+                // Log at INFO level so it's visible with default log settings.
+                ESP_LOGI(TAG,
+                         "Bit mismatch (bits so far=%u, last_data=0x%016llX): "
+                         "te_last=%lu duration=%lu → resetting",
+                         self->decode_count_bit_,
+                         (unsigned long long)self->last_data_,
+                         (unsigned long)self->te_last_,
+                         (unsigned long)duration_us);
                 self->state_ = StepReset;
             }
         } else {
             // Got a HIGH where we expected a LOW → reset.
+            ESP_LOGI(TAG, "Expected LOW, got HIGH (bits=%u) → resetting",
+                     self->decode_count_bit_);
             self->state_ = StepReset;
         }
         break;

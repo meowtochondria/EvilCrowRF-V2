@@ -41,8 +41,14 @@ CAMEDecoder::CAMEDecoder()
 
 CAMEDecoder::~CAMEDecoder() {}
 
-void* CAMEDecoder::alloc() { return new CAMEDecoder(); }
-void CAMEDecoder::freeInstance(void* context) { delete static_cast<CAMEDecoder*>(context); }
+void* CAMEDecoder::alloc() {
+    // Single static instance — avoids boot-time heap fragmentation (see PrincetonDecoder).
+    static CAMEDecoder instance;
+    return &instance;
+}
+void CAMEDecoder::freeInstance(void* context) {
+    (void)context;  // static instance, nothing to free
+}
 
 void CAMEDecoder::resetInstance(void* context) {
     auto* self = static_cast<CAMEDecoder*>(context);

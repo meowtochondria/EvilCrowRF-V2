@@ -42,11 +42,13 @@ GateTXDecoder::GateTXDecoder()
 GateTXDecoder::~GateTXDecoder() {}
 
 void* GateTXDecoder::alloc() {
-    return new GateTXDecoder();
+    // Single static instance — avoids boot-time heap fragmentation (see PrincetonDecoder).
+    static GateTXDecoder instance;
+    return &instance;
 }
 
 void GateTXDecoder::freeInstance(void* context) {
-    delete static_cast<GateTXDecoder*>(context);
+    (void)context;  // static instance, nothing to free
 }
 
 void GateTXDecoder::resetInstance(void* context) {
