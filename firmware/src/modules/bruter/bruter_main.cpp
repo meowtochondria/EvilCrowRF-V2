@@ -86,7 +86,7 @@ void BruterModule::updatePinsForModule() {
 }
 
 void BruterModule::setModule(uint8_t mod) {
-    if (mod > MODULE_2) mod = MODULE_2;
+    if (mod >= CC1101_NUM_MODULES) mod = CC1101_NUM_MODULES - 1;
     selectedModule = mod;
     updatePinsForModule();
     ESP_LOGI("Bruter", "Module set to %d (CS=%d, TX=%d)", selectedModule, RF_CS, RF_TX);

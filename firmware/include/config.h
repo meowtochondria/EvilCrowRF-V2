@@ -15,7 +15,7 @@
 // Stringified by XSTR() for adjacent string literal concatenation.
 // Default: empty string (no suffix for local/serial builds).
 #ifndef FIRMWARE_BUILD_SUFFIX
-#define FIRMWARE_BUILD_SUFFIX 
+#define FIRMWARE_BUILD_SUFFIX
 #endif
 #define STRINGIFY_(x) #x
 #define XSTR(x) STRINGIFY_(x)

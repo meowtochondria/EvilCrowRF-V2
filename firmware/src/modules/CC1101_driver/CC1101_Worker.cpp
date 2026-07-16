@@ -122,7 +122,7 @@ void CC1101Worker::receiveSample(int module)
 
     if (duration > MAX_SIGNAL_DURATION) {
         // Log only occasionally to avoid ISR overhead - use static counter
-        static volatile int clearCount[2] = {0, 0};
+        static volatile int clearCount[CC1101_NUM_MODULES] = {0, 0};
         clearCount[module] = clearCount[module] + 1;  // Avoid deprecated volatile++
         if ((clearCount[module] % 100) == 0) {
             // Note: ESP_LOG cannot be used in ISR, so we'll track this differently
@@ -143,7 +143,7 @@ void CC1101Worker::receiveSample(int module)
         }
     } else {
         // Track rejected samples for debugging
-        static volatile int rejectedCount[2] = {0, 0};
+        static volatile int rejectedCount[CC1101_NUM_MODULES] = {0, 0};
         rejectedCount[module] = rejectedCount[module] + 1;  // Avoid deprecated volatile++
     }
 
@@ -163,7 +163,7 @@ void CC1101Worker::receiveSample(int module)
     } else {
         // Track sub-threshold edges pushed to pipeline (shouldn't happen
         // with this guard, but left for future diagnostics).
-        static volatile int pipelineRejectedCount[2] = {0, 0};
+        static volatile int pipelineRejectedCount[CC1101_NUM_MODULES] = {0, 0};
         pipelineRejectedCount[module] = pipelineRejectedCount[module] + 1;
     }
 
@@ -1394,7 +1394,7 @@ void CC1101Worker::sendHeartbeat() {
     status.core0Mhz = static_cast<uint16_t>(ESP.getCpuFreqMHz());
     status.core1Mhz = static_cast<uint16_t>(ESP.getCpuFreqMHz());
 
-    // Read all CC1101 registers for both modules
+    // Read all CC1101 registers for active modules
     moduleCC1101State[0].readAllConfigRegisters(status.module0Registers, numRegs);
     moduleCC1101State[1].readAllConfigRegisters(status.module1Registers, numRegs);
 

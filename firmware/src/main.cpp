@@ -128,7 +128,7 @@ void ConfigManager::applyToRuntime() {
     if (settings.bruterRepeats >= 1 && settings.bruterRepeats <= BRUTER_MAX_REPETITIONS) {
         bruter.setGlobalRepeats(settings.bruterRepeats);
     }
-    // Apply radio TX power for both CC1101 modules
+    // Apply radio TX power for active CC1101 modules
     extern ModuleCc1101 moduleCC1101State[CC1101_NUM_MODULES];
     moduleCC1101State[0].setPA(settings.radioPowerMod1);
     moduleCC1101State[1].setPA(settings.radioPowerMod2);

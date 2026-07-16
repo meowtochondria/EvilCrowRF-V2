@@ -70,10 +70,10 @@ ModuleCc1101 ModuleCc1101::setReceiveConfig(float frequency, bool dcFilterOff, i
     config.dcFilterOff = dcFilterOff;
     config.rxBandwidth = rxBandwidth;
     config.dataRate = dataRate;
-    
-    ESP_LOGD(TAG, "Config set: freq=%.2f, mod=%d, dev=%.2f, bw=%.2f, rate=%.2f", 
+
+    ESP_LOGD(TAG, "Config set: freq=%.2f, mod=%d, dev=%.2f, bw=%.2f, rate=%.2f",
              frequency, modulation, deviation, rxBandwidth, dataRate);
-    
+
     return *this;
 }
 
@@ -127,11 +127,11 @@ ModuleCc1101 ModuleCc1101::initConfig()
 {
     xSemaphoreTake(rwSemaphore, portMAX_DELAY);
     cc1101.setModul(id);
-    
+
     // Force CC1101 to idle before reconfiguring
     cc1101.setSidle();
     delay(10);  // Give CC1101 time to enter idle state
-    
+
     cc1101.setModulation(config.modulation);  // set modulation mode. 0 = 2-FSK, 1 = GFSK, 2 = ASK/OOK, 3 = 4-FSK, 4 = MSK.
     cc1101.setDeviation(config.deviation);  // Set the Frequency deviation in kHz. Value from 1.58 to 380.85. Default is 47.60 kHz.
     cc1101.setMHZ(config.frequency);
@@ -148,12 +148,12 @@ ModuleCc1101 ModuleCc1101::initConfig()
                                  // (00), in RX. 3 = Asynchronous serial mode, Data in on GDO0 and data out on either of the GDOx pins.
         cc1101.setDRate(config.dataRate);
         cc1101.setRxBW(config.rxBandwidth);
-        
+
         // Force transition to RX mode
         cc1101.SetRx();
         delay(10);  // Give CC1101 time to enter RX state
-        
-        ESP_LOGI(TAG, "CC1101 module %d configured for RX: freq=%.2f, mod=%d, dev=%.2f", 
+
+        ESP_LOGI(TAG, "CC1101 module %d configured for RX: freq=%.2f, mod=%d, dev=%.2f",
                  id, config.frequency, config.modulation, config.deviation);
     }
     xSemaphoreGive(rwSemaphore);
@@ -177,37 +177,38 @@ void ModuleCc1101::setTxWithPreset(float frequency, const uint8_t *presetBytes, 
     xSemaphoreTake(rwSemaphore, portMAX_DELAY);
     cc1101.setModul(id);
     cc1101.setSidle();
-    delay(10);
+    vTaskDelay(pdMS_TO_TICKS(5));
     cc1101.Init();  // Reset all registers to defaults
-    delay(10);
-    
+    // Small delay to ensure CC1101 settles after Init()
+    vTaskDelay(pdMS_TO_TICKS(5));
+
     // Set frequency first (before applying preset)
     cc1101.setMHZ(frequency);  // This will also call Calibrate()
-    delay(10);
-    
+    vTaskDelay(pdMS_TO_TICKS(5));
+
     // Apply preset configuration - presets now contain correct values
     if (presetBytes != nullptr && presetLength > 0) {
         int index = 0;
-        
+
         // Apply all registers from preset
         while (index < presetLength) {
             uint8_t addr = presetBytes[index++];
             uint8_t value = presetBytes[index++];
-            
+
             if (addr == 0x00 && value == 0x00) {
                 break;
             }
-            
+
             // Write each register - preset values are correct now
             cc1101.SpiWriteReg(addr, value);
         }
-        
+
         // Apply PA table (last 8 bytes)
         std::array<uint8_t, 8> paValue;
         std::copy(presetBytes + index, presetBytes + index + paValue.size(), paValue.begin());
         cc1101.SpiWriteBurstReg(CC1101_PATABLE, paValue.data(), paValue.size());
     }
-    
+
     delay(10);
     cc1101.SetTx();  // Enter TX mode
     xSemaphoreGive(rwSemaphore);
