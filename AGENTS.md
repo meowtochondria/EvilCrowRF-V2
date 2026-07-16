@@ -7,3 +7,5 @@
 7. **Don't commit** — the user commits manually. Just make the code changes.
 8. **Maintain work log** - If executing on a plan via markdown file, update the progress in the file.
 9. **No phase number in comments** - If implementing a phased plan, do not reference anything related to phase in code or comments.
+10. When stubbing code, call it out loudly in summary.
+11. When building or modifying functionality, ensure that new code is invoked by existing code path, or add new code paths. Call it out in summary.
