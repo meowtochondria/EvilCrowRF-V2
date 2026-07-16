@@ -893,14 +893,16 @@ void loop()
 #endif
 
     if (deviceConfig.powerBlink) {
-        // Priority blink: NRF jammer > bruter > normal heartbeat
+        // Priority blink: NRF jammer > bruter (idle poweron blink disabled)
         BruterModule& bruter = getBruterModule();
         if (NrfJammer::isRunning()) {
             DeviceControls::nrfJamActiveBlink();
         } else if (bruter.isAttackRunning()) {
             DeviceControls::bruterActiveBlink();
-        } else {
-            DeviceControls::poweronBlink();
-        }
+        // } else {
+        //     DeviceControls::poweronBlink();
+        // }
+        // Note: idle power-on blink removed to reduce LED flash during normal use.
+        // LED stays off between active operations.
     }
 }
