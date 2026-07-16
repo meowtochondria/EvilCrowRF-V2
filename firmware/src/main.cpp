@@ -899,6 +899,7 @@ void loop()
             DeviceControls::nrfJamActiveBlink();
         } else if (bruter.isAttackRunning()) {
             DeviceControls::bruterActiveBlink();
+        }
         // } else {
         //     DeviceControls::poweronBlink();
         // }
