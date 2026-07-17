@@ -37,21 +37,14 @@ The ESP32 boot heap has ~39 KB free with 90% fragmentation (largest block 3828 b
 
 ## Implementation Plan
 
-### Phase 1: Defer CC1101 stream buffers per-module to capture start
+### ✅ Phase 1: Defer CC1101 stream buffers per-module to capture start (COMPLETE)
 
 **Files:** `SubGhzCaptureManager.h/cpp`, `CC1101_Worker.cpp`
 
-Currently `init()` creates **both** stream buffers (2 × 32 KB = 64 KB) at boot, even though only one module is typically active at a time and the ISR only pushes to a buffer during `Recording` state (ISR attached in `handleStartRecord`). The app issues a capture command for a **specific module** — only that module's stream buffer and receiver need to exist.
-
-**Current state (already implemented):**
-- `init()` already only creates stream buffers (no receivers) — receivers are lazy.
-- `ensureReceiver(module)` creates the receiver for the requested module only.
-- `freeReceiver(module)` frees the receiver for that module.
-
-**Remaining change (to complete Phase 1):**
-- Move stream buffer creation from `init()` into `ensureReceiver(module)` so that **only the activated module's stream buffer** is allocated.
-- Move stream buffer deletion from `~SubGhzCaptureManager()` into `freeReceiver(module)` so the buffer is freed when capture stops.
-- `init()` becomes a true no-op (just logs).
+**Change made (2026-07-15):**
+- Moved stream buffer creation from `init()` into `ensureReceiver(module)` — only the activated module's stream buffer is allocated.
+- Moved stream buffer deletion from `~SubGhzCaptureManager()` into `freeReceiver(module)` — the buffer is freed when capture stops.
+- `init()` is now a no-op (just logs).
 
 **Memory model:**
 
@@ -63,7 +56,7 @@ Currently `init()` creates **both** stream buffers (2 × 32 KB = 64 KB) at boot,
 | Capture on both | 32 KB stream + receiver | 32 KB stream + receiver | **~64 KB** |
 | After stop | null | null | **0 KB** |
 
-**Risk:** Low. Stream buffer is only used during active capture. The null-checks already exist in `isrPush`, `isrSignalOverrun`, and `process`. The receiver is already lazily created in `ensureReceiver` and freed in `freeReceiver` — this just extends the same lifecycle to the stream buffer.
+**Risk:** Low. Null-checks already exist in `isrPush`, `isrSignalOverrun`, and `process`. This extends the same lifecycle already proven with lazy receivers.
 
 ### Phase 2: Defer BruterModule to first bruter command
 

@@ -34,27 +34,25 @@ SubGhzCaptureManager::~SubGhzCaptureManager() {
 }
 
 void SubGhzCaptureManager::init() {
-    // Create one stream buffer per module (ISR → worker handoff).
-    // Decoder receivers are NOT allocated here — they are created lazily by
-    // ensureReceiver() when a capture first starts (handleStartRecord), so
-    // their heap cost is deferred until after boot when the heap is stable.
-    // This avoids fragmenting the boot-time heap and breaking the SoftAP DHCP
-    // server (which needs a contiguous buffer).
-    for (int i = 0; i < CC1101_NUM_MODULES; i++) {
-        streamBuffers_[i] = xStreamBufferCreate(
-            STREAM_BUFFER_SIZE,          // total buffer size (bytes)
-            sizeof(LevelDuration));      // trigger level (bytes)
-        if (!streamBuffers_[i]) {
-            ESP_LOGE(TAG, "Failed to create stream buffer for module %d", i);
-        }
-    }
-    ESP_LOGI(TAG, "Stream buffers initialized for %d modules (decoders deferred to capture start)",
-             CC1101_NUM_MODULES);
+    // All heap resources (stream buffers + receivers) are now deferred to
+    // ensureReceiver(), called when a capture first starts. This avoids
+    // fragmenting the boot-time heap and breaking the SoftAP DHCP server.
+    ESP_LOGI(TAG, "Capture manager initialized (all resources deferred to capture start)");
 }
 
 void SubGhzCaptureManager::ensureReceiver(int module) {
     if (module < 0 || module >= CC1101_NUM_MODULES) return;
     if (receivers_[module]) return;  // already created
+
+    // Create stream buffer for ISR→worker handoff (deferred from boot)
+    if (!streamBuffers_[module]) {
+        streamBuffers_[module] = xStreamBufferCreate(
+            STREAM_BUFFER_SIZE,
+            sizeof(LevelDuration));
+        if (!streamBuffers_[module]) {
+            ESP_LOGE(TAG, "Failed to create stream buffer for module %d", module);
+        }
+    }
 
     // Create receiver
     receivers_[module] = new SubGhzReceiver();
@@ -232,7 +230,13 @@ void SubGhzCaptureManager::freeReceiver(int module) {
     delete receivers_[module];  // ~SubGhzReceiver clears decoder slots (static instances, no-op free)
     receivers_[module] = nullptr;
 
-    ESP_LOGI(TAG, "Receiver freed for module %d", module);
+    // Free the stream buffer now that capture has stopped
+    if (streamBuffers_[module]) {
+        vStreamBufferDelete(streamBuffers_[module]);
+        streamBuffers_[module] = nullptr;
+    }
+
+    ESP_LOGI(TAG, "Receiver and stream buffer freed for module %d", module);
 }
 
 void SubGhzCaptureManager::reset() {

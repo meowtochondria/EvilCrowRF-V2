@@ -29,14 +29,12 @@ public:
     ~SubGhzCaptureManager();
 
     /**
-     * Initialize the ISR→worker stream buffers.
+     * Initialize the capture manager.
      * Call once at startup from CC1101Worker::init().
      *
-     * NOTE: decoder receivers are NOT allocated here. They are created
-     * lazily by ensureReceiver() the first time a capture starts (see
-     * handleStartRecord), so their heap cost is deferred until after boot
-     * when the heap is stable — this avoids fragmenting the boot-time heap
-     * and breaking the SoftAP DHCP server.
+     * NOTE: All heap allocation (stream buffers + receivers) is now deferred
+     * to ensureReceiver(), called when a capture first starts. This avoids
+     * fragmenting the boot-time heap and breaking the SoftAP DHCP server.
      */
     void init();
 
@@ -71,16 +69,16 @@ public:
     void reset();
 
     /**
-     * Lazily create the decoder receiver for a module if it does not yet
-     * exist. Called when a capture starts (handleStartRecord) so the heap
-     * cost is deferred past boot. Safe to call repeatedly.
+     * Lazily create the stream buffer + decoder receiver for a module.
+     * Called when a capture starts (handleStartRecord) so all heap cost
+     * is deferred past boot. Safe to call repeatedly.
      */
     void ensureReceiver(int module);
 
     /**
-     * Free the decoder receiver for a module (releases its heap) when the
-     * capture stops. The stream buffer is kept (the ISR may be re-attached
-     * on the next capture). A later ensureReceiver() recreates it.
+     * Free the stream buffer + decoder receiver for a module when the
+     * capture stops. Both are recreated lazily by ensureReceiver() on the
+     * next capture.
      */
     void freeReceiver(int module);
 
