@@ -20,6 +20,7 @@ SubGhzCaptureManager::SubGhzCaptureManager()
         glitchFilters_[i].filter_duration = 30;  // 30 µs default (Flipper value)
         glitchFilters_[i].firstEdgeValid = false;
         lastDecodeTimeMs_[i] = 0;
+        rawEdgeCount_[i] = 0;
     }
 }
 
@@ -158,12 +159,14 @@ void SubGhzCaptureManager::process(int module, float currentRssi) {
 
         if (ld.isReset()) {
             // Signal-end sentinel (sent by isrSignalOverrun when the gap
-            // between edges exceeds MAX_SIGNAL_DURATION). Reset decoders.
+            // between edges exceeds MAX_SIGNAL_DURATION). Reset decoders
+            // and clear the RAW edge buffer for the next signal.
             ESP_LOGI(TAG, "Signal end on module %d (drained %d edges) — resetting decoders",
                      module, drained);
             receiver->reset();
             gf.accumulator = LevelDuration::make(false, 0);
             gf.firstEdgeValid = false;
+            rawEdgeCount_[module] = 0;
             // Reset edge log counter so the next signal's edges are logged.
             edgeLogCount[module] = 0;
             continue;
@@ -200,6 +203,16 @@ void SubGhzCaptureManager::process(int module, float currentRssi) {
                          (unsigned long)gf.accumulator.getDuration());
                 edgeLogCount[module]++;
             }
+            // Accumulate the emitted edge for RAW_Data export
+            // (positive = HIGH, negative = LOW).
+            // Uses fixed-size C array — no heap allocation.
+            if (rawEdgeCount_[module] < MAX_RAW_EDGES) {
+                rawEdges_[module][rawEdgeCount_[module]++] =
+                    gf.accumulator.getLevel()
+                        ? static_cast<int>(gf.accumulator.getDuration())
+                        : -static_cast<int>(gf.accumulator.getDuration());
+            }
+
             receiver->decode(
                 gf.accumulator.getLevel(),
                 gf.accumulator.getDuration());
@@ -340,6 +353,30 @@ void SubGhzCaptureManager::onSignalDecoded(
     }
 
     file.println();
+
+    // ---- Append RAW_Data from the glitch-filter output buffer ----
+    // This makes the .sub file replayable via the RAW streaming transmit
+    // path, regardless of which protocol decoder matched the signal.
+    // The buffer is populated in process() for every emitted edge and
+    // cleared on Signal-end or after this write.
+    {
+        size_t n = self->rawEdgeCount_[foundModule];
+        if (n > 0) {
+            int* raw = self->rawEdges_[foundModule];
+            file.print("RAW_Data: ");
+            for (size_t i = 0; i < n; i++) {
+                file.print(raw[i]);
+                file.print(' ');
+                if ((i + 1) % 64 == 0 && (i + 1) < n) {
+                    file.println();
+                    file.print("RAW_Data: ");
+                }
+            }
+            file.println();
+            self->rawEdgeCount_[foundModule] = 0;
+        }
+    }
+
     file.close();
 
     ESP_LOGI(TAG, "💾 Decoded signal saved: %s", filename);

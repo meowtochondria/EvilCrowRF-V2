@@ -121,6 +121,23 @@ private:
     /** Decode debounce: skip saves within 500ms of the previous decode on the same module. */
     uint32_t lastDecodeTimeMs_[CC1101_NUM_MODULES];
 
+    /**
+     * RAW pulse buffer: accumulates glitch-filter output edges per module.
+     * Populated by process(); cleared on Signal-end or after writing to file.
+     * Each entry is a signed duration: positive = HIGH, negative = LOW.
+     * Written as RAW_Data: lines into the .sub file so any protocol decode
+     * can be replayed via the RAW streaming transmit path.
+     *
+     * WARNING: This is a fixed-size C array, NOT std::vector.
+     * Vector push_back() calls new/delete under the hood, which throws
+     * std::bad_alloc on ESP32's fragmented heap and crashes via terminate().
+     * 1024 entries (4 KB per module, 8 KB total) is ample for any
+     * protocol-aware signal (Princeton = ~70 edges, CAME/Holtek = ~30).
+     */
+    static constexpr size_t MAX_RAW_EDGES = 1024;
+    int rawEdges_[CC1101_NUM_MODULES][MAX_RAW_EDGES];
+    size_t rawEdgeCount_[CC1101_NUM_MODULES];
+
     /** Internal trampoline for decoder callbacks. */
     static void onSignalDecoded(SubGhzProtocolDecoderBase* decoder, void* context);
 };
