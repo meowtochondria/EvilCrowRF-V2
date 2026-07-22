@@ -5,6 +5,7 @@
 #include <SD.h>
 #include <cstdio>
 #include <cstring>
+#include "esp_timer.h"
 
 static const char* TAG = "SubGhzCaptureManager";
 
@@ -161,7 +162,7 @@ void SubGhzCaptureManager::process(int module, float currentRssi) {
             // Signal-end sentinel (sent by isrSignalOverrun when the gap
             // between edges exceeds MAX_SIGNAL_DURATION). Reset decoders
             // and clear the RAW edge buffer for the next signal.
-            ESP_LOGI(TAG, "Signal end on module %d (drained %d edges) — resetting decoders",
+            ESP_LOGD(TAG, "Signal end on module %d (drained %d edges) — resetting decoders",
                      module, drained);
             receiver->reset();
             gf.accumulator = LevelDuration::make(false, 0);
@@ -198,7 +199,7 @@ void SubGhzCaptureManager::process(int module, float currentRssi) {
             // Level changed — emit the accumulated edge.
             // Log the first few edges per signal for diagnostics.
             if (edgeLogCount[module] < 10) {
-                ESP_LOGI(TAG, "Edge: module=%d level=%d duration=%lu us",
+                ESP_LOGD(TAG, "Edge: module=%d level=%d duration=%lu us",
                          module, (int)gf.accumulator.getLevel(),
                          (unsigned long)gf.accumulator.getDuration());
                 edgeLogCount[module]++;
@@ -311,18 +312,15 @@ void SubGhzCaptureManager::onSignalDecoded(
     self->lastDecodeTimeMs_[foundModule] = nowMs;
 
     // ---- Phase 7: Save decoded signal to SD card ----
-    // Build filename: /DATA/SIGNALS/<protocol>_<random>.sub
+    // Build filename: /DATA/SIGNALS/<timestamp>_<protocol>.sub
+    // Uses esp_timer_get_time() (microseconds since boot) so filenames
+    // are always unique and monotonically increasing regardless of NTP
+    // sync status. If RTC time is available later, the app can rename.
     char filename[128];
     {
-        // Generate 8-char random string
-        const char* hexChars = "0123456789ABCDEF";
-        char randStr[9];
-        for (int i = 0; i < 8; i++) {
-            randStr[i] = hexChars[esp_random() % 16];
-        }
-        randStr[8] = '\0';
-        snprintf(filename, sizeof(filename), "/DATA/SIGNALS/%s_%s.sub",
-                 decoder->protocol_name, randStr);
+        uint64_t now = esp_timer_get_time() / 1000000ULL;
+        snprintf(filename, sizeof(filename), "/DATA/SIGNALS/%llu_%s.sub",
+                 (unsigned long long)now, decoder->protocol_name);
     }
 
     // Ensure directory exists

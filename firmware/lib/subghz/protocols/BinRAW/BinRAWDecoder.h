@@ -142,6 +142,9 @@ private:
     SubGhzProtocolDecoderBinRAW();
     ~SubGhzProtocolDecoderBinRAW();
 
+    /** Lazy-allocate data_raw_ and data_ buffers. Returns false on OOM. */
+    bool ensureBuffers();
+
     // ---- Structural validation (bin_raw.c:401-882) ----
     bool checkRemoteController();
 

@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cmath>
 #include <cfloat>
+#include <new>
 
 static const char* TAG = "BinRAWDecoder";
 
@@ -60,10 +61,11 @@ SubGhzProtocolDecoderBinRAW::SubGhzProtocolDecoderBinRAW()
     base_.protocol_name = "BinRAW";
     base_.flag = PROTOCOL_FLAG;
 
-    data_raw_ = new int32_t[BIN_RAW_BUF_RAW_SIZE];
-    data_     = new uint8_t[BIN_RAW_BUF_RAW_SIZE];
-    memset(data_raw_, 0, BIN_RAW_BUF_RAW_SIZE * sizeof(int32_t));
-    memset(data_, 0, BIN_RAW_BUF_RAW_SIZE * sizeof(uint8_t));
+    // NOTE: data_raw_ and data_ are NOT allocated here. They are allocated
+    // lazily on first feed() or inputRssi() call and freed in freeInstance()
+    // when the receiver is torn down. This avoids ~10 KB of permanent heap
+    // allocation that would otherwise persist for the lifetime of the static
+    // decoder instance and fragment the heap between captures.
     memset(data_markup_, 0, BIN_RAW_MAX_MARKUP_COUNT * sizeof(BinRAWMarkup));
 }
 
@@ -79,9 +81,36 @@ void* SubGhzProtocolDecoderBinRAW::alloc() {
 }
 
 void SubGhzProtocolDecoderBinRAW::freeInstance(void* context) {
-    // Instance is static (lives for program lifetime) — nothing to free.
-    // Its destructor's delete[] runs once at program exit, which is correct.
-    (void)context;
+    auto* self = static_cast<SubGhzProtocolDecoderBinRAW*>(context);
+    if (!self) return;
+
+    // Free the lazily-allocated buffers so the ~10 KB of heap is released
+    // when the capture ends. They will be re-allocated on the next call
+    // to feed() or inputRssi() when a new capture starts.
+    delete[] self->data_raw_;
+    self->data_raw_ = nullptr;
+    delete[] self->data_;
+    self->data_ = nullptr;
+    self->data_raw_ind_ = 0;
+}
+
+// ============================================================
+// Lazy buffer allocation — called from feed() and inputRssi().
+// Allocates on first use, freed in freeInstance().
+// ============================================================
+
+bool SubGhzProtocolDecoderBinRAW::ensureBuffers() {
+    if (data_raw_) return true;
+    data_raw_ = new (std::nothrow) int32_t[BIN_RAW_BUF_RAW_SIZE];
+    data_     = new (std::nothrow) uint8_t[BIN_RAW_BUF_RAW_SIZE];
+    if (!data_raw_ || !data_) {
+        delete[] data_raw_;  data_raw_ = nullptr;
+        delete[] data_;      data_     = nullptr;
+        return false;
+    }
+    memset(data_raw_, 0, BIN_RAW_BUF_RAW_SIZE * sizeof(int32_t));
+    memset(data_, 0, BIN_RAW_BUF_RAW_SIZE * sizeof(uint8_t));
+    return true;
 }
 
 // ============================================================
@@ -93,6 +122,10 @@ void SubGhzProtocolDecoderBinRAW::feed(void* context, bool level, uint32_t durat
     if (!instance) return;
 
     if (instance->parser_step == BinRAWDecoderStep::Write) {
+        if (!instance->ensureBuffers()) {
+            instance->parser_step = BinRAWDecoderStep::Reset;
+            return;
+        }
         if (instance->data_raw_ind_ >= BIN_RAW_BUF_RAW_SIZE) {
             instance->parser_step = BinRAWDecoderStep::BufFull;
         } else {
@@ -129,7 +162,11 @@ void SubGhzProtocolDecoderBinRAW::inputRssi(void* context, float rssi) {
     case BinRAWDecoderStep::Reset: {
         // Quiet state: track noise floor with EMA
         if (rssi > (instance->adaptive_threshold_rssi + BIN_RAW_DELTA_RSSI)) {
-            // SIGNAL DETECTED: clear buffers, start writing
+            // SIGNAL DETECTED: allocate buffers (if not already), clear and start writing
+            if (!instance->ensureBuffers()) {
+                instance->parser_step = BinRAWDecoderStep::Reset;
+                break;
+            }
             ESP_LOGD(TAG, "RSSI %.1f > threshold %.1f + %.1f — START capture",
                      rssi, instance->adaptive_threshold_rssi, BIN_RAW_DELTA_RSSI);
             instance->data_raw_ind_ = 0;

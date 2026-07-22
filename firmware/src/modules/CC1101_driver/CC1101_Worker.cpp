@@ -1111,73 +1111,10 @@ std::string CC1101Worker::transmitSub(const std::string& filename, int module, i
     ESP_LOGD(TAG, "Header parsed, protocol=%s, frequency=%.2f MHz",
              header.protocol.c_str(), header.frequency / 1000000.0);
 
-    // Handle non-RAW protocols that can be generated from parameters.
-    // Currently supports Princeton; extend with CAME, Holtek, etc. as needed.
-    std::vector<int> generatedPulses;
-    bool generateFromParams = false;
-    uint32_t genTe = 0;
-    uint64_t genKey = 0;
-    int genBits = 0;
-
-    if (header.protocol == "Princeton") {
-        // Re-open the file to read protocol-specific fields (Bit, Key, TE).
-        File pf = fs.open(fullPath.c_str(), FILE_READ);
-        if (!pf) {
-            return "Failed to re-open " + fullPath + " for protocol parameters";
-        }
-        while (pf.available()) {
-            String line = pf.readStringUntil('\n');
-            if (line.startsWith("Bit:")) {
-                genBits = line.substring(line.indexOf(':') + 1).toInt();
-            } else if (line.startsWith("Key:")) {
-                String ks = line.substring(line.indexOf(':') + 1);
-                ks.trim();
-                genKey = strtoull(ks.c_str(), NULL, 16);
-            } else if (line.startsWith("TE:")) {
-                genTe = line.substring(line.indexOf(':') + 1).toInt();
-            }
-        }
-        pf.close();
-
-        if (genTe == 0 || genBits == 0) {
-            std::string msg = "Invalid Princeton parameters (TE=" + std::to_string(genTe)
-                + " bits=" + std::to_string(genBits) + ") in " + fullPath;
-            ESP_LOGE(TAG, "%s", msg.c_str());
-            return msg;
-        }
-
-        ESP_LOGI(TAG, "Generating Princeton: key=0x%llX bits=%d TE=%lu",
-                 (unsigned long long)genKey, genBits, (unsigned long)genTe);
-
-        // Build pulse train (positive = HIGH, negative = LOW).
-        uint32_t teS = genTe;
-        uint32_t teL = genTe * 2;
-
-        // Preamble: HIGH for 36*TE, LOW for 36*TE
-        generatedPulses.push_back(static_cast<int>(teS * 36));
-        generatedPulses.push_back(-static_cast<int>(teS * 36));
-
-        // Data bits (MSB first)
-        for (int b = genBits - 1; b >= 0; b--) {
-            if ((genKey >> b) & 1) {
-                // Bit 1: HIGH=long, LOW=short
-                generatedPulses.push_back(static_cast<int>(teL));
-                generatedPulses.push_back(-static_cast<int>(teS));
-            } else {
-                // Bit 0: HIGH=short, LOW=long
-                generatedPulses.push_back(static_cast<int>(teS));
-                generatedPulses.push_back(-static_cast<int>(teL));
-            }
-        }
-        // Frame-end guard
-        generatedPulses.push_back(-static_cast<int>(teL * 2));
-
-        generateFromParams = true;
-    } else if (header.protocol != "RAW") {
-        std::string msg = "Unsupported protocol (only RAW/Princeton supported): " + header.protocol;
-        ESP_LOGE(TAG, "%s", msg.c_str());
-        return msg;
-    }
+    // All saved .sub files now include RAW_Data: lines from the capture
+    // pipeline's glitch-filter buffer (see onSignalDecoded). Stream them
+    // directly regardless of the Protocol: field in the header — the
+    // StreamingPulsePayload searches for RAW_Data: lines independently.
 
     // Configure CC1101 with proper order:
     // CRITICAL: Preset must be applied AFTER Init but BEFORE entering TX mode
@@ -1210,32 +1147,19 @@ std::string CC1101Worker::transmitSub(const std::string& filename, int module, i
 
     delay(10);
 
-    bool signalTransmitted = false;
-
-    if (generateFromParams) {
-        // Transmit the generated pulse train with repeat.
-        ESP_LOGI(TAG, "Transmitting generated %s signal (%d repeats)",
-                 header.protocol.c_str(), repeat);
-        for (int r = 0; r < repeat; r++) {
-            transmitRawData(generatedPulses, module);
-            if (r < repeat - 1) delay(10);
-        }
-        signalTransmitted = true;
-    } else {
-        // RAW protocol: stream from file.
-        ESP_LOGD(TAG, "Initializing streaming transmission (repeat: %d)", repeat);
-        StreamingPulsePayload streamingPayload;
-        if (!streamingPayload.init(fullPath.c_str(), repeat)) {
-            std::string msg = "Failed to initialize streaming payload: " + fullPath;
-            ESP_LOGE(TAG, "%s", msg.c_str());
-            return msg;
-        }
-
-        ESP_LOGD(TAG, "Starting streaming transmission...");
-        signalTransmitted = transmitData(streamingPayload, module);
-        ESP_LOGD(TAG, "Transmission result: %s", signalTransmitted ? "SUCCESS" : "FAILED");
-        streamingPayload.close();
+    // Stream RAW_Data: from file.
+    ESP_LOGD(TAG, "Initializing streaming transmission (repeat: %d)", repeat);
+    StreamingPulsePayload streamingPayload;
+    if (!streamingPayload.init(fullPath.c_str(), repeat)) {
+        std::string msg = "Failed to initialize streaming payload: " + fullPath;
+        ESP_LOGE(TAG, "%s", msg.c_str());
+        return msg;
     }
+
+    ESP_LOGD(TAG, "Starting streaming transmission...");
+    bool signalTransmitted = transmitData(streamingPayload, module);
+    ESP_LOGD(TAG, "Transmission result: %s", signalTransmitted ? "SUCCESS" : "FAILED");
+    streamingPayload.close();
 
     moduleCC1101State[module].restoreConfig().setSidle();
     ESP_LOGI(TAG, "Transmission %s for %s", signalTransmitted ? "SUCCESS" : "FAILED", fullPath.c_str());
