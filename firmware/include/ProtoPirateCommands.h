@@ -39,6 +39,19 @@ public:
     }
 
 private:
+    /// Lazily initialize the ProtoPirate module on first use.
+    /// Safe to call repeatedly (init() is idempotent).
+    static bool ensureInit(ProtoPirateModule& pp) {
+        if (pp.isInitialized()) return true;
+        ESP_LOGI("PPCmd", "Lazy-initializing ProtoPirate module");
+        if (!pp.init()) {
+            ESP_LOGE("PPCmd", "Failed to initialize ProtoPirate module");
+            sendError(14);
+            return false;
+        }
+        return true;
+    }
+
     static bool handleCommand(const uint8_t* data, size_t len) {
         if (len < 1) {
             ESP_LOGE("PPCmd", "No sub-command byte");
@@ -97,6 +110,8 @@ private:
             frequency = (float)freqRaw / 100.0f;
         }
 
+        if (!ensureInit(pp)) return false;
+
         ESP_LOGI("PPCmd", "StartDecode: module=%d, freq=%.2f MHz", module, frequency);
 
         if (!pp.startDecode(module, frequency)) {
@@ -124,6 +139,7 @@ private:
      * Get history entry: [0x04][index:1]
      */
     static bool cmdGetHistoryEntry(ProtoPirateModule& pp, const uint8_t* data, size_t len) {
+        if (!ensureInit(pp)) return false;
         if (len < 1) {
             sendError(5);
             return false;
@@ -137,6 +153,7 @@ private:
     }
 
     static bool cmdClearHistory(ProtoPirateModule& pp) {
+        if (!ensureInit(pp)) return false;
         ESP_LOGI("PPCmd", "ClearHistory");
         pp.clearHistory();
         sendSuccess();
@@ -168,6 +185,8 @@ private:
         size_t copyLen = std::min((size_t)pathLen, sizeof(path) - 1);
         memcpy(path, data + 1, copyLen);
         path[copyLen] = '\0';
+
+        if (!ensureInit(pp)) return false;
 
         ESP_LOGI("PPCmd", "LoadSubFile: %s", path);
 
@@ -390,6 +409,8 @@ private:
             return false;
         }
 
+        if (!ensureInit(pp)) return false;
+
         ESP_LOGI("PPCmd", "Emulate: proto=%s module=%d repeat=%d btn=%d cnt=%u",
                  result.protocolName ? result.protocolName : "?",
                  module, repeat, result.button, result.counter);
@@ -415,6 +436,8 @@ private:
         ESP_LOGI("PPCmd", "SaveCapture: proto=%s btn=%d cnt=%u",
                  result.protocolName ? result.protocolName : "?",
                  result.button, result.counter);
+
+        if (!ensureInit(pp)) return false;
 
         std::string savedPath;
         if (pp.saveCapture(result, savedPath)) {

@@ -118,6 +118,9 @@ private:
         static_cast<SubGhzProtocolFlag>(
             SubGhzProtocolFlag_BinRAW | SubGhzProtocolFlag_Decodable);
 
+    /** Decode debounce: skip saves within 500ms of the previous decode on the same module. */
+    uint32_t lastDecodeTimeMs_[CC1101_NUM_MODULES];
+
     /** Internal trampoline for decoder callbacks. */
     static void onSignalDecoded(SubGhzProtocolDecoderBase* decoder, void* context);
 };

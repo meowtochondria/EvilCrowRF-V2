@@ -57,7 +57,7 @@ void NiceFloDecoder::feed(void* context, bool level, uint32_t duration_us) {
             duration_diff(duration, (float)(TE_SHORT * PREAMBLE_GUARD_TE)) <
                 (float)(TE_DELTA * PREAMBLE_GUARD_TE)) {
             // Found header Nice Flo
-            ESP_LOGI(TAG, "Preamble detected");
+            ESP_LOGD(TAG, "Preamble detected");
             self->state_ = StepFoundStartBit;
         }
         break;

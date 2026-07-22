@@ -89,7 +89,7 @@ void GateTXDecoder::feed(void* context, bool level, uint32_t duration_us) {
             (duration_diff(static_cast<float>(duration_us),
                            static_cast<float>(TE_SHORT * PREAMBLE_GUARD_TE)) <
              static_cast<float>(TE_DELTA * PREAMBLE_GUARD_TE))) {
-            ESP_LOGI(TAG, "Preamble detected: %lu us", (unsigned long)duration_us);
+            ESP_LOGD(TAG, "Preamble detected: %lu us", (unsigned long)duration_us);
             self->state_ = StepFoundStartBit;
         }
         break;
@@ -100,7 +100,7 @@ void GateTXDecoder::feed(void* context, bool level, uint32_t duration_us) {
             (duration_diff(static_cast<float>(duration_us),
                            static_cast<float>(TE_LONG)) <
              static_cast<float>(TE_DELTA * 3))) {
-            ESP_LOGI(TAG, "Start bit detected: %lu us", (unsigned long)duration_us);
+            ESP_LOGD(TAG, "Start bit detected: %lu us", (unsigned long)duration_us);
             self->state_            = StepSaveDuration;
             self->decode_data_      = 0;
             self->decode_count_bit_ = 0;

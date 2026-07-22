@@ -18,9 +18,8 @@
 #include <cstring>
 #include <algorithm>
 
-// Static allocation for FreeRTOS task
-StackType_t ProtoPirateModule::taskStack_[ProtoPirateModule::TASK_STACK_SIZE];
-StaticTask_t ProtoPirateModule::taskTcb_;
+// Task stack is dynamically allocated from heap via xTaskCreate when decoding starts.
+// 4096 words = 16384 bytes, freed when the decode task self-deletes.
 
 bool ProtoPirateModule::init() {
     if (mutex_) return true;  // Already initialized
@@ -75,15 +74,15 @@ bool ProtoPirateModule::startDecode(int ccModule, float frequency) {
         return false;
     }
 
-    // Create decode task (statically allocated)
-    taskHandle_ = xTaskCreateStatic(
+    // Create decode task (dynamically allocated — stack freed on task delete)
+    xTaskCreatePinnedToCore(
         decodeTask,
         "PPDecode",
         TASK_STACK_SIZE,
         this,
         2,  // Priority (above idle, below main)
-        taskStack_,
-        &taskTcb_
+        &taskHandle_,
+        1   // Core 1
     );
 
     state_ = PPState::Decoding;
@@ -116,6 +115,22 @@ void ProtoPirateModule::stopDecode() {
     ESP_LOGI(TAG, "Stopped decoding");
 
     sendStatus();
+}
+
+void ProtoPirateModule::deinit() {
+    if (!mutex_) return;  // Already deinitialized
+
+    // Stop any active decoding
+    stopDecode();
+
+    // Free protocol decoder instances
+    decoders_.clear();
+
+    // Delete the mutex
+    vSemaphoreDelete(mutex_);
+    mutex_ = nullptr;
+
+    ESP_LOGI(TAG, "Deinitialized");
 }
 
 void ProtoPirateModule::clearHistory() {

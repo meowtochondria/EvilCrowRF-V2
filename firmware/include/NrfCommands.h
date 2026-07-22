@@ -70,6 +70,20 @@ public:
     }
 
 private:
+    /// Lazily initialize NRF module on first hardware access.
+    /// Safe to call repeatedly (init is idempotent).
+    static bool ensureNrfInit() {
+        if (NrfModule::isInitialized()) return NrfModule::isPresent();
+        NrfJammer::loadConfigs();
+        if (!NrfModule::init()) {
+            ESP_LOGW("NrfCmd", "nRF24L01 not detected");
+            return false;
+        }
+        MouseJack::init();
+        ESP_LOGI("NrfCmd", "nRF24L01 lazily initialized");
+        return true;
+    }
+
     // ── 0x20: Initialize NRF module ─────────────────────────────
     static bool handleInit(const uint8_t* data, size_t len) {
         bool ok = NrfModule::init();
@@ -98,6 +112,7 @@ private:
 
     // ── 0x21: Start MouseJack scan ──────────────────────────────
     static bool handleScanStart(const uint8_t* data, size_t len) {
+        if (!ensureNrfInit()) return false;
         // Check if any NRF operation is already running
         if (MouseJack::isRunning() || NrfSpectrum::isRunning() || NrfJammer::isRunning()) {
             uint8_t resp[] = { MSG_COMMAND_ERROR, 1 };  // Busy
@@ -162,6 +177,7 @@ private:
     // ── 0x24: Attack with raw HID payload ───────────────────────
     // Payload: [targetIndex:1][hidData:N]
     static bool handleAttackHid(const uint8_t* data, size_t len) {
+        if (!ensureNrfInit()) return false;
         if (len < 3) {
             uint8_t resp[] = { MSG_COMMAND_ERROR, 2 };  // Bad payload
             ClientsManager::getInstance().notifyAllBinary(
@@ -181,6 +197,7 @@ private:
     // ── 0x25: Attack with ASCII string ──────────────────────────
     // Payload: [targetIndex:1][strLen:1][string:N]
     static bool handleAttackString(const uint8_t* data, size_t len) {
+        if (!ensureNrfInit()) return false;
         if (len < 3) {
             uint8_t resp[] = { MSG_COMMAND_ERROR, 2 };
             ClientsManager::getInstance().notifyAllBinary(
@@ -214,6 +231,7 @@ private:
     // ── 0x26: Execute DuckyScript ───────────────────────────────
     // Payload: [targetIndex:1][pathLen:1][path:N]
     static bool handleAttackDucky(const uint8_t* data, size_t len) {
+        if (!ensureNrfInit()) return false;
         if (len < 3) {
             uint8_t resp[] = { MSG_COMMAND_ERROR, 2 };
             ClientsManager::getInstance().notifyAllBinary(
@@ -254,6 +272,7 @@ private:
 
     // ── 0x28: Start spectrum analyzer ───────────────────────────
     static bool handleSpectrumStart(const uint8_t* data, size_t len) {
+        if (!ensureNrfInit()) return false;
         if (MouseJack::isRunning() || NrfJammer::isRunning()) {
             uint8_t resp[] = { MSG_COMMAND_ERROR, 1 };  // NRF busy
             ClientsManager::getInstance().notifyAllBinary(
@@ -281,6 +300,7 @@ private:
     // Payload: [mode:1] or [mode:1][channel:1] for SINGLE
     //          or [mode:1][startCh:1][stopCh:1][step:1] for HOPPER
     static bool handleJamStart(const uint8_t* data, size_t len) {
+        if (!ensureNrfInit()) return false;
         if (MouseJack::isRunning() || NrfSpectrum::isRunning()) {
             uint8_t resp[] = { MSG_COMMAND_ERROR, 1 };
             ClientsManager::getInstance().notifyAllBinary(
@@ -391,6 +411,7 @@ private:
     // ── 0x41: Apply nRF24 settings ──────────────────────────────
     // Payload: [paLevel:1][dataRate:1][channel:1][autoRetransmit:1] = 4 bytes
     static bool handleNrfSettings(const uint8_t* data, size_t len) {
+        if (!ensureNrfInit()) return false;
         if (len < 4) {
             uint8_t resp[] = { MSG_COMMAND_ERROR };
             ClientsManager::getInstance().notifyAllBinary(

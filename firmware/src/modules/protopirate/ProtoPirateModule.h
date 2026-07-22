@@ -69,6 +69,9 @@ public:
      */
     void clearHistory();
 
+    /// @return true if init() has been called successfully
+    bool isInitialized() const { return mutex_ != nullptr; }
+
     /**
      * @brief Get history entry count.
      */
@@ -135,6 +138,9 @@ private:
     static void decodeTask(void* param);
     void processLoop();
 
+    // Full teardown — frees all heap resources
+    void deinit();
+
     // Feed samples to all decoders
     void feedSamplesToDecoders(const std::vector<unsigned long>& samples);
 
@@ -169,10 +175,9 @@ private:
     SemaphoreHandle_t mutex_ = nullptr;
     volatile bool stopRequested_ = false;
 
-    // Task stack (static allocation — no heap fragmentation)
+    // Task stack size (4096 words = 16384 bytes)
+    // Allocated from heap via xTaskCreate when decoding starts
     static constexpr size_t TASK_STACK_SIZE = 4096;
-    static StackType_t taskStack_[TASK_STACK_SIZE];
-    static StaticTask_t taskTcb_;
 
     static constexpr const char* TAG = "ProtoPirate";
 };

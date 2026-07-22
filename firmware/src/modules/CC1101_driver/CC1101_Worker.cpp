@@ -152,8 +152,16 @@ void CC1101Worker::receiveSample(int module)
     // Only push edges that meet MIN_PULSE_DURATION — sub-threshold edges
     // (e.g. 31/34 µs noise glitches) prevent the Princeton decoder from
     // ever finding a valid preamble guard LOW (which must be 3.2–24.8 ms).
+    //
+    // NOTE: we push !currentLevel (the level that was held for `duration`
+    // µs) rather than currentLevel (the new level after the transition).
+    // The decoders are ported from Flipper Zero where each pulse stores
+    // the level of the completed pulse paired with its duration. Pushing
+    // the NEW level inverts the edge sequence by one position and causes
+    // every decoder to mis-classify its first data bit (e.g. Princeton
+    // sees the guard-LOW duration masquerading as a data-bit HIGH).
     if (duration >= MIN_PULSE_DURATION) {
-        bool pushed = g_subghzCaptureManager.isrPush(module, currentLevel,
+        bool pushed = g_subghzCaptureManager.isrPush(module, !currentLevel,
                                                      static_cast<uint32_t>(duration));
         if (pushed) {
             isrEdgeCount[module] = isrEdgeCount[module] + 1;
@@ -1100,28 +1108,89 @@ std::string CC1101Worker::transmitSub(const std::string& filename, int module, i
         return msg;
     }
 
-    // Check if it's a supported protocol (RAW only for now)
-    if (header.protocol != "RAW") {
-        std::string msg = "Unsupported protocol (only RAW supported in streaming mode): " + header.protocol;
+    ESP_LOGD(TAG, "Header parsed, protocol=%s, frequency=%.2f MHz",
+             header.protocol.c_str(), header.frequency / 1000000.0);
+
+    // Handle non-RAW protocols that can be generated from parameters.
+    // Currently supports Princeton; extend with CAME, Holtek, etc. as needed.
+    std::vector<int> generatedPulses;
+    bool generateFromParams = false;
+    uint32_t genTe = 0;
+    uint64_t genKey = 0;
+    int genBits = 0;
+
+    if (header.protocol == "Princeton") {
+        // Re-open the file to read protocol-specific fields (Bit, Key, TE).
+        File pf = fs.open(fullPath.c_str(), FILE_READ);
+        if (!pf) {
+            return "Failed to re-open " + fullPath + " for protocol parameters";
+        }
+        while (pf.available()) {
+            String line = pf.readStringUntil('\n');
+            if (line.startsWith("Bit:")) {
+                genBits = line.substring(line.indexOf(':') + 1).toInt();
+            } else if (line.startsWith("Key:")) {
+                String ks = line.substring(line.indexOf(':') + 1);
+                ks.trim();
+                genKey = strtoull(ks.c_str(), NULL, 16);
+            } else if (line.startsWith("TE:")) {
+                genTe = line.substring(line.indexOf(':') + 1).toInt();
+            }
+        }
+        pf.close();
+
+        if (genTe == 0 || genBits == 0) {
+            std::string msg = "Invalid Princeton parameters (TE=" + std::to_string(genTe)
+                + " bits=" + std::to_string(genBits) + ") in " + fullPath;
+            ESP_LOGE(TAG, "%s", msg.c_str());
+            return msg;
+        }
+
+        ESP_LOGI(TAG, "Generating Princeton: key=0x%llX bits=%d TE=%lu",
+                 (unsigned long long)genKey, genBits, (unsigned long)genTe);
+
+        // Build pulse train (positive = HIGH, negative = LOW).
+        uint32_t teS = genTe;
+        uint32_t teL = genTe * 2;
+
+        // Preamble: HIGH for 36*TE, LOW for 36*TE
+        generatedPulses.push_back(static_cast<int>(teS * 36));
+        generatedPulses.push_back(-static_cast<int>(teS * 36));
+
+        // Data bits (MSB first)
+        for (int b = genBits - 1; b >= 0; b--) {
+            if ((genKey >> b) & 1) {
+                // Bit 1: HIGH=long, LOW=short
+                generatedPulses.push_back(static_cast<int>(teL));
+                generatedPulses.push_back(-static_cast<int>(teS));
+            } else {
+                // Bit 0: HIGH=short, LOW=long
+                generatedPulses.push_back(static_cast<int>(teS));
+                generatedPulses.push_back(-static_cast<int>(teL));
+            }
+        }
+        // Frame-end guard
+        generatedPulses.push_back(-static_cast<int>(teL * 2));
+
+        generateFromParams = true;
+    } else if (header.protocol != "RAW") {
+        std::string msg = "Unsupported protocol (only RAW/Princeton supported): " + header.protocol;
         ESP_LOGE(TAG, "%s", msg.c_str());
         return msg;
     }
-
-    ESP_LOGD(TAG, "Header parsed, frequency: %.2f MHz", header.frequency / 1000000.0);
 
     // Configure CC1101 with proper order:
     // CRITICAL: Preset must be applied AFTER Init but BEFORE entering TX mode
     // Order: 1) Idle, 2) Init (reset registers), 3) Set frequency, 4) Apply preset, 5) Set TX
     ESP_LOGD(TAG, "Configuring CC1101 module %d", module);
 
-    // Get preset bytes
     const uint8_t* presetBytes = nullptr;
     int presetLength = 0;
 
     if (!header.preset.empty()) {
         presetBytes = getPresetByteArray(header.preset);
         if (presetBytes != nullptr) {
-            presetLength = 44;  // Standard presets are 44 bytes
+            presetLength = 44;
             ESP_LOGI(TAG, "Using standard preset: %s", header.preset.c_str());
         }
     }
@@ -1134,32 +1203,40 @@ std::string CC1101Worker::transmitSub(const std::string& filename, int module, i
 
     if (presetBytes == nullptr) {
         ESP_LOGW(TAG, "No preset available - using default CC1101 configuration");
-        // Use regular setTx without preset
         moduleCC1101State[module].setTx(header.frequency / 1000000.0);
     } else {
-        // Use setTxWithPreset which applies preset in correct order
         moduleCC1101State[module].setTxWithPreset(header.frequency / 1000000.0, presetBytes, presetLength);
     }
 
     delay(10);
 
-    // ULTRA-OPTIMIZED: Use StreamingPulsePayload (reads from file on-demand!)
-    // RAM usage: ~100 bytes instead of ~2KB for vector!
-    ESP_LOGD(TAG, "Initializing streaming transmission (repeat: %d)", repeat);
+    bool signalTransmitted = false;
 
-    StreamingPulsePayload streamingPayload;
-    if (!streamingPayload.init(fullPath.c_str(), repeat)) {
-        std::string msg = "Failed to initialize streaming payload: " + fullPath;
-        ESP_LOGE(TAG, "%s", msg.c_str());
-        return msg;
+    if (generateFromParams) {
+        // Transmit the generated pulse train with repeat.
+        ESP_LOGI(TAG, "Transmitting generated %s signal (%d repeats)",
+                 header.protocol.c_str(), repeat);
+        for (int r = 0; r < repeat; r++) {
+            transmitRawData(generatedPulses, module);
+            if (r < repeat - 1) delay(10);
+        }
+        signalTransmitted = true;
+    } else {
+        // RAW protocol: stream from file.
+        ESP_LOGD(TAG, "Initializing streaming transmission (repeat: %d)", repeat);
+        StreamingPulsePayload streamingPayload;
+        if (!streamingPayload.init(fullPath.c_str(), repeat)) {
+            std::string msg = "Failed to initialize streaming payload: " + fullPath;
+            ESP_LOGE(TAG, "%s", msg.c_str());
+            return msg;
+        }
+
+        ESP_LOGD(TAG, "Starting streaming transmission...");
+        signalTransmitted = transmitData(streamingPayload, module);
+        ESP_LOGD(TAG, "Transmission result: %s", signalTransmitted ? "SUCCESS" : "FAILED");
+        streamingPayload.close();
     }
 
-    // Transmit directly from file
-    ESP_LOGD(TAG, "Starting streaming transmission...");
-    bool signalTransmitted = transmitData(streamingPayload, module);
-    ESP_LOGD(TAG, "Transmission result: %s", signalTransmitted ? "SUCCESS" : "FAILED");
-
-    streamingPayload.close();
     moduleCC1101State[module].restoreConfig().setSidle();
     ESP_LOGI(TAG, "Transmission %s for %s", signalTransmitted ? "SUCCESS" : "FAILED", fullPath.c_str());
     if (!signalTransmitted) {

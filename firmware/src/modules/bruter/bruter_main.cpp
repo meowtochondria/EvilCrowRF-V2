@@ -53,10 +53,9 @@ static BruterModule bruterModule;
 // Volatile cancel flag — can be set from another task/ISR to stop a running attack
 volatile bool bruterCancelFlag = false;
 
-// Static task resources for async attack execution (BSS, no heap usage)
-static constexpr size_t BRUTER_TASK_STACK_WORDS = 4096; // 4096 * 4 = 16384 bytes
-static StackType_t  bruterTaskStack[BRUTER_TASK_STACK_WORDS];
-static StaticTask_t bruterTaskTCB;
+// Task stack size for async attack execution (4096 words = 16384 bytes)
+// Allocated from heap via xTaskCreate when an attack starts — reclaimed on task delete
+static constexpr size_t BRUTER_TASK_STACK_WORDS = 4096;
 TaskHandle_t BruterModule::attackTaskHandle = nullptr;
 
 BruterModule& getBruterModule() {
@@ -262,15 +261,16 @@ bool BruterModule::startAttackAsync(uint8_t menuChoice) {
         return false;
     }
     resumeFromCode = 0; // Fresh attack
-    // Use static allocation, pinned to Core 1 (app core, RF time-sensitive)
-    attackTaskHandle = xTaskCreateStatic(
+    // Use dynamic allocation (heap) — stack is freed when task self-deletes
+    // via vTaskDelete(NULL). Pinned to Core 1 (app core, RF time-sensitive).
+    xTaskCreatePinnedToCore(
         attackTaskFunc,
         "bruter_atk",
         BRUTER_TASK_STACK_WORDS,
         (void*)(uintptr_t)menuChoice,
         2,  // Priority 2 (above normal, below CC1101Worker at 5)
-        bruterTaskStack,
-        &bruterTaskTCB
+        &attackTaskHandle,
+        1   // Core 1
     );
     return (attackTaskHandle != nullptr);
 }
@@ -307,14 +307,14 @@ bool BruterModule::resumeAttackAsync() {
         sizeof(BinaryBruterResumed));
 
     // Launch the task with the saved menu choice
-    attackTaskHandle = xTaskCreateStatic(
+    xTaskCreatePinnedToCore(
         attackTaskFunc,
         "bruter_atk",
         BRUTER_TASK_STACK_WORDS,
         (void*)(uintptr_t)saved.menuId,
         2,
-        bruterTaskStack,
-        &bruterTaskTCB
+        &attackTaskHandle,
+        1   // Core 1
     );
     return (attackTaskHandle != nullptr);
 }

@@ -66,11 +66,9 @@ private:
         // Send device name to the app
         sendDeviceName();
 
-        // Send battery status if module is enabled
+        // Send battery status (lazily initializes ADC on first query)
 #if BATTERY_MODULE_ENABLED
-        if (BatteryModule::isInitialized()) {
-            BatteryModule::sendBatteryStatus();
-        }
+        BatteryModule::sendBatteryStatus();
 #endif
 
         // Send HW button config so the app can sync button states

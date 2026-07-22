@@ -72,7 +72,7 @@ void CAMEDecoder::feed(void* context, bool level, uint32_t duration_us) {
         if (!level &&
             duration_diff(duration, static_cast<float>(TE_SHORT * PREAMBLE_GUARD_TE)) <
                 static_cast<float>(TE_DELTA * 63)) {
-            ESP_LOGI(TAG, "CAME preamble detected (low=%lu us)", (unsigned long)duration_us);
+            ESP_LOGD(TAG, "CAME preamble detected (low=%lu us)", (unsigned long)duration_us);
             self->state_ = StepFoundStartBit;
         }
         break;

@@ -122,7 +122,8 @@ bool BatteryModule::isCharging() {
 }
 
 void BatteryModule::sendBatteryStatus() {
-    if (!initialized_) return;
+    // Lazily initialize on first status query
+    if (!initialized_) init();
 
     BinaryBatteryStatus msg;
     msg.voltage_mv = lastVoltage_;

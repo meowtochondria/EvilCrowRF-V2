@@ -762,52 +762,22 @@ void setup()
 
 	ESP_LOGI(TAG, "CommandHandler initialized with %zu commands", commandHandler.getCommandCount());
 
-    // Initialize bruter module
-    ESP_LOGI(TAG, "Initializing Bruter module...");
-    if (!bruter_init()) {
-        ESP_LOGE(TAG, "Failed to initialize Bruter module!");
-    } else {
-        ESP_LOGI(TAG, "Bruter module initialized successfully");
-        // Check for any resumable paused attack and notify on connect
-        BruterModule& bruter = getBruterModule();
-        bruter.checkAndNotifySavedState();
-    }
+    // BruterModule is lazily initialized on first bruter command.
+    // The attack task re-initializes CC1101 in attackTaskFunc().
+    // Saved state (paused attack) is queried by the app via sub-command 0xF9.
 
-#if PROTOPIRATE_MODULE_ENABLED
-    // Initialize ProtoPirate module
-    ESP_LOGI(TAG, "Initializing ProtoPirate module...");
-    if (!ProtoPirateModule::getInstance().init()) {
-        ESP_LOGE(TAG, "Failed to initialize ProtoPirate module!");
-    } else {
-        ESP_LOGI(TAG, "ProtoPirate module initialized successfully");
-    }
-#endif
+    // ProtoPirateModule is lazily initialized on first ProtoPirate command
+    // (see ensureInit() in ProtoPirateCommands.h).
 
     // Apply persistent settings to runtime modules (bruter delay, repeats, etc.)
     ConfigManager::applyToRuntime();
 
-    // Initialize nRF24L01 module (optional hardware)
-#if NRF_MODULE_ENABLED
-    ESP_LOGI(TAG, "Initializing nRF24L01 module...");
-    NrfJammer::loadConfigs();  // Load per-mode jam settings from flash
-    if (NrfModule::init()) {
-        MouseJack::init();
-        ESP_LOGI(TAG, "nRF24L01 + MouseJack initialized");
-    } else {
-        ESP_LOGW(TAG, "nRF24L01 not detected — NRF features disabled");
-    }
-#endif
+    // nRF24L01 is lazily initialized on first NRF command
+    // (see ensureNrfInit() in NrfCommands.h).
 
-    // Initialize battery monitoring (optional hardware)
-#if BATTERY_MODULE_ENABLED
-    ESP_LOGI(TAG, "Initializing battery monitor...");
-    BatteryModule::init();
-#endif
-
-#if SDR_MODULE_ENABLED
-    ESP_LOGI(TAG, "Initializing SDR module...");
-    SdrModule::init();
-#endif
+    // BatteryModule and SdrModule are lazily initialized on first use.
+    // BatteryModule::sendBatteryStatus() calls init() if needed.
+    // SdrModule::init() just sets a flag — effectively no-op.
 
     // Notification sender on Core 0 (near BLE stack for lower latency)
     xTaskCreatePinnedToCore(ClientsManager::processMessageQueue, "SendNotifications", 6144, NULL, 1, NULL, 0); // 6KB on Core 0

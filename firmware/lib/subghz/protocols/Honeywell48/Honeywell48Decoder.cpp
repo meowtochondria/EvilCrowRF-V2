@@ -78,7 +78,7 @@ void Honeywell48Decoder::feed(void* context, bool level, uint32_t duration_us) {
             // Found header (LOW ~3*te_short)
             self->decode_count_bit_ = 0;
             self->decode_data_ = 0;
-            ESP_LOGI(TAG, "Preamble detected (LOW=%lu us)", (unsigned long)duration_us);
+            ESP_LOGD(TAG, "Preamble detected (LOW=%lu us)", (unsigned long)duration_us);
             self->state_ = StepSaveDuration;
         }
         break;

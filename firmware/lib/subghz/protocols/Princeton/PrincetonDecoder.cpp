@@ -101,7 +101,7 @@ void PrincetonDecoder::feed(void* context, bool level, uint32_t duration_us) {
             (duration_diff(static_cast<float>(duration_us),
                            static_cast<float>(TE_SHORT * PREAMBLE_GUARD_TE)) <
              static_cast<float>(TE_DELTA * PREAMBLE_GUARD_TE))) {
-            ESP_LOGI(TAG, "Preamble guard detected: %lu us", (unsigned long)duration_us);
+            ESP_LOGD(TAG, "Preamble guard detected: %lu us", (unsigned long)duration_us);
             self->state_           = StepSaveDuration;
             self->decode_data_     = 0;
             self->decode_count_bit_ = 0;
@@ -112,7 +112,7 @@ void PrincetonDecoder::feed(void* context, bool level, uint32_t duration_us) {
         {
             static uint32_t resetSkipCount = 0;
             if ((resetSkipCount % 200) == 0) {
-                ESP_LOGI(TAG, "StepReset: waiting for preamble guard LOW (3.2-24.8 ms); "
+                ESP_LOGD(TAG, "StepReset: waiting for preamble guard LOW (3.2-24.8 ms); "
                          "got level=%d duration=%lu us (skipped %u similar)",
                          (int)level, (unsigned long)duration_us,
                          (unsigned)(resetSkipCount % 200 == 0 ? 200 : 0));
@@ -168,7 +168,7 @@ void PrincetonDecoder::feed(void* context, bool level, uint32_t duration_us) {
                                  self->decode_count_bit_);
                     }
                 } else {
-                    ESP_LOGW(TAG,
+                    ESP_LOGD(TAG,
                              "Princeton end-of-frame with %u bits (expected %u) — resetting",
                              self->decode_count_bit_, MIN_COUNT_BIT);
                 }
@@ -206,8 +206,7 @@ void PrincetonDecoder::feed(void* context, bool level, uint32_t duration_us) {
                 self->state_ = StepSaveDuration;
             } else {
                 // Pattern doesn't match either bit shape → reset.
-                // Log at INFO level so it's visible with default log settings.
-                ESP_LOGI(TAG,
+                ESP_LOGD(TAG,
                          "Bit mismatch (bits so far=%u, last_data=0x%016llX): "
                          "te_last=%lu duration=%lu → resetting",
                          self->decode_count_bit_,
@@ -218,7 +217,7 @@ void PrincetonDecoder::feed(void* context, bool level, uint32_t duration_us) {
             }
         } else {
             // Got a HIGH where we expected a LOW → reset.
-            ESP_LOGI(TAG, "Expected LOW, got HIGH (bits=%u) → resetting",
+            ESP_LOGD(TAG, "Expected LOW, got HIGH (bits=%u) → resetting",
                      self->decode_count_bit_);
             self->state_ = StepReset;
         }

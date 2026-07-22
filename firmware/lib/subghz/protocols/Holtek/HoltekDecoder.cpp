@@ -60,7 +60,7 @@ void HoltekDecoder::feed(void* context, bool level, uint32_t duration_us) {
         if (!level &&
             duration_diff(duration, (float)(TE_SHORT * PREAMBLE_GUARD_TE)) <
                 (float)(TE_DELTA * PREAMBLE_GUARD_DELTA_TE)) {
-            ESP_LOGI(TAG, "Preamble detected (%lu us)", (unsigned long)duration_us);
+            ESP_LOGD(TAG, "Preamble detected (%lu us)", (unsigned long)duration_us);
             self->state_ = StepFoundStartBit;
         }
         break;
@@ -92,7 +92,7 @@ void HoltekDecoder::feed(void* context, bool level, uint32_t duration_us) {
                         if (self->base_.callback)
                             self->base_.callback(&self->base_, self->base_.callback_context);
                     } else {
-                        ESP_LOGI(TAG, "Waiting for repeat (data=0x%03lX)",
+                        ESP_LOGD(TAG, "Waiting for repeat (data=0x%03lX)",
                                  (unsigned long)(self->decode_data_ & 0xFFF));
                     }
                     self->last_data_ = self->decode_data_;

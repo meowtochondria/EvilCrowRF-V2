@@ -19,6 +19,7 @@ SubGhzCaptureManager::SubGhzCaptureManager()
         glitchFilters_[i].accumulator = LevelDuration::make(false, 0);
         glitchFilters_[i].filter_duration = 30;  // 30 µs default (Flipper value)
         glitchFilters_[i].firstEdgeValid = false;
+        lastDecodeTimeMs_[i] = 0;
     }
 }
 
@@ -146,8 +147,14 @@ void SubGhzCaptureManager::process(int module, float currentRssi) {
 
     // Drain the stream buffer
     LevelDuration ld;
+    int sinceYield = 0;
     while (xStreamBufferReceive(sb, &ld, sizeof(ld), 0) == sizeof(ld)) {
         drained++;
+        // Cooperative yield every ~32 edges so a noisy RF environment
+        // does not starve IDLE0 of CPU time and trip the 5 s TWDT.
+        if ((++sinceYield & 0x1F) == 0) {
+            taskYIELD();
+        }
 
         if (ld.isReset()) {
             // Signal-end sentinel (sent by isrSignalOverrun when the gap
@@ -278,6 +285,17 @@ void SubGhzCaptureManager::onSignalDecoded(
         ESP_LOGW(TAG, "Could not find slot for decoded signal");
         return;
     }
+
+    // ---- Debounce: skip if we already saved a signal < 500 ms ago on this module ----
+    // RF remotes transmit the same frame multiple times per button press (Princeton
+    // sends ~5 repeats). Each repeat triggers the decoder callback independently,
+    // but we only want one .sub file per physical button press.
+    uint32_t nowMs = millis();
+    if (self->lastDecodeTimeMs_[foundModule] != 0 &&
+        (nowMs - self->lastDecodeTimeMs_[foundModule]) < 500) {
+        return;
+    }
+    self->lastDecodeTimeMs_[foundModule] = nowMs;
 
     // ---- Phase 7: Save decoded signal to SD card ----
     // Build filename: /DATA/SIGNALS/<protocol>_<random>.sub

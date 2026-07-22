@@ -58,65 +58,79 @@ The ESP32 boot heap has ~39 KB free with 90% fragmentation (largest block 3828 b
 
 **Risk:** Low. Null-checks already exist in `isrPush`, `isrSignalOverrun`, and `process`. This extends the same lifecycle already proven with lazy receivers.
 
-### Phase 2: Defer BruterModule to first bruter command
+### ✅ Phase 2: Defer BruterModule to first bruter command (COMPLETE)
 
 **Files:** `bruter_main.h/cpp`, `main.cpp`
 
-Currently `bruter_init()` is called at boot. It creates a mutex and loads saved state. The 16 KB static task stack (`bruterTaskStack[4096]`) is allocated in `.bss` at compile time — it's always in RAM regardless of whether bruter_init runs.
+**Changes made (2026-07-15):**
+- Removed `static StackType_t bruterTaskStack[4096]` and `static StaticTask_t bruterTaskTCB` — 16 KB no longer in .bss.
+- Changed `startAttackAsync()` and `resumeAttackAsync()` from `xTaskCreateStatic()` to `xTaskCreatePinnedToCore()` — task stack is allocated from heap only when an attack runs, freed on task self-delete (`vTaskDelete(NULL)`).
+- Removed `bruter_init()` call from `setup()` in `main.cpp`.
+- Removed `checkAndNotifySavedState()` call from `setup()` — the app queries saved state via sub-command `0xF9` (already implemented in `BruterCommands` and `serialCommandTask`).
+- Added comment explaining lazy init (attack task calls `setupCC1101()` internally).
 
-- Move `bruterTaskStack` and `bruterTaskTCB` from file-scope statics to dynamically allocated (use `xTaskCreate` instead of `xTaskCreateStatic`, or allocate the static arrays on first use via a function-local static).
-- Remove `bruter_init()` from `setup()`.
-- Add lazy init: first bruter command (TX, RX, etc.) calls `bruter_init()` if not already initialized.
-- Add `bruter_deinit()`: stops any running attack, deletes task, frees mutex. Called when bruter goes idle (after attack completes or is stopped).
-- `BruterCommands` handlers: add `ensureBruterInit()` guard at entry.
+**Design note:** No `ensureBruterInit()` guard was needed in command handlers because `attackTaskFunc()` already calls `setupCC1101()` at the start of every attack. Commands that don't start attacks (setModule, setDelay, query saved state) don't need CC1101 initialized.
 
-**Risk:** Medium. BruterModule has persistent state (paused attack, saved config). Need to ensure `checkAndNotifySavedState()` still works on first connect — move it to a lazy trigger (e.g., on first `GetState` command after connect, or on first bruter command).
+**Savings:** ~16 KB stack in .bss eliminated. The 16 KB heap allocation only exists during active attacks (transient).
 
-### Phase 3: Defer ProtoPirateModule to first ProtoPirate command
+### ✅ Phase 3: Defer ProtoPirateModule to first ProtoPirate command (COMPLETE)
 
-**Files:** `ProtoPirateModule.h/cpp`, `main.cpp`
+**Files:** `ProtoPirateModule.h/cpp`, `main.cpp`, `ProtoPirateCommands.h`
 
-Currently `ProtoPirateModule::getInstance().init()` is called at boot. It creates a mutex and instantiates protocol decoders. The 4 KB static task stack (`taskStack_[4096]`) is in `.bss`.
+**Changes made (2026-07-15):**
+- Removed `static StackType_t taskStack_[4096]` and `static StaticTask_t taskTcb_` from class & .cpp — eliminates 16 KB from .bss.
+- Changed `startDecode()` from `xTaskCreateStatic()` to `xTaskCreatePinnedToCore()` — task stack allocated from heap during decode, freed on task self-delete.
+- Added `deinit()` method: stops decode, frees decoders, deletes mutex.
+- Added `isInitialized()` accessor (checks `mutex_ != nullptr`).
+- Added `ensureInit()` helper in `ProtoPirateCommands.h` — calls `pp.init()` if not yet initialized, returns false on failure. Guards are placed in: `cmdStartDecode`, `cmdGetHistoryEntry`, `cmdClearHistory`, `cmdLoadSubFile`, `cmdEmulate`, `cmdSaveCapture`.
+- Removed `ProtoPirateModule::getInstance().init()` from `setup()` in `main.cpp`.
 
-- Move `taskStack_` and `taskTcb_` from class statics to dynamically allocated (or function-local statics inside `startDecode()`).
-- Remove `ProtoPirateModule::getInstance().init()` from `setup()`.
-- Add lazy init: first ProtoPirate command calls `init()` if not already initialized.
-- Add `deinit()`: stops decode, deletes task, frees mutex + decoder instances. Called when ProtoPirate goes idle.
-- `ProtoPirateCommands` handlers: add `ensureInit()` guard at entry.
+**Commands that work without init** (no guard needed): StopDecode, GetHistoryCount, GetStatus, ListSubFiles, ListSaved.
 
-**Risk:** Low. ProtoPirate is self-contained. `init()` is already idempotent (`if (mutex_) return true`).
+**Savings:** ~16 KB task stack in .bss eliminated. Only ~a few hundred bytes for the heap-allocated task stack during active decode (transient).
 
-### Phase 4: Defer nRF24L01 to first NRF command
+### ✅ Phase 4: Defer nRF24L01 to first NRF command (COMPLETE)
 
-**Files:** `NrfModule.h/cpp`, `NrfJammer.h/cpp`, `MouseJack.h/cpp`, `main.cpp`
+**Files:** `NrfCommands.h`, `main.cpp`
 
-Currently `NrfModule::init()`, `NrfJammer::loadConfigs()`, and `MouseJack::init()` are called at boot. These initialize the SPI bus and load config from flash.
+**Changes made (2026-07-15):**
+- Added `ensureNrfInit()` helper in `NrfCommands.h`: calls `NrfJammer::loadConfigs()` + `NrfModule::init()` + `MouseJack::init()` on first use. Guarded by `NrfModule::isInitialized()` — runs only once.
+- Added `ensureNrfInit()` guards to 7 command handlers that access NRF hardware: `handleScanStart`, `handleAttackHid`, `handleAttackString`, `handleAttackDucky`, `handleSpectrumStart`, `handleJamStart`, `handleNrfSettings`.
+- `handleInit` (0x20) already does its own init — no guard needed.
+- Commands that only manage state (stop, status, config read) work without init.
+- Removed NRF init block from `setup()` in `main.cpp`.
 
-- Remove NRF init from `setup()`.
-- Add lazy init: first NRF command (jam, mousejack, spectrum) calls `NrfModule::init()` + `NrfJammer::loadConfigs()` + `MouseJack::init()` if not already initialized.
-- Add `NrfModule::deinit()`: puts NRF to power-down, releases SPI. Called when NRF goes idle.
-- `NrfCommands` handlers: add `ensureInit()` guard at entry.
+**Note:** `NrfModule::deinit()` was already implemented — no changes needed.
 
-**Risk:** Low. `NrfModule::init()` already returns false if hardware not detected. `NrfModule::initialized_` flag prevents double-init.
+**Savings:** ~1-2 KB heap from SPI bus init + config loading deferred until first NRF command.
 
-### Phase 5: Defer BatteryModule and SDR module (low priority)
+### ✅ Phase 5: Defer BatteryModule and SDR module (COMPLETE)
 
-**Files:** `BatteryModule.h/cpp`, `SdrModule.h/cpp`, `main.cpp`
+**Files:** `BatteryModule.cpp`, `StateCommands.h`, `main.cpp`
 
-These are minimal cost (~0 heap) but can be deferred for consistency.
+**Changes made (2026-07-15):**
+- `BatteryModule::sendBatteryStatus()` now calls `init()` lazily if not yet initialized. Since `init()` is already idempotent (`if (initialized_) return;`), this is safe to call from any context.
+- `StateCommands::handleGetState()`: removed the `if (BatteryModule::isInitialized())` guard — `sendBatteryStatus()` handles lazy init internally.
+- `SdrModule::init()` was already effectively lazy (just sets a flag). No code change needed beyond removing the boot-time call.
+- Removed both `BatteryModule::init()` and `SdrModule::init()` calls from `setup()` in `main.cpp`.
 
-- BatteryModule: `init()` configures ADC. Move to first `getBatteryVoltage()` call. Add `initialized_` guard.
-- SDR module: `init()` just sets a flag. Already effectively lazy. No change needed.
+**Risk:** Very low. BatteryModule was already guarded by `initialized_`. SdrModule init is a no-op.
 
-**Risk:** Very low. These are nearly free.
+**Savings:** Minimal (~0 heap), but ensures consistency — no module initializes at boot unless essential.
 
-## Implementation Order
+---
 
-1. **Phase 1** (stream buffers) — highest impact (64 KB), lowest risk.
-2. **Phase 2** (BruterModule) — second highest impact (16 KB), medium risk.
-3. **Phase 3** (ProtoPirateModule) — good impact (4 KB), low risk.
-4. **Phase 4** (nRF24L01) — moderate impact (1-2 KB), low risk.
-5. **Phase 5** (Battery/SDR) — minimal impact, lowest priority.
+## All Phases Complete 🎉
+
+| Phase | Module | Savings | Status |
+|-------|--------|---------|--------|
+| 1 | Stream buffers | 64 KB at boot | ✅ Complete |
+| 2 | BruterModule | 16 KB .bss → heap | ✅ Complete |
+| 3 | ProtoPirateModule | 16 KB .bss → heap | ✅ Complete |
+| 4 | nRF24L01 | ~1-2 KB heap | ✅ Complete |
+| 5 | Battery/SDR | ~0 KB | ✅ Complete |
+
+**Total estimated savings:** ~65-98 KB when no capture/bruter/ProtoPirate/NRF is active.
 
 ## Design Pattern
 
