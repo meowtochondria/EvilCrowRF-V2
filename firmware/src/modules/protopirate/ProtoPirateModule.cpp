@@ -14,7 +14,6 @@
 #include "BinaryMessages.h"
 #include "esp_log.h"
 #include "modules/subghz_function/StreamingSubFileParser.h"
-#include "FlipperSubFile.h"
 #include <cstring>
 #include <algorithm>
 
@@ -648,13 +647,6 @@ bool ProtoPirateModule::saveCapture(const PPDecodeResult& result,
         return false;
     }
 
-    // Convert PPPulse vector to unsigned long vector for FlipperSubFile
-    std::vector<unsigned long> samples;
-    samples.reserve(pulses.size());
-    for (auto& p : pulses) {
-        samples.push_back((unsigned long)std::abs(p.duration));
-    }
-
     // Determine frequency
     float freqMHz = (result.frequency > 0) ? result.frequency : activeFrequency_;
     if (freqMHz <= 0) freqMHz = 433.92f;
@@ -662,7 +654,7 @@ bool ProtoPirateModule::saveCapture(const PPDecodeResult& result,
     // Determine preset from protocol
     const char* presetName = result.presetName ? result.presetName : "Ook650";
 
-    // Write .sub file
+    // Write .sub file (standard Flipper RAW format)
     File file = SD.open(filePath, FILE_WRITE);
     if (!file) {
         ESP_LOGE(TAG, "saveCapture: failed to open %s for writing", filePath);
@@ -670,12 +662,44 @@ bool ProtoPirateModule::saveCapture(const PPDecodeResult& result,
         return false;
     }
 
-    std::vector<byte> emptyCustom;
-    FlipperSubFile::generateRaw(file, std::string(presetName), emptyCustom, samples, freqMHz);
+    // Write header + preset
+    file.println("Filetype: Flipper SubGhz RAW File");
+    file.println("Version: 1");
+    file.print("Frequency: ");
+    file.print((unsigned long)(freqMHz * 1e6));
+    file.println();
+    file.print("Preset: FuriHalSubGhzPreset");
+    file.print(presetName);
+    file.println("Async");
+    file.println("Protocol: RAW");
+    file.print("RAW_Data: ");
+
+    // Write samples directly from pulses (no intermediate vector)
+    char buf[32];
+    int wordCount = 0;
+    int lineBreakCount = 0;
+    for (size_t i = 0; i < pulses.size(); i++) {
+        unsigned long val = (unsigned long)std::abs(pulses[i].duration);
+        if (i > 0) {
+            file.print((i % 2 == 1) ? " -" : " ");
+        }
+        int len = snprintf(buf, sizeof(buf), "%lu", val);
+        file.write((const uint8_t*)buf, len);
+        wordCount++;
+
+        // Line breaks every 512 numbers
+        if (wordCount > 0 && wordCount % 512 == 0) {
+            file.println();
+            file.print("RAW_Data: ");
+            lineBreakCount++;
+        }
+    }
+
+    file.println();
     file.close();
 
     outPath = filePath;
-    ESP_LOGI(TAG, "saveCapture: saved to %s (%zu samples)", filePath, samples.size());
+    ESP_LOGI(TAG, "saveCapture: saved to %s (%zu samples)", filePath, pulses.size());
     notifySaveResult(true, filePath);
     return true;
 }
