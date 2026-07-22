@@ -12,7 +12,6 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include "DeviceTasks.h"
-#include "PulsePayload.h"
 // Note: <sstream> moved to CC1101_Worker.cpp — only needed there
 
 // Receive data structure - moved from Recorder.h
@@ -195,7 +194,6 @@ private:
     static std::string transmitSub(const std::string& filename, int module, int repeat, int pathType);
     static bool transmitBinary(float frequency, int pulseDuration, const std::string& bits, int module, int modulation, float deviation, int repeatCount, int wait);
     static bool transmitRaw(int module, float frequency, int modulation, float deviation, std::string& data, int repeat);
-    static bool transmitData(PulsePayload& payload, int module);
     
     // Template version for streaming payload (works with any type that has next())
     template<typename PayloadT>

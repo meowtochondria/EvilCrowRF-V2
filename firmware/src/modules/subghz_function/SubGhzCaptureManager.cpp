@@ -2,6 +2,7 @@
 #include "esp_log.h"
 #include "protocols/BinRAW/BinRAWDecoder.h"
 #include "AllProtocols.h"  // Registers all real-time decoders + file parsers via static initializer
+#include "StringBuffer.h"
 #include <SD.h>
 #include <cstdio>
 #include <cstring>
@@ -316,10 +317,10 @@ void SubGhzCaptureManager::onSignalDecoded(
     // Uses esp_timer_get_time() (microseconds since boot) so filenames
     // are always unique and monotonically increasing regardless of NTP
     // sync status. If RTC time is available later, the app can rename.
-    char filename[128];
+    PathBuffer filename;
     {
         uint64_t now = esp_timer_get_time() / 1000000ULL;
-        snprintf(filename, sizeof(filename), "/DATA/SIGNALS/%llu_%s.sub",
+        filename.printf("/DATA/SIGNALS/%llu_%s.sub",
                  (unsigned long long)now, decoder->protocol_name);
     }
 
@@ -330,7 +331,7 @@ void SubGhzCaptureManager::onSignalDecoded(
 
     fs::File file = SD.open(filename, FILE_WRITE);
     if (!file) {
-        ESP_LOGE(TAG, "Failed to create file: %s", filename);
+        ESP_LOGE(TAG, "Failed to create file: %s", filename.c_str());
         return;
     }
 

@@ -1185,20 +1185,6 @@ bool CC1101Worker::transmitRawData(const std::vector<int> &rawData, int module)
     return true;
 }
 
-bool CC1101Worker::transmitData(PulsePayload &payload, int module)
-{
-    uint32_t duration;
-    bool pinState;
-
-    while (payload.next(duration, pinState)) {
-        digitalWrite(moduleCC1101State[module].getOutputPin(), pinState);
-        delayMicroseconds(duration);
-        taskYIELD();
-    }
-
-    return true;
-}
-
 int CC1101Worker::findFirstIdleModule()
 {
     for (int i = 0; i < CC1101_NUM_MODULES; ++i) {

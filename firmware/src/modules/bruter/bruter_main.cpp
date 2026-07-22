@@ -66,12 +66,6 @@ bool bruter_init() {
     return bruterModule.setupCC1101();
 }
 
-void bruter_handleCommand(const String& command) {
-    if (command == "BRUTER") {
-        // Placeholder for interactive menu output
-    }
-}
-
 void BruterModule::updatePinsForModule() {
     if (selectedModule < CC1101_NUM_MODULES) {
         RF_CS   = moduleCC1101State[selectedModule].getCsPin();

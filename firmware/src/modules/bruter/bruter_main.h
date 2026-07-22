@@ -153,7 +153,6 @@ private:
 
 // Global functions for integration with main firmware
 bool bruter_init();
-void bruter_handleCommand(const String& command);
 
 // Get bruter module instance
 BruterModule& getBruterModule();
